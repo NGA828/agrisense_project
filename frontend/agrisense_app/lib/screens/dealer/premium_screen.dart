@@ -1,0 +1,218 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../../theme/app_theme.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api/api_service.dart';
+
+class PremiumScreen extends StatefulWidget {
+  const PremiumScreen({super.key});
+
+  @override
+  State<PremiumScreen> createState() => _PremiumScreenState();
+}
+
+class _PremiumScreenState extends State<PremiumScreen> {
+  bool _isUpgrading = false;
+  int _selectedMonths = 1;
+
+  Future<void> _handleUpgrade() async {
+    final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    if (user == null || user.id == null) return;
+
+    setState(() => _isUpgrading = true);
+    try {
+      final api = ApiService();
+      await api.upgradePremium(user.id!, durationMonths: _selectedMonths);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Premium upgrade successful!'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upgrade failed: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isUpgrading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+              child: Row(children: [
+                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios, size: 20)),
+                const Icon(Icons.star_rounded, color: AppTheme.accent, size: 20),
+                const SizedBox(width: 8),
+                Text('Premium Analytics', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15)),
+              ]),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppTheme.primary, AppTheme.primaryDark]),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: AppTheme.accentSoft, borderRadius: BorderRadius.circular(12)),
+                            child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.star, size: 12, color: Colors.black87), SizedBox(width: 4), Text('PREMIUM DEALER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.black87))]),
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Grow Faster with Premium', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+                          Text('3x more visibility', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13)),
+                          const SizedBox(height: 16),
+                          Row(children: [
+                            _buildStat(Icons.visibility_rounded, '2.4k', 'Views'),
+                            const SizedBox(width: 12),
+                            _buildStat(Icons.touch_app_rounded, '186', 'Clicks'),
+                            const SizedBox(width: 12),
+                            _buildStat(Icons.thumb_up_rounded, '94%', 'Positive'),
+                          ]),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: AppTheme.cardDecoration,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Premium Benefits', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 12),
+                          _buildBenefit(Icons.push_pin_rounded, 'Featured Top'),
+                          _buildBenefit(Icons.chat_rounded, 'Chat Priority'),
+                          _buildBenefit(Icons.analytics_rounded, 'Analytics'),
+                          _buildBenefit(Icons.verified_rounded, 'Verified Badge'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: AppTheme.cardDecoration,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Select Duration', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              _buildDurationChip(1, '1 Month', '15,000'),
+                              const SizedBox(width: 8),
+                              _buildDurationChip(3, '3 Months', '40,000'),
+                              const SizedBox(width: 8),
+                              _buildDurationChip(6, '6 Months', '75,000'),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: const Color(0xFFFFFDE7), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.accentSoft)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(children: [Text('${_selectedMonths == 1 ? '15,000' : _selectedMonths == 3 ? '40,000' : '75,000'} Fcfa', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18)), Text('/${_selectedMonths == 1 ? 'mo' : '${_selectedMonths} months'}', style: AppTheme.bodySmall)]),
+                            Text('25,000 Fcfa', style: AppTheme.bodySmall.copyWith(decoration: TextDecoration.lineThrough)),
+                          ]),
+                          ElevatedButton.icon(
+                            onPressed: _isUpgrading ? null : _handleUpgrade,
+                            icon: _isUpgrading 
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.star_rounded, color: Colors.white),
+                            label: Text(_isUpgrading ? 'Processing...' : 'Upgrade Now', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white)),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStat(IconData icon, String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+        child: Column(children: [
+          Icon(icon, color: Colors.white, size: 18),
+          const SizedBox(height: 4),
+          Text(value, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+          Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 11)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildBenefit(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [Icon(icon, size: 16, color: AppTheme.success), const SizedBox(width: 8), Text(text, style: AppTheme.bodyMedium.copyWith(fontSize: 13))]),
+    );
+  }
+
+  Widget _buildDurationChip(int months, String label, String price) {
+    final isSelected = _selectedMonths == months;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedMonths = months),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.primary : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: isSelected ? AppTheme.primary : Colors.grey.shade300),
+          ),
+          child: Column(
+            children: [
+              Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? Colors.white : Colors.grey.shade700)),
+              const SizedBox(height: 4),
+              Text('$price Fcfa', style: TextStyle(fontSize: 11, color: isSelected ? Colors.white.withValues(alpha: 0.9) : Colors.grey.shade600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

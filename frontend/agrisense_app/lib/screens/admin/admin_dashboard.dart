@@ -1,0 +1,1434 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../../theme/app_theme.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api/api_service.dart';
+import 'analytics_screen.dart';
+import 'content_management_screen.dart';
+import 'dealer_verification_screen.dart';
+import 'notifications_screen.dart';
+import 'system_health_screen.dart';
+
+class AdminDashboard extends StatefulWidget {
+  const AdminDashboard({super.key});
+  @override
+  State<AdminDashboard> createState() => _AdminDashboardState();
+}
+
+class _AdminDashboardState extends State<AdminDashboard> {
+  int _selectedIndex = 0;
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0EDE5),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: const [
+          _AdminOverview(),
+          _AdminUsers(),
+          _AdminOrders(),
+          _AdminSettings(),
+        ],
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            )
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _nav(0, Icons.home_rounded, 'Overview'),
+                _nav(1, Icons.people_rounded, 'Users'),
+                _nav(2, Icons.receipt_long_rounded, 'Orders'),
+                _nav(3, Icons.settings_rounded, 'Settings'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _nav(int i, IconData icon, String label) {
+    final s = i == _selectedIndex;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIndex = i),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 22, color: s ? AppTheme.primaryDark : AppTheme.textMuted),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: s ? FontWeight.w700 : FontWeight.w400,
+              color: s ? AppTheme.primaryDark : AppTheme.textMuted,
+            ),
+          ),
+          if (s)
+            Container(
+              width: 20,
+              height: 3,
+              margin: const EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryDark,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Overview ────────────────────────────────────────────────────────────────
+
+class _AdminOverview extends StatefulWidget {
+  const _AdminOverview();
+  @override
+  State<_AdminOverview> createState() => _AdminOverviewState();
+}
+
+class _AdminOverviewState extends State<_AdminOverview> {
+  Map<String, dynamic>? _stats;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    setState(() => _isLoading = true);
+    try {
+      final api = ApiService();
+      final r = await api.getAdminStats();
+      setState(() {
+        _stats = r;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+    }
+    return RefreshIndicator(
+      onRefresh: _loadStats,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(
+                  20, MediaQuery.of(context).padding.top + 20, 20, 28),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1A3A1A), Color(0xFF2D5016), Color(0xFF3A6B20)],
+                ),
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Admin Dashboard',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 22,
+                        ),
+                      ),
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Stack(
+                          children: [
+                            const Icon(Icons.notifications_none_rounded,
+                                color: Colors.white, size: 22),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.error,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Good morning, Admin',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Here's what's happening on your platform today",
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.calendar_today_rounded,
+                            color: Colors.white.withValues(alpha: 0.9), size: 16),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'July 24, 2026',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Stats grid
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.4,
+                children: [
+                  _stat('${_stats?['total_users'] ?? 0}', 'Total Users',
+                      Icons.people_rounded, const Color(0xFFE8F5E9), AppTheme.primary, '+12.5%'),
+                  _stat('${_stats?['total_dealers'] ?? 0}', 'Active Dealers',
+                      Icons.store_rounded, const Color(0xFFFFF3E0), AppTheme.accent, '+8.2%'),
+                  _stat('${_stats?['total_diagnoses'] ?? 0}', 'Diagnoses',
+                      Icons.eco_rounded, const Color(0xFFE3F2FD), AppTheme.info, 'Today: 84'),
+                  _stat('${_stats?['total_orders'] ?? 0}', 'Total Orders',
+                      Icons.receipt_long_rounded, const Color(0xFFF3E5F5),
+                      const Color(0xFF9C27B0), 'Pending: 12'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Activity chart
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04), blurRadius: 12)
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Platform Activity',
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                              color: AppTheme.textPrimary),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.trending_up_rounded,
+                                  color: AppTheme.primary, size: 14),
+                              const SizedBox(width: 4),
+                              Text('Last 7 Days',
+                                  style: TextStyle(
+                                      color: AppTheme.primary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      height: 140,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.show_chart_rounded,
+                                color: AppTheme.primary.withValues(alpha: 0.4), size: 56),
+                            const SizedBox(height: 8),
+                            Text('Activity Chart',
+                                style: TextStyle(
+                                    color: AppTheme.primary.withValues(alpha: 0.6),
+                                    fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                            width: 12,
+                            height: 3,
+                            decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(width: 6),
+                        Text('Users',
+                            style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 20),
+                        Container(
+                            width: 12,
+                            height: 3,
+                            decoration: BoxDecoration(
+                                color: AppTheme.accent,
+                                borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(width: 6),
+                        Text('Diagnoses',
+                            style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 20),
+                        Container(
+                            width: 12,
+                            height: 3,
+                            decoration: BoxDecoration(
+                                color: AppTheme.info,
+                                borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(width: 6),
+                        Text('Orders',
+                            style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text('Quick Actions',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: AppTheme.textPrimary)),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  _action(Icons.analytics_rounded, 'View Analytics', AppTheme.primary,
+                      () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const AnalyticsScreen()))),
+                  const SizedBox(width: 12),
+                  _action(
+                      Icons.verified_user_rounded, 'Verify Dealers', AppTheme.info,
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const DealerVerificationScreen()))),
+                  const SizedBox(width: 12),
+                  _action(Icons.article_rounded, 'Manage Content', AppTheme.success,
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ContentManagementScreen()))),
+                  const SizedBox(width: 12),
+                  _action(Icons.notifications_rounded, 'Send Notice',
+                      const Color(0xFF9C27B0),
+                      () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const NotificationsScreen()))),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text('Recent Activity',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: AppTheme.textPrimary)),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04), blurRadius: 12)
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _act(Icons.person_add_rounded, 'New dealer registration',
+                        'Jean Mbeki - Yaounde', '2 min ago', AppTheme.success),
+                    const SizedBox(height: 12),
+                    _act(Icons.payment_rounded, 'Payment confirmed',
+                        '18,500 FCFA - Order #AGR-10482', '15 min ago', AppTheme.info),
+                    const SizedBox(height: 12),
+                    _act(Icons.edit_rounded, 'Content updated',
+                        'Disease database article', '1 hour ago', AppTheme.warning),
+                    const SizedBox(height: 12),
+                    _act(Icons.report_rounded, 'Report submitted',
+                        'User reported inappropriate content', '3 hours ago', AppTheme.error),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stat(String v, String l, IconData i, Color bg, Color ic, String s) =>
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration:
+                  BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+              child: Icon(i, color: ic, size: 22),
+            ),
+            const SizedBox(height: 12),
+            Text(v,
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w800, fontSize: 26)),
+            Text(l,
+                style:
+                    TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: ic.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(s,
+                  style: TextStyle(
+                      color: ic, fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+
+  Widget _action(IconData i, String l, Color c, [VoidCallback? onTap]) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+              ],
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                      color: c.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(i, color: c, size: 24),
+                ),
+                const SizedBox(height: 12),
+                Text(l,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: AppTheme.textPrimary)),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Widget _act(IconData i, String t, String d, String time, Color c) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                  color: c.withValues(alpha: 0.1), shape: BoxShape.circle),
+              child: Icon(i, color: c, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t,
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: AppTheme.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text(d,
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+            Text(time,
+                style:
+                    TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+          ],
+        ),
+      );
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+class _AdminUsers extends StatefulWidget {
+  const _AdminUsers();
+  @override
+  State<_AdminUsers> createState() => _AdminUsersState();
+}
+
+class _AdminUsersState extends State<_AdminUsers> {
+  List<dynamic> _users = [];
+  bool _isLoading = true;
+  String _filter = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() => _isLoading = true);
+    try {
+      final api = ApiService();
+      final r = await api.getUsers();
+      setState(() {
+        _users = r;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = _filter == 'all'
+        ? _users
+        : _users.where((u) => u['role'] == _filter).toList();
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1A3A1A), Color(0xFF2D5016)],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('User Management',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20)),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle),
+                      child: const Icon(Icons.person_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16)),
+                  child: Row(
+                    children: [
+                      Icon(Icons.search_rounded,
+                          color: Colors.grey.shade400, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text('Search users by name or email...',
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: Row(
+              children: [
+                _us('All', '${_users.length}', AppTheme.primary),
+                const SizedBox(width: 12),
+                _us('Farmers',
+                    '${_users.where((u) => u['role'] == 'farmer').length}',
+                    AppTheme.info),
+                const SizedBox(width: 12),
+                _us('Dealers',
+                    '${_users.where((u) => u['role'] == 'dealer').length}',
+                    AppTheme.accent),
+                const SizedBox(width: 12),
+                _us('Pending',
+                    '${_users.where((u) => u['is_active'] == false).length}',
+                    AppTheme.warning),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: ['All', 'Farmers', 'Dealers', 'Admins'].map((t) {
+                final s = (t.toLowerCase() == _filter) ||
+                    (t == 'All' && _filter == 'all');
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() =>
+                        _filter = t == 'All' ? 'all' : t.toLowerCase().replaceAll('s', '')),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: s ? AppTheme.primaryDark : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                      child: Text(t,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight:
+                                  s ? FontWeight.w700 : FontWeight.w500,
+                              color: s
+                                  ? AppTheme.primaryDark
+                                  : AppTheme.textMuted)),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppTheme.primary))
+                : RefreshIndicator(
+                    onRefresh: _loadUsers,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                      itemCount: f.length,
+                      itemBuilder: (c, i) => _uc(f[i]),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _us(String l, String v, Color c) => Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            children: [
+              Text(v,
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w800, fontSize: 20, color: c)),
+              Text(l,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ),
+      );
+
+  Widget _uc(dynamic u) {
+    final a = u['is_active'] ?? true;
+    final r = u['role'] ?? 'farmer';
+    final rc =
+        {'farmer': AppTheme.primary, 'dealer': AppTheme.info, 'admin': AppTheme.accent}[r] ??
+            Colors.grey;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+                color: rc.withValues(alpha: 0.1), shape: BoxShape.circle),
+            child: Icon(Icons.person_rounded, color: rc, size: 26),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            color: AppTheme.textPrimary),
+                      ),
+                    ),
+                    Icon(Icons.verified_rounded,
+                        size: 16, color: a ? AppTheme.success : Colors.grey),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(u['email'] ?? '',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12)),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: a
+                        ? AppTheme.success.withValues(alpha: 0.1)
+                        : AppTheme.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    a ? 'Active' : 'Suspended',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: a ? AppTheme.success : AppTheme.error,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!a) ...[
+            Container(
+                width: 1,
+                height: 32,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                color: Colors.grey.shade200),
+            GestureDetector(
+              onTap: () => _toggleUserActive(u['id'], true),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('Activate',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.success,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ] else ...[
+            Container(
+                width: 1,
+                height: 32,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                color: Colors.grey.shade200),
+            GestureDetector(
+              onTap: () => _toggleUserActive(u['id'], false),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('Suspend',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.error,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
+          Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400, size: 24),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleUserActive(int userId, bool active) async {
+    try {
+      final api = ApiService();
+      if (active) {
+        await api.activateUser(userId);
+      } else {
+        await api.suspendUser(userId);
+      }
+      _loadUsers();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update user: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+}
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+
+class _AdminOrders extends StatelessWidget {
+  const _AdminOrders();
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1A3A1A), Color(0xFF2D5016)],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Order Management',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20)),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle),
+                      child: const Icon(Icons.receipt_long_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16)),
+                  child: Row(
+                    children: [
+                      Icon(Icons.search_rounded,
+                          color: Colors.grey.shade400, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text('Search orders by ID or customer...',
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: Row(
+              children: [
+                _os('326', 'Total Orders', AppTheme.primary),
+                const SizedBox(width: 12),
+                _os('24', 'Pending', AppTheme.warning),
+                const SizedBox(width: 12),
+                _os('18', 'In Transit', AppTheme.info),
+                const SizedBox(width: 12),
+                _os('271', 'Completed', AppTheme.success),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: ['All', 'Pending', 'In Transit', 'Completed', 'Issues']
+                  .map((t) {
+                final s = t == 'All';
+                return Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color:
+                              s ? AppTheme.primaryDark : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                    ),
+                    child: Text(t,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                s ? FontWeight.w700 : FontWeight.w500,
+                            color:
+                                s ? AppTheme.primaryDark : AppTheme.textMuted)),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              children: [
+                _oi('#AGR-10482', 'Marie Nkoum', 'Yaounde', '9,500 FCFA',
+                    'Pending', AppTheme.warning, '2 items • 15 min ago'),
+                _oi('#AGR-10481', 'Jean Mbeki', 'Bafoussam', '18,500 FCFA',
+                    'In Transit', AppTheme.info, '1 item • 1 hour ago'),
+                _oi('#AGR-10479', 'Amina Bello', 'Douala', '42,000 FCFA',
+                    'Completed', AppTheme.success, '3 items • 3 hours ago'),
+                _oi('#AGR-10476', 'Samuel N.', 'Bamenda', '12,750 FCFA',
+                    'Issue', AppTheme.error, '1 item • 5 hours ago'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _os(String v, String l, Color c) => Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            children: [
+              Text(v,
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w800, fontSize: 20, color: c)),
+              Text(l,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ),
+      );
+
+  Widget _oi(String id, String c, String city, String amt, String st,
+      Color sc, String details) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: sc.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.inventory_2_rounded, color: sc, size: 26),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(id,
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppTheme.textPrimary)),
+                const SizedBox(height: 4),
+                Text('$c - $city',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(details,
+                    style:
+                        TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(amt,
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppTheme.textPrimary)),
+              const SizedBox(height: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: sc.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(st,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: sc,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+class _AdminSettings extends StatelessWidget {
+  const _AdminSettings();
+  @override
+  Widget build(BuildContext context) {
+    final user = Provider.of<AuthProvider>(context).currentUser;
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(
+                20, MediaQuery.of(context).padding.top + 8, 20, 16),
+            decoration: const BoxDecoration(color: Color(0xFF2D5016)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Admin Settings',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18)),
+                Row(
+                  children: [
+                    const Icon(Icons.notifications_none_rounded,
+                        color: Colors.white, size: 22),
+                    const SizedBox(width: 12),
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.person_rounded,
+                          color: Colors.white, size: 18),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14)),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.person_rounded,
+                        color: AppTheme.primary, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Platform Administrator',
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600, fontSize: 14)),
+                        Text(user?.email ?? 'admin@agrisense.cm',
+                            style: TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  OutlinedButton(
+                    onPressed: () {},
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.primaryDark),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Edit Profile',
+                        style: TextStyle(
+                            color: AppTheme.primaryDark,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Platform Settings',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(height: 10),
+                  _si(Icons.settings_rounded, 'General',
+                      'Language, region, and app details'),
+                  _si(Icons.admin_panel_settings_rounded, 'Roles & Permissions',
+                      'Manage administrator access'),
+                  _si(Icons.payment_rounded, 'Payment Configuration',
+                      'MTN MoMo and Orange Money'),
+                  _si(Icons.cloud_rounded, 'Weather API', 'Connected'),
+                  _si(Icons.smart_toy_rounded, 'AI Model Settings',
+                      'Version 3.2 active'),
+                  _si(
+                      Icons.health_and_safety_rounded,
+                      'System Health',
+                      'Monitor API, database, AI engine',
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const SystemHealthScreen()))),
+                  _si(
+                      Icons.article_rounded,
+                      'Content Management',
+                      'Manage disease database',
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ContentManagementScreen()))),
+                  _si(
+                      Icons.verified_user_rounded,
+                      'Dealer Verification',
+                      'Review dealer applications',
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const DealerVerificationScreen()))),
+                  const SizedBox(height: 20),
+                  Text('Security',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(height: 10),
+                  _sWI(Icons.lock_rounded, 'Two-Factor Authentication', true),
+                  _si(Icons.history_rounded, 'Login Activity', ''),
+                  _si(Icons.folder_rounded, 'Data & Privacy', ''),
+                  const SizedBox(height: 20),
+                  Text('Communication',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700, fontSize: 15)),
+                  const SizedBox(height: 10),
+                  _sWI(Icons.notifications_rounded, 'Push Notifications', true),
+                  _sWI(Icons.email_rounded, 'Email Reports', false),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await context.read<AuthProvider>().logout();
+                        if (context.mounted) {
+                          Navigator.of(context)
+                              .pushNamedAndRemoveUntil('/', (route) => false);
+                        }
+                      },
+                      icon: Icon(Icons.logout_rounded,
+                          color: AppTheme.error, size: 18),
+                      label: Text('Sign Out',
+                          style: TextStyle(
+                              color: AppTheme.error,
+                              fontWeight: FontWeight.w600)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppTheme.error),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _si(IconData i, String t, String s, [VoidCallback? onTap]) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(i, size: 22, color: AppTheme.primary),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(t,
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: AppTheme.textPrimary)),
+                      if (s.isNotEmpty)
+                        Text(s,
+                            style: TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                if (onTap != null)
+                  Icon(Icons.arrow_forward_ios_rounded,
+                      color: Colors.grey.shade400, size: 16)
+                else
+                  Icon(Icons.chevron_right_rounded,
+                      color: Colors.grey.shade400, size: 24),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Widget _sWI(IconData i, String t, bool v) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(i, size: 22, color: AppTheme.primary),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(t,
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: AppTheme.textPrimary)),
+              ),
+              Switch(
+                value: v,
+                onChanged: (newVal) {},
+                activeTrackColor: AppTheme.primary.withValues(alpha: 0.5),
+                thumbColor: WidgetStateProperty.all(AppTheme.primary),
+              ),
+            ],
+          ),
+        ),
+      );
+}
