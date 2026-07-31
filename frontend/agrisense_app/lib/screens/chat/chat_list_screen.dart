@@ -5,6 +5,11 @@ import '../../theme/app_theme.dart';
 import '../../providers/chat_provider.dart';
 import 'chat_screen.dart';
 
+/// Observes navigation so the conversation list refreshes when the user
+/// returns from a chat. Registered in `main.dart` navigatorObservers.
+final RouteObserver<ModalRoute<void>> chatRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
@@ -12,13 +17,37 @@ class ChatListScreen extends StatefulWidget {
   State<ChatListScreen> createState() => _ChatListScreenState();
 }
 
-class _ChatListScreenState extends State<ChatListScreen> {
+class _ChatListScreenState extends State<ChatListScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatProvider>().loadConversations();
     });
+  }
+
+  /// Refresh the list when returning from a conversation so last messages
+  /// and unread badges are always current.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      chatRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    if (mounted) {
+      context.read<ChatProvider>().loadConversations();
+    }
+  }
+
+  @override
+  void dispose() {
+    chatRouteObserver.unsubscribe(this);
+    super.dispose();
   }
 
   @override
@@ -44,13 +73,26 @@ class _ChatListScreenState extends State<ChatListScreen> {
             Expanded(
               child: chatProvider.isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-                  : chatProvider.conversations.isEmpty
-                      ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.chat_rounded, size: 64, color: Colors.grey.shade300), const SizedBox(height: 12), Text('No conversations yet', style: AppTheme.bodyMedium)]))
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: chatProvider.conversations.length,
-                          itemBuilder: (context, index) => _buildChatItem(context, chatProvider.conversations[index]),
-                        ),
+                  : RefreshIndicator(
+                      color: AppTheme.primary,
+                      onRefresh: () => chatProvider.loadConversations(),
+                      child: chatProvider.conversations.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: [
+                                const SizedBox(height: 160),
+                                Icon(Icons.chat_rounded, size: 64, color: Colors.grey.shade300),
+                                const SizedBox(height: 12),
+                                Center(child: Text('No conversations yet', style: AppTheme.bodyMedium)),
+                              ],
+                            )
+                          : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(16),
+                              itemCount: chatProvider.conversations.length,
+                              itemBuilder: (context, index) => _buildChatItem(context, chatProvider.conversations[index]),
+                            ),
+                    ),
             ),
           ],
         ),

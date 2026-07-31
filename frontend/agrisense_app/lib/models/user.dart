@@ -8,6 +8,8 @@ class User {
   final String role;
   final String? profilePhoto;
   final bool isVerified;
+  final bool isPremium;
+  final DateTime? premiumExpiry;
   final DateTime? dateJoined;
 
   User({
@@ -20,22 +22,28 @@ class User {
     required this.role,
     this.profilePhoto,
     this.isVerified = false,
+    this.isPremium = false,
+    this.premiumExpiry,
     this.dateJoined,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'],
-      username: json['username'],
-      firstName: json['first_name'],
-      lastName: json['last_name'],
-      email: json['email'],
-      phoneNumber: json['phone_number'],
-      role: json['role'],
+      username: json['username'] ?? '',
+      firstName: json['first_name'] ?? '',
+      lastName: json['last_name'] ?? '',
+      email: json['email'] ?? '',
+      phoneNumber: json['phone_number'] ?? '',
+      role: json['role'] ?? 'farmer',
       profilePhoto: json['profile_photo'],
       isVerified: json['is_verified'] ?? false,
-      dateJoined: json['date_joined'] != null 
-          ? DateTime.parse(json['date_joined']) 
+      isPremium: json['is_premium'] ?? false,
+      premiumExpiry: json['premium_expiry'] != null
+          ? DateTime.tryParse(json['premium_expiry'].toString())
+          : null,
+      dateJoined: json['date_joined'] != null
+          ? DateTime.tryParse(json['date_joined'].toString())
           : null,
     );
   }
@@ -51,7 +59,13 @@ class User {
       'role': role,
       'profile_photo': profilePhoto,
       'is_verified': isVerified,
+      'is_premium': isPremium,
     };
+  }
+
+  String get fullName {
+    final name = '$firstName $lastName'.trim();
+    return name.isEmpty ? username : name;
   }
 
   bool get isFarmer => role == 'farmer';

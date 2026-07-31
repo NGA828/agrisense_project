@@ -1,12 +1,15 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 // Importing original imports. Fallbacks are included to ensure seamless execution.
 import '../../theme/app_theme.dart';
 import '../../services/api/api_service.dart';
 import '../../widgets/glass_card.dart';
+import '../../providers/chat_provider.dart';
 import '../chat/chat_screen.dart';
+import '../chat/chat_list_screen.dart';
 import '../payment/payment_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -33,6 +36,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   int quantity = 1;
   bool isAddingToCart = false;
   bool isFavorite = false;
+  int? _dealerId;
+  String _dealerName = '';
   late final AnimationController _pulseController;
 
   @override
@@ -42,6 +47,45 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    _loadProduct();
+  }
+
+  Future<void> _loadProduct() async {
+    final productId = widget.productId;
+    if (productId == null) return;
+    try {
+      final product = await ApiService().getProduct(productId);
+      if (mounted) {
+        setState(() {
+          _dealerId = product.dealerId;
+          _dealerName = product.dealerName;
+        });
+      }
+    } catch (_) {
+      // Keep the values passed via constructor; chat falls back to the list.
+    }
+  }
+
+  Future<void> _openChatWithDealer() async {
+    final chatProvider = context.read<ChatProvider>();
+    if (_dealerId != null) {
+      final conversation = await chatProvider.startConversation(dealerId: _dealerId);
+      if (conversation != null && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              conversationId: conversation.id,
+              conversationName: conversation.name,
+            ),
+          ),
+        );
+        return;
+      }
+    }
+    if (mounted) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatListScreen()));
+    }
   }
 
   @override
@@ -693,18 +737,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                     width: double.infinity,
                     height: 50,
                     child: OutlinedButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ChatScreen(
-                            conversationId: 1,
-                            conversationName: 'AgroShop Yaounde',
-                          ),
-                        ),
-                      ),
+                      onPressed: _openChatWithDealer,
                       icon: Icon(Icons.chat_bubble_outline_rounded, size: 18, color: _primaryColor),
                       label: Text(
-                        'Chat with Seller',
+                        _dealerName.isEmpty ? 'Chat with Seller' : 'Chat with $_dealerName',
                         style: GoogleFonts.poppins(
                           fontSize: 14.5,
                           fontWeight: FontWeight.bold,

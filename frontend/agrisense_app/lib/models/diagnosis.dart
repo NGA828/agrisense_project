@@ -1,3 +1,5 @@
+import '../services/api/api_service.dart';
+
 class Diagnosis {
   final String id;
   final String userEmail;
@@ -34,7 +36,7 @@ class Diagnosis {
       id: json['id'],
       userEmail: json['user_email'],
       cropType: json['crop_type'],
-      imageUrl: json['image'],
+      imageUrl: ApiService.resolveMedia(json['image'] as String?),
       symptoms: json['symptoms'],
       confidence: double.parse(json['confidence'].toString()),
       diseaseName: json['disease_name'],

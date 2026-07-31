@@ -23,6 +23,7 @@ class PaymentScreen extends StatefulWidget {
 class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProviderStateMixin {
   String _selectedPayment = 'mtn';
   bool _isProcessing = false;
+  final TextEditingController _phoneController = TextEditingController();
   late final AnimationController _animController;
 
   @override
@@ -36,6 +37,7 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
 
   @override
   void dispose() {
+    _phoneController.dispose();
     _animController.dispose();
     super.dispose();
   }
@@ -466,6 +468,29 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
             icon: Icons.credit_card_rounded,
             accentColor: _creditCardColor,
           ),
+          if (_selectedPayment != 'card') ...[
+            const SizedBox(height: 14),
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Mobile money number',
+                hintText: 'e.g. +237 6XX XX XX XX',
+                prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                filled: true,
+                fillColor: const Color(0xFFFAFAFA),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Payment is sent to this mobile money number',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+            ),
+          ],
         ],
       ),
     );
@@ -647,17 +672,44 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
               ? 'ORANGE_MONEY'
               : 'CARD';
 
+      final phone = _phoneController.text.trim();
+      if (apiPaymentType != 'CARD' && phone.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter your mobile money number'),
+              backgroundColor: Color(0xFFC62828),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+
       final payment = await api.createPayment(
         widget.orderId!,
         apiPaymentType,
-        '+237600000000', // Regional country-code phone placeholder
+        phone.isEmpty ? '+237600000000' : phone,
         total.toDouble(),
       );
 
-      await api.processPayment(payment['id']);
+      final result = await api.processPayment(payment['id']);
 
-      if (mounted) {
+      if (!mounted) return;
+      if (result['status'] == 'completed') {
         _showSuccessDialog();
+      } else {
+        // The provider rejected or could not confirm the transaction.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Payment ${result['status'] ?? 'failed'}. Please check your mobile money '
+              'number and try again, or choose another payment method.',
+            ),
+            backgroundColor: const Color(0xFFC62828),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

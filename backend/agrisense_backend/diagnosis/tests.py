@@ -1,3 +1,136 @@
-from django.test import TestCase
+import io
 
-# Create your tests here.
+from django.urls import reverse
+from PIL import Image
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from users.models import User
+from diagnosis.models import Disease, Diagnosis
+
+
+def make_user(username, role):
+    return User.objects.create_user(
+        username=username, password='Str0ngPass!',
+        first_name=username.title(), last_name='Test',
+        email=f'{username}@test.com', phone_number='+237600000000',
+        role=role,
+    )
+
+
+def png_bytes(color=(120, 140, 100), size=(64, 64)):
+    buf = io.BytesIO()
+    Image.new('RGB', size, color).save(buf, format='PNG')
+    buf.seek(0)
+    return buf
+
+
+class DiagnosisTests(APITestCase):
+    def setUp(self):
+        self.farmer = make_user('farmer1', 'farmer')
+        self.admin = make_user('admin1', 'admin')
+        self.dealer = make_user('dealer1', 'dealer')
+        Disease.objects.create(
+            disease_name='Test Blight', crop_name='Tomato', pathogen='X',
+            symptoms='spots', causes='fungus', severity='medium',
+            prevention='rotate', medication='copper',
+            instructions='spray', duration=14,
+        )
+
+    def auth(self, user):
+        self.client.force_authenticate(user=user)
+
+    def test_analyze_with_image(self):
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes(), 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertIn('disease_name', resp.data)
+        self.assertIn('confidence', resp.data)
+        self.assertGreaterEqual(float(resp.data['confidence']), 0)
+        self.assertIn('treatment_plan', resp.data)
+        self.assertTrue(Diagnosis.objects.filter(user=self.farmer).exists())
+
+    def test_analyze_rejects_bad_type(self):
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': io.BytesIO(b'not-an-image'), 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        # Content type is text/plain by default for BytesIO => rejected pre-inference.
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_analyze_requires_auth(self):
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes(), 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_history_scoped_to_user(self):
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes(), 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        resp = self.client.get(reverse('diagnosis-history'))
+        self.assertEqual(len(resp.data), 1)
+
+
+class DiseaseDatabaseTests(APITestCase):
+    def setUp(self):
+        self.farmer = make_user('farmer1', 'farmer')
+        self.admin = make_user('admin1', 'admin')
+        self.disease = Disease.objects.create(
+            disease_name='Existing', crop_name='Maize', severity='low',
+        )
+
+    def auth(self, user):
+        self.client.force_authenticate(user=user)
+
+    def test_admin_can_add_disease(self):
+        self.auth(self.admin)
+        resp = self.client.post(reverse('disease-db-add-disease'), {
+            'disease_name': 'New Rust', 'crop_name': 'Maize',
+            'pathogen': 'Puccinia', 'symptoms': 'pustules',
+            'causes': 'fungus', 'severity': 'medium',
+            'prevention': 'rotate', 'medication': 'azole',
+            'instructions': 'spray', 'duration': 14,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Disease.objects.filter(disease_name='New Rust').exists())
+
+    def test_farmer_cannot_add_disease(self):
+        self.auth(self.farmer)
+        resp = self.client.post(reverse('disease-db-add-disease'), {
+            'disease_name': 'Hack', 'crop_name': 'Maize', 'severity': 'low',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_farmer_cannot_update_disease(self):
+        self.auth(self.farmer)
+        resp = self.client.patch(reverse('disease-db-detail', args=[self.disease.id]),
+                                 {'disease_name': 'Hacked'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_farmer_cannot_delete_disease(self):
+        self.auth(self.farmer)
+        resp = self.client.delete(reverse('disease-db-detail', args=[self.disease.id]))
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_list_diseases_admin_only(self):
+        self.auth(self.farmer)
+        resp = self.client.get(reverse('disease-db-list-diseases'))
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_read_access_for_all_users(self):
+        self.auth(self.farmer)
+        resp = self.client.get(reverse('disease-db-supported-crops'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('Maize', resp.data)

@@ -161,7 +161,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                           Expanded(
                                             child: GestureDetector(
-                                              onTap: () => setState(() => _isLogin = false),
+                                              // Admin accounts are provisioned by platform
+                                              // staff, so self-registration is hidden.
+                                              onTap: widget.selectedRole == 'admin'
+                                                  ? null
+                                                  : () => setState(() => _isLogin = false),
                                               child: AnimatedContainer(
                                                 duration: const Duration(milliseconds: 300),
                                                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -172,7 +176,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                                   borderRadius: BorderRadius.circular(30),
                                                 ),
                                                 child: Text(
-                                                  'Register',
+                                                  widget.selectedRole == 'admin'
+                                                      ? 'Login'
+                                                      : 'Register',
                                                   textAlign: TextAlign.center,
                                                   style: AppTheme.bodyMedium.copyWith(
                                                     color: !_isLogin
@@ -299,7 +305,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       Align(
                                         alignment: Alignment.centerRight,
                                         child: TextButton(
-                                          onPressed: () {},
+                                          onPressed: _showPasswordResetDialog,
                                           child: Text(
                                             'Forgot Password?',
                                             style: AppTheme.bodySmall.copyWith(
@@ -481,18 +487,18 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     
     try {
-      final api = ApiService();
+      final auth = context.read<AuthProvider>();
       
       if (_isLogin) {
-        // Login
-        await api.login(_usernameController.text, _passwordController.text);
-        final user = await api.getCurrentUser();
-        
-        if (mounted) {
+        // Login through the auth provider so the app-wide session is set.
+        await auth.login(_usernameController.text, _passwordController.text);
+        final user = auth.currentUser;
+        if (mounted && user != null) {
           _navigateToDashboard(user.role);
         }
       } else {
         // Register
+        final api = ApiService();
         await api.register(
           username: _usernameController.text,
           password: _passwordController.text,
@@ -505,8 +511,12 @@ class _LoginScreenState extends State<LoginScreen> {
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account created! Please login.'),
+            SnackBar(
+              content: Text(
+                widget.selectedRole == 'dealer'
+                    ? 'Account created! Your dealer profile is pending admin verification.'
+                    : 'Account created! Please login.',
+              ),
               backgroundColor: AppTheme.success,
             ),
           );
@@ -525,6 +535,106 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Self-service password reset, verified by the registered phone number.
+  Future<void> _showPasswordResetDialog() async {
+    final username = TextEditingController();
+    final phone = TextEditingController();
+    final newPassword = TextEditingController();
+    var submitting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Reset Password'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Enter your username and the phone number you registered '
+                  'with. Your password will be reset immediately.',
+                  style: TextStyle(fontSize: 12, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: username,
+                  decoration: const InputDecoration(
+                    labelText: 'Username',
+                    prefixIcon: Icon(Icons.person_rounded, size: 18),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Registered phone number',
+                    prefixIcon: Icon(Icons.phone_android_rounded, size: 18),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: newPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New password',
+                    prefixIcon: Icon(Icons.lock_rounded, size: 18),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      setDialogState(() => submitting = true);
+                      try {
+                        await ApiService().resetPassword(
+                          username: username.text.trim(),
+                          phoneNumber: phone.text.trim(),
+                          newPassword: newPassword.text,
+                        );
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Password reset! You can now log in.'),
+                              backgroundColor: AppTheme.success,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => submitting = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Reset failed: $e'),
+                            backgroundColor: AppTheme.error,
+                          ),
+                        );
+                      }
+                    },
+              child: Text(submitting ? 'Resetting...' : 'Reset Password'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _navigateToDashboard(String role) {
