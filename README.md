@@ -47,26 +47,86 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 
 ## Quick Start
 
-### Backend (Django)
+### 0. Requirements
+
+- **Python 3.10+**
+- **MySQL 8.0+ or MariaDB 10.6+** (recommended; the schema uses `utf8mb4`,
+  `CHECK` constraints and descending indexes). SQLite works too for quick
+  local smoke tests — see the note at the end of this section.
+- **Flutter 3.x** for the mobile app
+
+### Backend (Django + MySQL)
 
 ```bash
 cd backend/agrisense_backend
-python -m venv venv && source venv/bin/activate
+python -m venv venv && source venv/bin/activate     # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
 
-# Option A — MySQL (production-like)
-mysql -u root -p -e "CREATE DATABASE agrisense_db CHARACTER SET utf8mb4;"
-mysql -u root -p -e "CREATE USER 'agrisense_user'@'localhost' IDENTIFIED BY 'password123';"
-mysql -u root -p -e "GRANT ALL PRIVILEGES ON agrisense_db.* TO 'agrisense_user'@'localhost';"
+The project uses **PyMySQL** (pure Python — no C compiler needed on Windows)
+and already ships the `cryptography` package required for MySQL 8's
+`caching_sha2_password` authentication.
 
-# Option B — SQLite (zero-setup local dev)
-export DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3
+#### Option A — One command (recommended)
 
+Start your MySQL server, then:
+
+```bash
+python manage.py create_mysql_database
+# prompts for the MySQL root password; creates:
+#   database  agrisense_db      (utf8mb4)
+#   user      agrisense_user    (password: password123, full access)
+```
+
+It is idempotent — safe to re-run. Then:
+
+```bash
 python manage.py migrate
 python manage.py seed_data            # demo users/products/diseases/orders/chats
 python manage.py createsuperuser
 python manage.py runserver            # REST API on :8000
 ```
+
+#### Option B — Manual MySQL setup
+
+Linux / macOS:
+
+```bash
+mysql -u root -p -e "CREATE DATABASE agrisense_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p -e "CREATE USER 'agrisense_user'@'localhost' IDENTIFIED BY 'password123';"
+mysql -u root -p -e "GRANT ALL PRIVILEGES ON agrisense_db.* TO 'agrisense_user'@'localhost';"
+mysql -u root -p -e "CREATE USER 'agrisense_user'@'%' IDENTIFIED BY 'password123';"
+mysql -u root -p -e "GRANT ALL PRIVILEGES ON agrisense_db.* TO 'agrisense_user'@'%';"
+```
+
+Windows (cmd / PowerShell):
+
+```bat
+mysql -u root -p -e "CREATE DATABASE agrisense_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p -e "CREATE USER 'agrisense_user'@'localhost' IDENTIFIED BY 'password123';"
+mysql -u root -p -e "GRANT ALL PRIVILEGES ON agrisense_db.* TO 'agrisense_user'@'localhost';"
+```
+
+#### Connecting with different credentials
+
+All database settings come from environment variables (or `backend/agrisense_backend/.env` — copy `.env.example`):
+
+```bash
+DB_NAME=agrisense_db DB_USER=root DB_PASSWORD=yourpass DB_HOST=localhost DB_PORT=3306 python manage.py runserver
+```
+
+#### MySQL notes you may care about
+
+- The `Order` model maps to a table named `` `order` `` — `order` is a MySQL
+  reserved word, but Django always quotes identifiers with backticks, so the
+  app is unaffected. Just remember to backtick it if you write raw SQL.
+- MySQL 8's default `caching_sha2_password` auth works out of the box thanks
+  to the `cryptography` dependency (PyMySQL performs the RSA key exchange).
+- `FILE_UPLOAD_MAX_MEMORY_SIZE`/`DATA_UPLOAD_MAX_MEMORY_SIZE` are set to 10 MB
+  in `settings.py`, so large plant photos upload fine through the API.
+- Not using MySQL right now? For zero-setup smoke tests you can run
+  `export DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3` (or the
+  equivalent `set` on Windows) before `migrate` — no other changes needed.
 
 ### Frontend (Flutter)
 
