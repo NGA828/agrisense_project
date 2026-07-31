@@ -32,6 +32,9 @@ dependencies:
   # Location
   geolocator: ^10.1.0
   
+  # Real-time chat (WebSockets)
+  web_socket_channel: ^2.4.0
+  
   # Utils
   intl: ^0.19.0
   percent_indicator: ^4.2.3

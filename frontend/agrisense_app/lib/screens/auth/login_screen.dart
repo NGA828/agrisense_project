@@ -161,7 +161,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                           Expanded(
                                             child: GestureDetector(
-                                              onTap: () => setState(() => _isLogin = false),
+                                              // Admin accounts are provisioned by platform
+                                              // staff, so self-registration is hidden.
+                                              onTap: widget.selectedRole == 'admin'
+                                                  ? null
+                                                  : () => setState(() => _isLogin = false),
                                               child: AnimatedContainer(
                                                 duration: const Duration(milliseconds: 300),
                                                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -172,7 +176,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                                   borderRadius: BorderRadius.circular(30),
                                                 ),
                                                 child: Text(
-                                                  'Register',
+                                                  widget.selectedRole == 'admin'
+                                                      ? 'Login'
+                                                      : 'Register',
                                                   textAlign: TextAlign.center,
                                                   style: AppTheme.bodyMedium.copyWith(
                                                     color: !_isLogin
@@ -481,18 +487,18 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     
     try {
-      final api = ApiService();
+      final auth = context.read<AuthProvider>();
       
       if (_isLogin) {
-        // Login
-        await api.login(_usernameController.text, _passwordController.text);
-        final user = await api.getCurrentUser();
-        
-        if (mounted) {
+        // Login through the auth provider so the app-wide session is set.
+        await auth.login(_usernameController.text, _passwordController.text);
+        final user = auth.currentUser;
+        if (mounted && user != null) {
           _navigateToDashboard(user.role);
         }
       } else {
         // Register
+        final api = ApiService();
         await api.register(
           username: _usernameController.text,
           password: _passwordController.text,
@@ -505,8 +511,12 @@ class _LoginScreenState extends State<LoginScreen> {
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account created! Please login.'),
+            SnackBar(
+              content: Text(
+                widget.selectedRole == 'dealer'
+                    ? 'Account created! Your dealer profile is pending admin verification.'
+                    : 'Account created! Please login.',
+              ),
               backgroundColor: AppTheme.success,
             ),
           );

@@ -13,16 +13,17 @@ class MarketplaceScreen extends StatefulWidget {
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
+  /// Display label -> backend category value.
+  final List<Map<String, dynamic>> _categories = [
+    {'name': 'Seeds', 'value': 'seed', 'icon': Icons.eco_rounded, 'color': const Color(0xFF43A047)},
+    {'name': 'Fertilizers', 'value': 'fertilizer', 'icon': Icons.science_rounded, 'color': const Color(0xFFFF9800)},
+    {'name': 'Fungicides', 'value': 'fungicide', 'icon': Icons.healing_rounded, 'color': const Color(0xFFE91E63)},
+    {'name': 'Pesticides', 'value': 'pesticide', 'icon': Icons.bug_report_rounded, 'color': const Color(0xFF1E88E5)},
+    {'name': 'Equipment', 'value': 'equipment', 'icon': Icons.build_rounded, 'color': const Color(0xFF607D8B)},
+  ];
   String _selectedCategory = 'Seeds';
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
-
-  final List<Map<String, dynamic>> _categories = [
-    {'name': 'Seeds', 'icon': Icons.eco_rounded, 'color': const Color(0xFF43A047)},
-    {'name': 'Fertilizers', 'icon': Icons.science_rounded, 'color': const Color(0xFFFF9800)},
-    {'name': 'Pesticides', 'icon': Icons.bug_report_rounded, 'color': const Color(0xFF1E88E5)},
-    {'name': 'Equipment', 'icon': Icons.build_rounded, 'color': const Color(0xFF607D8B)},
-  ];
 
   @override
   void initState() {
@@ -30,6 +31,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MarketplaceProvider>().loadProducts();
     });
+  }
+
+  String get _selectedCategoryValue {
+    for (final cat in _categories) {
+      if (cat['name'] == _selectedCategory) return cat['value'] as String;
+    }
+    return '';
+  }
+
+  void _refresh() {
+    final provider = context.read<MarketplaceProvider>();
+    final query = _searchController.text.trim();
+    provider.loadProducts(
+      category: _selectedCategoryValue,
+      search: query.isEmpty ? null : query,
+    );
   }
 
   @override
@@ -41,9 +58,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   @override
   Widget build(BuildContext context) {
     final marketplace = context.watch<MarketplaceProvider>();
-    final products = marketplace.products.where((p) =>
-      p.category.toLowerCase().contains(_selectedCategory.toLowerCase().replaceAll('s', ''))
-    ).toList();
+    final products = marketplace.products;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7F3),
@@ -69,7 +84,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           color: AppTheme.primary,
                           backgroundColor: Colors.white,
                           displacement: 40,
-                          onRefresh: () => marketplace.loadProducts(),
+                          onRefresh: _refresh,
                           child: GridView.builder(
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -214,6 +229,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     onChanged: (value) {
                       setState(() => _isSearching = value.isNotEmpty);
                     },
+                    onSubmitted: (_) => _refresh(),
+                    textInputAction: TextInputAction.search,
                   ),
                 ),
                 if (_isSearching)
@@ -221,6 +238,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     onTap: () {
                       _searchController.clear();
                       setState(() => _isSearching = false);
+                      _refresh();
                     },
                     child: Padding(
                       padding: const EdgeInsets.only(right: 12),
@@ -328,7 +346,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             final catColor = cat['color'] as Color;
 
             return GestureDetector(
-              onTap: () => setState(() => _selectedCategory = cat['name']),
+              onTap: () {
+                setState(() => _selectedCategory = cat['name'] as String);
+                _refresh();
+              },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOutCubic,
@@ -772,33 +793,62 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Verified + Rating row
+                    // Verified + Premium + Rating row
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.success.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.verified_rounded,
-                                  size: 10, color: AppTheme.success),
-                              const SizedBox(width: 3),
-                              Text(
-                                'Verified',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 9,
-                                  color: AppTheme.success,
-                                  fontWeight: FontWeight.w600,
+                        if (product.dealerIsPremium) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF8E1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.workspace_premium_rounded,
+                                    size: 10, color: AppTheme.accent),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Premium',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    color: AppTheme.accent,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 4),
+                        ],
+                        if (product.dealerIsVerified) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.success.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.verified_rounded,
+                                    size: 10, color: AppTheme.success),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Verified',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    color: AppTheme.success,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -839,6 +889,28 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+
+                    // Dealer
+                    Row(
+                      children: [
+                        const Icon(Icons.storefront_rounded,
+                            size: 10, color: AppTheme.textMuted),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            product.dealerName.isEmpty ? 'Agro-dealer' : product.dealerName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              color: AppTheme.textMuted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
 

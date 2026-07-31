@@ -16,6 +16,9 @@ class _PremiumScreenState extends State<PremiumScreen> {
   bool _isUpgrading = false;
   int _selectedMonths = 1;
 
+  /// Must match the backend PREMIUM_PRICE_PER_MONTH (FCFA).
+  static const double premiumPricePerMonth = 1000;
+
   Future<void> _handleUpgrade() async {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     if (user == null || user.id == null) return;
@@ -23,28 +26,49 @@ class _PremiumScreenState extends State<PremiumScreen> {
     setState(() => _isUpgrading = true);
     try {
       final api = ApiService();
-      await api.upgradePremium(user.id!, durationMonths: _selectedMonths);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Premium upgrade successful!'),
-            backgroundColor: AppTheme.success,
-          ),
-        );
-        Navigator.pop(context);
+      // Creates a premium payment (payment_required) — premium activates only
+      // once the mobile-money payment completes.
+      final result = await api.upgradePremium(user.id!, durationMonths: _selectedMonths);
+      final paymentId = result['payment_id'];
+
+      if (paymentId == null) {
+        // Admin grant or already active.
+        await context.read<AuthProvider>().loadCurrentUser();
+        if (mounted) _showResult('Premium is active!', isSuccess: true);
+        return;
+      }
+
+      final payment = await api.processPayment(paymentId);
+      if (payment['status'] == 'completed') {
+        await context.read<AuthProvider>().loadCurrentUser();
+        if (mounted) _showResult('Premium activated! Your products now rank higher.', isSuccess: true);
+      } else {
+        if (mounted) {
+          _showResult(
+            'Payment failed. Please check your mobile money number and try again.',
+            isSuccess: false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Upgrade failed: $e'),
-            backgroundColor: AppTheme.error,
-          ),
+          SnackBar(content: Text('Upgrade failed: $e'), backgroundColor: AppTheme.error),
         );
       }
     } finally {
       setState(() => _isUpgrading = false);
     }
+  }
+
+  void _showResult(String message, {required bool isSuccess}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isSuccess ? AppTheme.success : AppTheme.error,
+      ),
+    );
+    if (isSuccess) Navigator.pop(context);
   }
 
   @override
@@ -127,11 +151,11 @@ class _PremiumScreenState extends State<PremiumScreen> {
                           const SizedBox(height: 12),
                           Row(
                             children: [
-                              _buildDurationChip(1, '1 Month', '15,000'),
+                              _buildDurationChip(1, '1 Month', '${(premiumPricePerMonth * 1).toInt()}'),
                               const SizedBox(width: 8),
-                              _buildDurationChip(3, '3 Months', '40,000'),
+                              _buildDurationChip(3, '3 Months', '${(premiumPricePerMonth * 3).toInt()}'),
                               const SizedBox(width: 8),
-                              _buildDurationChip(6, '6 Months', '75,000'),
+                              _buildDurationChip(6, '6 Months', '${(premiumPricePerMonth * 6).toInt()}'),
                             ],
                           ),
                         ],
@@ -146,8 +170,8 @@ class _PremiumScreenState extends State<PremiumScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Row(children: [Text('${_selectedMonths == 1 ? '15,000' : _selectedMonths == 3 ? '40,000' : '75,000'} Fcfa', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18)), Text('/${_selectedMonths == 1 ? 'mo' : '${_selectedMonths} months'}', style: AppTheme.bodySmall)]),
-                            Text('25,000 Fcfa', style: AppTheme.bodySmall.copyWith(decoration: TextDecoration.lineThrough)),
+                            Row(children: [Text('${(premiumPricePerMonth * _selectedMonths).toInt()} Fcfa', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18)), Text('/${_selectedMonths == 1 ? 'mo' : '${_selectedMonths} months'}', style: AppTheme.bodySmall)]),
+                            Text('${premiumPricePerMonth.toInt()} Fcfa per month', style: AppTheme.bodySmall),
                           ]),
                           ElevatedButton.icon(
                             onPressed: _isUpgrading ? null : _handleUpgrade,

@@ -8,9 +8,10 @@ class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = ['id', 'order', 'user', 'user_name', 'amount', 'payment_method',
-                  'phone_number', 'transaction_id', 'status', 'description',
-                  'created_at', 'updated_at']
-        read_only_fields = ['id', 'user', 'transaction_id', 'status', 'created_at', 'updated_at']
+                  'payment_type', 'phone_number', 'transaction_id', 'status',
+                  'description', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'transaction_id', 'status', 'payment_type',
+                            'created_at', 'updated_at']
 
     def create(self, validated_data):
         import uuid

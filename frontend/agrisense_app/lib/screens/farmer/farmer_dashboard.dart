@@ -3,11 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/diagnosis_provider.dart';
+import '../../services/api/api_service.dart';
 import 'farmer_home_screen.dart';
 import '../ai_scan/camera_screen.dart';
 import '../weather/weather_screen.dart';
 import '../marketplace/marketplace_screen.dart';
 import '../diagnosis/diagnosis_history_screen.dart';
+import '../chat/chat_list_screen.dart';
 import 'order_history_screen.dart';
 
 class FarmerDashboard extends StatefulWidget {
@@ -177,8 +180,150 @@ class _FarmerDashboardState extends State<FarmerDashboard>
 //  PROFILE SCREEN
 // ─────────────────────────────────────────────
 
+/// Live counters for the farmer profile (scans, orders, chats).
+class _ProfileStats extends StatefulWidget {
+  const _ProfileStats();
+
+  @override
+  State<_ProfileStats> createState() => _ProfileStatsState();
+}
+
+class _ProfileStatsState extends State<_ProfileStats> {
+  int _scans = 0;
+  int _orders = 0;
+  int _chats = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final diagnosisProvider = context.read<DiagnosisProvider>();
+    _scans = diagnosisProvider.history.length;
+    if (_scans == 0) {
+      await diagnosisProvider.loadHistory();
+      _scans = diagnosisProvider.history.length;
+    }
+    try {
+      final api = ApiService();
+      final orders = await api.getOrders();
+      final chats = await api.getChatRooms();
+      if (mounted) {
+        setState(() {
+          _orders = orders is List ? orders.length : 0;
+          _chats = chats is List ? chats.length : 0;
+        });
+      }
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _buildItem(context, '$_scans', 'Scans', Icons.search),
+        _buildDivider(),
+        _buildItem(context, '$_orders', 'Orders', Icons.shopping_bag_outlined),
+        _buildDivider(),
+        _buildItem(context, '$_chats', 'Chats', Icons.chat_bubble_outline),
+      ],
+    );
+  }
+
+  Widget _buildItem(BuildContext context, String value, String label, IconData icon) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, size: 18, color: AppTheme.primary),
+          const SizedBox(height: 4),
+          Text(value,
+              style: GoogleFonts.poppins(
+                  fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+          Text(label,
+              style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider() => Container(width: 1, height: 34, color: Colors.grey.shade200);
+}
+
 class _ProfileScreen extends StatelessWidget {
   const _ProfileScreen();
+
+  Future<void> _showEditProfileDialog(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final firstName = TextEditingController(text: user.firstName);
+    final lastName = TextEditingController(text: user.lastName);
+    final phone = TextEditingController(text: user.phoneNumber);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: firstName,
+                decoration: const InputDecoration(labelText: 'First name'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: lastName,
+                decoration: const InputDecoration(labelText: 'Last name'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone number'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await auth.updateProfile(
+          firstName: firstName.text.trim(),
+          lastName: lastName.text.trim(),
+          phoneNumber: phone.text.trim(),
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated'), backgroundColor: AppTheme.success),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Update failed: $e'), backgroundColor: AppTheme.error),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -233,7 +378,7 @@ class _ProfileScreen extends StatelessWidget {
                           child: IconButton(
                             icon: const Icon(Icons.edit_rounded,
                                 color: Colors.white, size: 20),
-                            onPressed: () {},
+                            onPressed: () => _showEditProfileDialog(context),
                           ),
                         ),
                       ],
@@ -337,17 +482,7 @@ class _ProfileScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Row(
-                    children: [
-                      _buildStatItem(context, '24', 'Scans', Icons.search),
-                      _buildStatDivider(),
-                      _buildStatItem(
-                          context, '8', 'Orders', Icons.shopping_bag_outlined),
-                      _buildStatDivider(),
-                      _buildStatItem(
-                          context, '5', 'Chats', Icons.chat_bubble_outline),
-                    ],
-                  ),
+                  child: const _ProfileStats(),
                 ),
               ),
 
@@ -393,7 +528,10 @@ class _ProfileScreen extends StatelessWidget {
                       iconBg: const Color(0xFFE0F2F1),
                       title: 'Chat History',
                       subtitle: 'Dealer conversations',
-                      onTap: () {},
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ChatListScreen()),
+                      ),
                     ),
 
                     const SizedBox(height: 20),
@@ -513,43 +651,6 @@ class _ProfileScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  // ── Helper: Stat Item ──
-  Widget _buildStatItem(
-      BuildContext context, String value, String label, IconData icon) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.primary,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: AppTheme.textMuted,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Helper: Stat Divider ──
-  Widget _buildStatDivider() {
-    return Container(
-      width: 1,
-      height: 32,
-      color: Colors.grey.shade200,
     );
   }
 

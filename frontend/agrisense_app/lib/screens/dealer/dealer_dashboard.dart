@@ -3,9 +3,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/chat_provider.dart';
 import '../../services/api/api_service.dart';
+import '../chat/chat_list_screen.dart';
+import '../chat/chat_screen.dart';
+import '../notifications/notifications_screen.dart';
 import 'premium_screen.dart';
 import 'add_product_screen.dart';
+import 'edit_product_screen.dart';
 
 class DealerDashboard extends StatefulWidget {
   const DealerDashboard({super.key});
@@ -60,12 +65,45 @@ class _DealerDashboardState extends State<DealerDashboard> {
   }
 }
 
-class _DealerHome extends StatelessWidget {
+class _DealerHome extends StatefulWidget {
   const _DealerHome();
+
+  @override
+  State<_DealerHome> createState() => _DealerHomeState();
+}
+
+class _DealerHomeState extends State<_DealerHome> {
+  List<dynamic> _orders = [];
+  int _productCount = 0;
+  double _revenue = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final api = ApiService();
+      final orders = await api.getOrders();
+      final products = await api.getMyProducts();
+      if (mounted) {
+        setState(() {
+          _orders = orders is List ? orders : [];
+          _productCount = products.length;
+          _revenue = _orders
+              .where((o) => o['status'] != 'cancelled')
+              .fold<double>(0, (sum, o) => sum + ((o['total_price'] ?? 0) as num).toDouble());
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
+    final recentOrders = _orders.take(3).toList();
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -85,10 +123,22 @@ class _DealerHome extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(children: [Icon(Icons.eco_rounded, color: Colors.white, size: 28), const SizedBox(width: 8), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('AgriSense AI', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)), Text('Dealer Dashboard', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 11))])]),
-                    Container(
-                      width: 48, height: 48,
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle, border: Border.all(color: Colors.white.withOpacity(0.3), width: 2)),
-                      child: Icon(Icons.store_rounded, color: Colors.white, size: 24),
+                    Row(
+                      children: [
+                        Container(
+                          width: 44, height: 44,
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                          child: const Center(
+                            child: NotificationBell(color: Colors.white, size: 20),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 48, height: 48,
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle, border: Border.all(color: Colors.white.withOpacity(0.3), width: 2)),
+                          child: Icon(Icons.store_rounded, color: Colors.white, size: 24),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -99,11 +149,11 @@ class _DealerHome extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Expanded(child: _buildStatCard(Icons.inventory_2_rounded, 'Products', '24', Colors.white.withOpacity(0.15), Colors.white)),
+                    Expanded(child: _buildStatCard(Icons.inventory_2_rounded, 'Products', '$_productCount', Colors.white.withOpacity(0.15), Colors.white)),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildStatCard(Icons.receipt_long_rounded, 'Orders', '18', Colors.white.withOpacity(0.15), Colors.white)),
+                    Expanded(child: _buildStatCard(Icons.receipt_long_rounded, 'Orders', '${_orders.length}', Colors.white.withOpacity(0.15), Colors.white)),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildStatCard(Icons.attach_money_rounded, 'Revenue', '245K', Colors.white.withOpacity(0.15), Colors.white)),
+                    Expanded(child: _buildStatCard(Icons.attach_money_rounded, 'Revenue', '${_revenue.toInt()}', Colors.white.withOpacity(0.15), Colors.white)),
                   ],
                 ),
               ],
@@ -125,9 +175,30 @@ class _DealerHome extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(children: [
-              _buildOrderItem('Urea Fertilizer 50kg', 'Jean Koffi', '25,000 FCFA', 'Pending', AppTheme.warning),
-              _buildOrderItem('Pesticide - Cypermethrin', 'Adama Traore', '15,000 FCFA', 'Delivered', AppTheme.success),
-              _buildOrderItem('NPK 20-10-10 50kg', 'Mariam Diallo', '27,500 FCFA', 'Completed', AppTheme.info),
+              if (recentOrders.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                  child: Text('No orders yet — new orders will appear here in real time.',
+                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                )
+              else
+                ...recentOrders.map((order) {
+                  final statusColor = {
+                    'pending': AppTheme.warning,
+                    'confirmed': AppTheme.info,
+                    'shipped': AppTheme.primary,
+                    'delivered': AppTheme.success,
+                    'cancelled': AppTheme.error,
+                  }[order['status']] ?? AppTheme.textMuted;
+                  return _buildOrderItem(
+                    '${order['quantity']}x ${order['product_name'] ?? 'Product'}',
+                    order['farmer_name'] ?? 'Farmer',
+                    '${order['total_price'] ?? 0} FCFA',
+                    order['status'] ?? 'pending',
+                    statusColor,
+                  );
+                }).toList(),
             ]),
           ),
           const SizedBox(height: 20),
@@ -143,9 +214,9 @@ class _DealerHome extends StatelessWidget {
               children: [
                 Expanded(child: _buildActionCard(Icons.add_circle_rounded, 'Add Product', AppTheme.primary, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen())))),
                 const SizedBox(width: 12),
-                Expanded(child: _buildActionCard(Icons.chat_rounded, 'Messages', AppTheme.info, () {})),
+                Expanded(child: _buildActionCard(Icons.chat_rounded, 'Messages', AppTheme.info, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatListScreen())))),
                 const SizedBox(width: 12),
-                Expanded(child: _buildActionCard(Icons.inventory_rounded, 'Stock', AppTheme.accent, () {})),
+                Expanded(child: _buildActionCard(Icons.inventory_rounded, 'Refresh', AppTheme.accent, () => _loadStats())),
               ],
             ),
           ),
@@ -260,8 +331,62 @@ class _DealerProductsState extends State<_DealerProducts> {
 
   Future<void> _loadProducts() async {
     setState(() => _isLoading = true);
-    try { final api = ApiService(); final response = await api.getMarketplaceProducts(); setState(() { _products = response; _isLoading = false; }); }
-    catch (e) { setState(() => _isLoading = false); }
+    try {
+      final api = ApiService();
+      final response = await api.getMyProducts();
+      setState(() { _products = response; _isLoading = false; });
+    } catch (e) { setState(() => _isLoading = false); }
+  }
+
+  Future<void> _deleteProduct(dynamic product) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete product?'),
+        content: Text('"${product.name}" will be permanently removed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiService().deleteProduct(product.idProduct);
+      if (mounted) {
+        setState(() => _products.removeWhere((p) => p.idProduct == product.idProduct));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Product deleted'), backgroundColor: AppTheme.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleAvailability(dynamic product, bool value) async {
+    try {
+      await ApiService().toggleProductAvailability(product.idProduct);
+      if (mounted) {
+        setState(() {
+          product.isAvailable = value;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
   }
 
   @override
@@ -335,8 +460,22 @@ class _DealerProductsState extends State<_DealerProducts> {
                 ),
               ),
               Row(children: [
-                IconButton(onPressed: () {}, icon: Icon(Icons.edit_rounded, color: AppTheme.primary, size: 18)),
-                IconButton(onPressed: () {}, icon: Icon(Icons.delete_rounded, color: AppTheme.error, size: 18)),
+                IconButton(
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EditProductScreen(product: product.toMap()),
+                      ),
+                    );
+                    if (result == true) _loadProducts();
+                  },
+                  icon: Icon(Icons.edit_rounded, color: AppTheme.primary, size: 18),
+                ),
+                IconButton(
+                  onPressed: () => _deleteProduct(product),
+                  icon: Icon(Icons.delete_rounded, color: AppTheme.error, size: 18),
+                ),
               ]),
             ],
           ),
@@ -348,7 +487,11 @@ class _DealerProductsState extends State<_DealerProducts> {
                 Text('Status: ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 Text(product.isAvailable ? 'Active' : 'Inactive', style: TextStyle(color: product.isAvailable ? AppTheme.success : AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
               ]),
-              Switch(value: product.isAvailable, onChanged: (v) {}, activeColor: AppTheme.primary),
+              Switch(
+                value: product.isAvailable,
+                onChanged: (v) => _toggleAvailability(product, v),
+                activeColor: AppTheme.primary,
+              ),
             ],
           ),
         ],
@@ -368,11 +511,62 @@ class _DealerProductsState extends State<_DealerProducts> {
   }
 }
 
-class _DealerOrders extends StatelessWidget {
+class _DealerOrders extends StatefulWidget {
   const _DealerOrders();
 
   @override
+  State<_DealerOrders> createState() => _DealerOrdersState();
+}
+
+class _DealerOrdersState extends State<_DealerOrders> {
+  List<dynamic> _orders = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrders();
+  }
+
+  Future<void> _loadOrders() async {
+    setState(() => _isLoading = true);
+    try {
+      final api = ApiService();
+      final response = await api.getOrders();
+      setState(() {
+        _orders = response is List ? response : [];
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _updateStatus(dynamic order, String status) async {
+    try {
+      await ApiService().updateOrderStatus(order['id'], status);
+      await _loadOrders();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Order #${order['id']} updated to $status'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update order: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final pendingCount = _orders.where((o) => o['status'] == 'pending').length;
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,38 +575,55 @@ class _DealerOrders extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: Text('Orders', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700)),
           ),
-          // Tabs
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Row(
-              children: ['New (3)', 'Processing', 'Completed', 'Cancelled'].map((tab) {
-                final isFirst = tab == 'New (3)';
-                return Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: isFirst ? AppTheme.primary : Colors.transparent, width: 3))),
-                    child: Text(tab, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: isFirst ? FontWeight.w700 : FontWeight.w500, color: isFirst ? AppTheme.primary : AppTheme.textMuted)),
-                  ),
-                );
-              }).toList(),
+          if (pendingCount > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: Text('$pendingCount order(s) awaiting action',
+                  style: TextStyle(color: AppTheme.warning, fontSize: 12, fontWeight: FontWeight.w600)),
             ),
-          ),
+          const SizedBox(height: 12),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                _buildOrderCard('Jean-Paul M.', '2x Hybrid Maize Seeds 10kg, 1x Urea', '16,000 FCFA', 'Paid via MTN MoMo', AppTheme.warning),
-                _buildOrderCard('Amina F.', '1x NPK Fertilizer 50kg', '12,500 FCFA', 'Paid via Orange Money', AppTheme.accent),
-                _buildOrderCard('Samuel T.', 'Knapsack Sprayer (16L)', '18,000 FCFA', 'Pending payment', AppTheme.textMuted),
-              ],
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                : _orders.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey.shade300),
+                            const SizedBox(height: 12),
+                            Text('No orders yet', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadOrders,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: _orders.length,
+                          itemBuilder: (context, index) => _buildOrderCard(_orders[index]),
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildOrderCard(String farmer, String items, String price, String payment, Color paymentColor) {
+  Widget _buildOrderCard(dynamic order) {
+    final statusColor = {
+      'pending': AppTheme.warning,
+      'confirmed': AppTheme.info,
+      'shipped': AppTheme.primary,
+      'delivered': AppTheme.success,
+      'cancelled': AppTheme.error,
+    }[order['status']] ?? AppTheme.textMuted;
+
+    final paymentColor = order['payment_status'] == 'paid' ? AppTheme.success : AppTheme.textMuted;
+    final farmerName = order['farmer_name'] ?? 'Farmer';
+    final productName = order['product_name'] ?? 'Product';
+    final items = '${order['quantity']}x $productName';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -427,11 +638,16 @@ class _DealerOrders extends StatelessWidget {
                 Container(width: 40, height: 40, decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.person_rounded, color: AppTheme.primary, size: 18)),
                 const SizedBox(width: 10),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(farmer, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                  Text('10 min ago', style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                  Text(farmerName, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                  Text('Order #${order['id']}', style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
                 ]),
               ]),
-              Icon(Icons.more_vert_rounded, color: Colors.grey.shade400),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: Text('${order['status'] ?? 'pending'}'.toUpperCase(),
+                    style: TextStyle(fontSize: 10, color: statusColor, fontWeight: FontWeight.w700)),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -440,33 +656,79 @@ class _DealerOrders extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(price, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.primary)),
+              Text('${order['total_price'] ?? 0} FCFA', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.primary)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: paymentColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(payment, style: TextStyle(fontSize: 10, color: paymentColor, fontWeight: FontWeight.w600)),
+                child: Text(order['payment_status'] == 'paid' ? 'Paid' : 'Unpaid',
+                    style: TextStyle(fontSize: 10, color: paymentColor, fontWeight: FontWeight.w600)),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: OutlinedButton(onPressed: () {}, style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.grey.shade300), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: Text('Decline', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)))),
-              const SizedBox(width: 10),
-              Expanded(child: ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: Text('Accept', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)))),
-            ],
-          ),
+          if (order['status'] == 'pending') ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _updateStatus(order, 'cancelled'),
+                    style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.grey.shade300), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                    child: Text('Decline', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _updateStatus(order, 'confirmed'),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                    child: Text('Accept', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          ] else if (order['status'] == 'confirmed' || order['status'] == 'shipped') ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => _updateStatus(order, order['status'] == 'confirmed' ? 'shipped' : 'delivered'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppTheme.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text(
+                  order['status'] == 'confirmed' ? 'Mark as Shipped' : 'Mark as Delivered',
+                  style: TextStyle(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _DealerChatList extends StatelessWidget {
+class _DealerChatList extends StatefulWidget {
   const _DealerChatList();
 
   @override
+  State<_DealerChatList> createState() => _DealerChatListState();
+}
+
+class _DealerChatListState extends State<_DealerChatList> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatProvider>().loadConversations();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final chatProvider = context.watch<ChatProvider>();
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,35 +739,57 @@ class _DealerChatList extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                _buildChatItem('Jean-Paul M.', 'My maize leaves have these brown spots...', true),
-                _buildChatItem('Amina F.', 'Is the NPK fertilizer available?', true),
-                _buildChatItem('Samuel T.', 'Thanks for the quick delivery!', false),
-              ],
-            ),
+            child: chatProvider.isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                : chatProvider.conversations.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.chat_rounded, size: 64, color: Colors.grey.shade300),
+                            const SizedBox(height: 12),
+                            Text('No conversations yet', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () => chatProvider.loadConversations(),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: chatProvider.conversations.length,
+                          itemBuilder: (context, index) => _buildChatItem(chatProvider.conversations[index]),
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChatItem(String name, String lastMessage, bool unread) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]),
-      child: Row(
-        children: [
-          Container(width: 48, height: 48, decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.person_rounded, color: AppTheme.primary, size: 22)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(name, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-            Text(lastMessage, style: TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-          ])),
-          if (unread) Container(width: 10, height: 10, decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle)),
-        ],
+  Widget _buildChatItem(dynamic chat) {
+    final unread = chat.unread > 0;
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(conversationId: chat.id, conversationName: chat.name),
+        ),
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]),
+        child: Row(
+          children: [
+            Container(width: 48, height: 48, decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.person_rounded, color: AppTheme.primary, size: 22)),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(chat.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+              Text(chat.lastMessage.isEmpty ? 'No messages yet' : chat.lastMessage, style: TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ])),
+            if (unread) Container(width: 10, height: 10, decoration: BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle)),
+          ],
+        ),
       ),
     );
   }

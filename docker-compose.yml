@@ -1,0 +1,72 @@
+# ──────────────────────────────────────────────────────────────
+# AgriSense AI — full local/production stack
+#
+#   docker compose up -d --build
+#   docker compose exec backend python manage.py migrate
+#   docker compose exec backend python manage.py seed_data
+#   docker compose exec backend python manage.py createsuperuser
+#
+# API:  http://localhost:8000/api/  (health: http://localhost:8000/api/health/)
+# Admin: http://localhost:8000/admin/
+# ──────────────────────────────────────────────────────────────
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: agrisense_db
+      MYSQL_USER: agrisense_user
+      MYSQL_PASSWORD: ${DB_PASSWORD:-password123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: .
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             daphne -b 0.0.0.0 -p 8000 agrisense_backend.asgi:application"
+    volumes:
+      - ./backend/agrisense_backend/media:/app/media
+      - ./backend/agrisense_backend/staticfiles:/app/staticfiles
+    environment:
+      DEBUG: "False"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key-change-me}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DB_ENGINE: django.db.backends.mysql
+      DB_NAME: agrisense_db
+      DB_USER: agrisense_user
+      DB_PASSWORD: ${DB_PASSWORD:-password123}
+      DB_HOST: db
+      DB_PORT: "3306"
+      CORS_ALLOW_ALL: "true"
+      CHANNEL_LAYER_BACKEND: redis
+      CHANNEL_LAYER_REDIS_URL: redis://redis:6379/0
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      JWT_ACCESS_MINUTES: "30"
+      JWT_REFRESH_DAYS: "7"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  db_data:

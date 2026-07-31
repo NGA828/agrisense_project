@@ -11,6 +11,7 @@ import '../weather/weather_screen.dart';
 import '../marketplace/marketplace_screen.dart';
 import '../diagnosis/diagnosis_history_screen.dart';
 import '../chat/chat_list_screen.dart';
+import '../notifications/notifications_screen.dart';
 
 class FarmerHomeScreen extends StatefulWidget {
   const FarmerHomeScreen({super.key});
@@ -64,7 +65,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                 // ── Header ──
                 _buildHeader(user),
 
-                const SizedBox(height: 8),
+                // ── Greeting ──
+                _buildGreeting(user),
 
                 // ── Weather Mini-Card ──
                 _buildWeatherMiniCard(weather),
@@ -101,6 +103,49 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  GREETING (time-of-day aware)
+  // ─────────────────────────────────────────────
+  Widget _buildGreeting(user) {
+    final hour = DateTime.now().hour;
+    final String greeting;
+    if (hour < 12) {
+      greeting = 'Good morning';
+    } else if (hour < 17) {
+      greeting = 'Good afternoon';
+    } else {
+      greeting = 'Good evening';
+    }
+    final name = (user?.firstName?.isNotEmpty ?? false) ? user!.firstName : (user?.username ?? 'Farmer');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$greeting, $name 👋',
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Here is what your farm needs today',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: AppTheme.textMuted,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -162,11 +207,17 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
             ],
           ),
           const Spacer(),
-          // Notification bell
-          _buildHeaderButton(
-            icon: Icons.notifications_none_rounded,
-            badge: 3,
-            onTap: () {},
+          // Notification bell (live unread badge)
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: NotificationBell(color: AppTheme.primary, size: 20),
+            ),
           ),
           const SizedBox(width: 8),
           // Avatar

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/diagnosis_provider.dart';
+import '../../services/api/api_service.dart';
 import '../diagnosis/diagnosis_result_screen.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -18,7 +19,7 @@ class _CameraScreenState extends State<CameraScreen>
     with TickerProviderStateMixin {
   bool _isScanning = false;
   String _selectedCrop = 'Tomato';
-  final List<String> _crops = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa'];
+  List<String> _crops = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa'];
 
   late final AnimationController _scanPulseController;
   late final AnimationController _scanRotateController;
@@ -42,6 +43,24 @@ class _CameraScreenState extends State<CameraScreen>
       duration: const Duration(milliseconds: 600),
     );
     _fadeController.forward();
+
+    _loadSupportedCrops();
+  }
+
+  /// Pull the crop list from the server's knowledge base; fall back to the
+  /// bundled defaults when offline or on error.
+  Future<void> _loadSupportedCrops() async {
+    try {
+      final crops = await ApiService().getSupportedCrops();
+      if (mounted && crops.isNotEmpty) {
+        setState(() {
+          _crops = crops.cast<String>();
+          if (!_crops.contains(_selectedCrop)) _selectedCrop = _crops.first;
+        });
+      }
+    } catch (_) {
+      // Bundled default list remains in use.
+    }
   }
 
   @override
@@ -187,7 +206,7 @@ class _CameraScreenState extends State<CameraScreen>
                     color: Colors.white, size: 14),
                 const SizedBox(width: 6),
                 Text(
-                  '38 diseases',
+                  '${_crops.length} crops supported',
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     color: Colors.white.withOpacity(0.85),
@@ -870,13 +889,16 @@ class _CameraScreenState extends State<CameraScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => DiagnosisResultScreen(
-              diseaseName: diagnosis.diseaseName,
-              confidence: diagnosis.confidence,
-              severity:
-                  diagnosis.severity.toLowerCase() == 'high' ? 78 : 45,
-              cropType: _selectedCrop,
-            ),
+            builder: (_) => DiagnosisResultScreen(diagnosis: diagnosis),
+          ),
+        );
+      } else {
+        final err = provider.error;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Analysis failed: ${err ?? "unknown error"}'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
