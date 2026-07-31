@@ -77,6 +77,34 @@ class AuthAndRegistrationTests(APITestCase):
         })
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_password_reset_with_valid_phone(self):
+        make_user('farmer1', 'farmer', phone_number='+237670000001')
+        resp = self.client.post(reverse('password_reset'), {
+            'username': 'farmer1', 'phone_number': '+237 670 000 001',
+            'new_password': 'NewStr0ngPass!',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        user = User.objects.get(username='farmer1')
+        self.assertTrue(user.check_password('NewStr0ngPass!'))
+
+    def test_password_reset_wrong_phone_rejected(self):
+        make_user('farmer1', 'farmer', phone_number='+237670000001')
+        resp = self.client.post(reverse('password_reset'), {
+            'username': 'farmer1', 'phone_number': '+237699999999',
+            'new_password': 'NewStr0ngPass!',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        user = User.objects.get(username='farmer1')
+        self.assertTrue(user.check_password('Str0ngPass!'))
+
+    def test_password_reset_weak_password_rejected(self):
+        make_user('farmer1', 'farmer', phone_number='+237670000001')
+        resp = self.client.post(reverse('password_reset'), {
+            'username': 'farmer1', 'phone_number': '+237670000001',
+            'new_password': '123',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_refresh_token_rotation_works_with_blacklist(self):
         make_user('farmer1', 'farmer')
         tokens = self.client.post(reverse('token_obtain_pair'), {

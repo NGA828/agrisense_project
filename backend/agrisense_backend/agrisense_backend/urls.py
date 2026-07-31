@@ -4,7 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from users.views import UserViewSet, register_view, admin_stats, admin_analytics
+from users.views import UserViewSet, register_view, password_reset_view, admin_stats, admin_analytics
 from diagnosis.views import DiagnosisViewSet, DiseaseDatabaseViewSet
 from products.views import ProductViewSet, OrderViewSet
 from chat.views import ChatRoomViewSet
@@ -30,6 +30,7 @@ urlpatterns = [
     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/register/', register_view, name='register'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/password_reset/', password_reset_view, name='password_reset'),
     # Weather
     path('api/weather/', get_weather, name='get_weather'),
     # Admin stats & analytics

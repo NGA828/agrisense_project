@@ -255,6 +255,73 @@ class _ProfileStatsState extends State<_ProfileStats> {
 class _ProfileScreen extends StatelessWidget {
   const _ProfileScreen();
 
+  void _showSettingsDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('App Settings'),
+        content: const Text(
+          '• Notifications are delivered in-app — check the bell icon.\n'
+          '• Weather uses your device location with a fallback to Yaoundé.\n'
+          '• Your session stays active until you log out.\n\n'
+          'More preferences will be added in future releases.',
+          style: TextStyle(height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSupportDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Help & Support'),
+        content: const Text(
+          'Need help? Here is what you can do:\n\n'
+          '• Chat with a verified dealer directly from a product page.\n'
+          '• Review your treatment plans under Diagnosis History.\n'
+          '• For account issues, contact support at support@agrisense.cm '
+          'or call +237 6XX XX XX XX.',
+          style: TextStyle(height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAboutDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('About AgriSense AI'),
+        content: const Text(
+          'AgriSense AI v1.0.0\n\n'
+          'Your plant doctor, weather forecaster and farm-supply marketplace '
+          'in one app. Built to remove agricultural guesswork for farmers '
+          'in Cameroon and beyond.',
+          style: TextStyle(height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showEditProfileDialog(BuildContext context) async {
     final auth = context.read<AuthProvider>();
     final user = auth.currentUser;
@@ -544,7 +611,7 @@ class _ProfileScreen extends StatelessWidget {
                       iconBg: const Color(0xFFECEFF1),
                       title: 'Settings',
                       subtitle: 'App preferences & account',
-                      onTap: () {},
+                      onTap: () => _showSettingsDialog(context),
                     ),
                     _buildMenuItem(
                       context,
@@ -553,7 +620,7 @@ class _ProfileScreen extends StatelessWidget {
                       iconBg: const Color(0xFFE3F2FD),
                       title: 'Help & Support',
                       subtitle: 'FAQs & contact us',
-                      onTap: () {},
+                      onTap: () => _showSupportDialog(context),
                     ),
                     _buildMenuItem(
                       context,
@@ -562,7 +629,7 @@ class _ProfileScreen extends StatelessWidget {
                       iconBg: const Color(0xFFF3E5F5),
                       title: 'About AgriSense AI',
                       subtitle: 'Version 1.0.0',
-                      onTap: () {},
+                      onTap: () => _showAboutDialog(context),
                     ),
 
                     const SizedBox(height: 24),

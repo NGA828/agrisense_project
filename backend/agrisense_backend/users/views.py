@@ -239,6 +239,49 @@ class UserViewSet(viewsets.ModelViewSet):
         })
 
 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def password_reset_view(request):
+    """Self-service password reset verified by the registered phone number.
+
+    Body: {username, phone_number, new_password}
+    This mirrors real-world flows in the region where the SIM-linked mobile
+    number is the recovery channel (no e-mail infrastructure required).
+    """
+    username = str(request.data.get('username') or '').strip()
+    phone = str(request.data.get('phone_number') or '').strip()
+    new_password = request.data.get('new_password') or ''
+
+    if not username or not phone or not new_password:
+        return Response({'error': 'username, phone_number and new_password are required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        # Do not leak whether the username exists.
+        return Response({'error': 'Verification failed. Check the username and phone number.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Compare digits only so formatting differences (+237, spaces) don't break it.
+    normalized = ''.join(ch for ch in phone if ch.isdigit())
+    user_phone = ''.join(ch for ch in (user.phone_number or '') if ch.isdigit())
+    if not normalized or normalized != user_phone:
+        return Response({'error': 'Verification failed. Check the username and phone number.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_password(new_password, user=user)
+    except ValidationError as exc:
+        return Response({'error': 'Weak password', 'details': list(exc.messages)},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.save(update_fields=['password'])
+    return Response({'message': 'Password reset successfully. You can now log in.'})
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_stats(request):

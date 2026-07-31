@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/marketplace_provider.dart';
+import '../../services/api/api_service.dart';
+import '../notifications/notifications_screen.dart';
+import '../payment/payment_screen.dart';
+import '../farmer/order_history_screen.dart';
 import 'product_detail_screen.dart';
 
 class MarketplaceScreen extends StatefulWidget {
@@ -24,6 +28,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   String _selectedCategory = 'Seeds';
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
+
+  /// Favourited product ids (session-local UI state).
+  final Set<int> _favorites = {};
+
+  /// Quick-buy in progress per product id.
+  final Set<int> _buying = {};
 
   @override
   void initState() {
@@ -171,18 +181,26 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ],
                 ),
               ),
-              // Cart icon
+              // Cart icon → track my orders
               _buildHeaderIconButton(
                 icon: Icons.shopping_cart_rounded,
-                badge: 2,
-                onTap: () {},
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const OrderHistoryScreen()),
+                ),
               ),
               const SizedBox(width: 8),
-              // Notification
-              _buildHeaderIconButton(
-                icon: Icons.notifications_none_rounded,
-                badge: 3,
-                onTap: () {},
+              // Notification bell → live in-app notifications
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Center(
+                  child: NotificationBell(color: Colors.white, size: 20),
+                ),
               ),
             ],
           ),
@@ -404,6 +422,62 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   // ─────────────────────────────────────────────
   //  PROMO BANNER
   // ─────────────────────────────────────────────
+  void _showPremiumInfo() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Premium Dealer Boost'),
+        content: const Text(
+          'Products from premium dealers always appear at the top of search '
+          'results and category listings. If you are a dealer, upgrade to '
+          'Premium from your dashboard to get this visibility boost.\n\n'
+          'For farmers: premium listings are highlighted with a golden badge.',
+          style: TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One-tap purchase from the product card: create the order and jump
+  /// straight to mobile-money checkout.
+  Future<void> _quickBuy(dynamic product) async {
+    if (_buying.contains(product.idProduct)) return;
+    setState(() => _buying.add(product.idProduct));
+    try {
+      final api = ApiService();
+      final order = await api.createOrder(product.idProduct, 1);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentScreen(
+            orderId: order['id'],
+            productName: product.name,
+            unitPrice: product.price.toInt().toString(),
+            quantity: 1,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not start checkout: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _buying.remove(product.idProduct));
+    }
+  }
+
   Widget _buildPromoBanner() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -487,7 +561,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               ),
             ),
             GestureDetector(
-              onTap: () {},
+              onTap: _showPremiumInfo,
               child: Container(
                 width: 36,
                 height: 36,
@@ -714,12 +788,18 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     ),
                   ),
 
-                  // Favorite button
+                  // Favorite button (session-local toggle)
                   Positioned(
                     top: 10,
                     right: 10,
                     child: GestureDetector(
-                      onTap: () {},
+                      onTap: () => setState(() {
+                        if (_favorites.contains(product.idProduct)) {
+                          _favorites.remove(product.idProduct);
+                        } else {
+                          _favorites.add(product.idProduct);
+                        }
+                      }),
                       child: Container(
                         width: 32,
                         height: 32,
@@ -735,8 +815,12 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           ],
                         ),
                         child: Icon(
-                          Icons.favorite_border_rounded,
-                          color: AppTheme.error.withOpacity(0.7),
+                          _favorites.contains(product.idProduct)
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          color: _favorites.contains(product.idProduct)
+                              ? AppTheme.error
+                              : AppTheme.error.withOpacity(0.7),
                           size: 16,
                         ),
                       ),
@@ -940,16 +1024,27 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
                     const Spacer(),
 
-                    // Add to Cart button
+                    // Quick buy button → straight to mobile-money checkout
                     SizedBox(
                       width: double.infinity,
                       height: 34,
                       child: ElevatedButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.add_rounded,
-                            color: Colors.white, size: 16),
+                        onPressed: _buying.contains(product.idProduct)
+                            ? null
+                            : () => _quickBuy(product),
+                        icon: _buying.contains(product.idProduct)
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Icon(Icons.shopping_cart_rounded,
+                                color: Colors.white, size: 15),
                         label: Text(
-                          'Add to Cart',
+                          _buying.contains(product.idProduct)
+                              ? 'Opening...'
+                              : 'Buy Now',
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700,
                             color: Colors.white,

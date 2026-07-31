@@ -1309,6 +1309,65 @@ class _AdminOrdersState extends State<_AdminOrders> {
 
 class _AdminSettings extends StatelessWidget {
   const _AdminSettings();
+
+  Future<void> _editProfile(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final firstName = TextEditingController(text: user.firstName);
+    final lastName = TextEditingController(text: user.lastName);
+    final phone = TextEditingController(text: user.phoneNumber);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: firstName, decoration: const InputDecoration(labelText: 'First name')),
+              const SizedBox(height: 8),
+              TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Last name')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone number'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await auth.updateProfile(
+          firstName: firstName.text.trim(),
+          lastName: lastName.text.trim(),
+          phoneNumber: phone.text.trim(),
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated'), backgroundColor: AppTheme.success),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Update failed: $e'), backgroundColor: AppTheme.error),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
@@ -1384,7 +1443,7 @@ class _AdminSettings extends StatelessWidget {
                     ),
                   ),
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => _editProfile(context),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: AppTheme.primaryDark),
                       shape: RoundedRectangleBorder(

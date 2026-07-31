@@ -161,6 +161,25 @@ class ApiService {
     }
   }
 
+  Future<void> resetPassword({
+    required String username,
+    required String phoneNumber,
+    required String newPassword,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/password_reset/'),
+      headers: _headers,
+      body: jsonEncode({
+        'username': username,
+        'phone_number': phoneNumber,
+        'new_password': newPassword,
+      }),
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException(_messageFrom(response, fallback: 'Password reset failed'));
+    }
+  }
+
   Future<User> getCurrentUser() async {
     final response = await _send((h) => http.get(Uri.parse('$baseUrl/users/me/'), headers: h));
     if (response.statusCode == 200) return User.fromJson(jsonDecode(response.body));
