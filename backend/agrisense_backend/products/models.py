@@ -26,10 +26,18 @@ class Product(models.Model):
     
     def __str__(self):
         return self.name
-    
+
     class Meta:
         db_table = 'product'
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(check=models.Q(price__gte=0), name='product_price_non_negative'),
+            models.CheckConstraint(check=models.Q(stock_quantity__gte=0), name='product_stock_non_negative'),
+        ]
+        indexes = [
+            models.Index(fields=['dealer', 'is_available', '-created_at'], name='idx_product_dealer_avail'),
+            models.Index(fields=['category', 'is_available'], name='idx_product_cat_avail'),
+        ]
 
 class Order(models.Model):
     STATUS_CHOICES = (
@@ -54,7 +62,15 @@ class Order(models.Model):
     
     def __str__(self):
         return f"Order {self.id} - {self.farmer.email}"
-    
+
     class Meta:
         db_table = 'order'
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(check=models.Q(quantity__gte=1), name='order_quantity_positive'),
+            models.CheckConstraint(check=models.Q(total_price__gte=0), name='order_total_non_negative'),
+        ]
+        indexes = [
+            models.Index(fields=['farmer', '-created_at'], name='idx_order_farmer'),
+            models.Index(fields=['product', '-created_at'], name='idx_order_product'),
+        ]

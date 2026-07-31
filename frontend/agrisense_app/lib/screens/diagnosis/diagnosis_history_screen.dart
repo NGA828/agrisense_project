@@ -58,7 +58,7 @@ class _DiagnosisHistoryScreenState extends State<DiagnosisHistoryScreen> {
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: GestureDetector(
-                                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DiagnosisResultScreen(diseaseName: diagnosis.diseaseName, confidence: diagnosis.confidence, severity: isHigh ? 78 : 45, cropType: diagnosis.cropType))),
+                                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DiagnosisResultScreen(diagnosis: diagnosis))),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(16),
                                       child: BackdropFilter(

@@ -103,6 +103,7 @@ class _AdminOverview extends StatefulWidget {
 
 class _AdminOverviewState extends State<_AdminOverview> {
   Map<String, dynamic>? _stats;
+  Map<String, dynamic>? _analytics;
   bool _isLoading = true;
 
   @override
@@ -116,13 +117,35 @@ class _AdminOverviewState extends State<_AdminOverview> {
     try {
       final api = ApiService();
       final r = await api.getAdminStats();
+      Map<String, dynamic>? analytics;
+      try {
+        analytics = await api.getAdminAnalytics('7d');
+      } catch (_) {
+        analytics = null;
+      }
       setState(() {
         _stats = r;
+        _analytics = analytics;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  /// User-growth series as (label, value) pairs for the overview chart.
+  List<(String, double)> get _growthSeries {
+    final raw = _analytics?['user_growth'];
+    if (raw is! Map || raw.isEmpty) return [];
+    final entries = raw.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    return entries
+        .map((e) {
+          final date = DateTime.tryParse(e.key);
+          final label = date == null ? e.key : '${date.day}/${date.month}';
+          final value = e.value is num ? (e.value as num).toDouble() : 0.0;
+          return (label, value);
+        })
+        .toList();
   }
 
   @override
@@ -248,14 +271,17 @@ class _AdminOverviewState extends State<_AdminOverview> {
                 childAspectRatio: 1.4,
                 children: [
                   _stat('${_stats?['total_users'] ?? 0}', 'Total Users',
-                      Icons.people_rounded, const Color(0xFFE8F5E9), AppTheme.primary, '+12.5%'),
-                  _stat('${_stats?['total_dealers'] ?? 0}', 'Active Dealers',
-                      Icons.store_rounded, const Color(0xFFFFF3E0), AppTheme.accent, '+8.2%'),
+                      Icons.people_rounded, const Color(0xFFE8F5E9), AppTheme.primary,
+                      '${_stats?['active_users'] ?? 0} active'),
+                  _stat('${_stats?['total_dealers'] ?? 0}', 'Dealers',
+                      Icons.store_rounded, const Color(0xFFFFF3E0), AppTheme.accent,
+                      '${_stats?['pending_dealer_requests'] ?? 0} pending'),
                   _stat('${_stats?['total_diagnoses'] ?? 0}', 'Diagnoses',
-                      Icons.eco_rounded, const Color(0xFFE3F2FD), AppTheme.info, 'Today: 84'),
+                      Icons.eco_rounded, const Color(0xFFE3F2FD), AppTheme.info,
+                      '${_stats?['premium_dealers'] ?? 0} premium dealers'),
                   _stat('${_stats?['total_orders'] ?? 0}', 'Total Orders',
                       Icons.receipt_long_rounded, const Color(0xFFF3E5F5),
-                      const Color(0xFF9C27B0), 'Pending: 12'),
+                      const Color(0xFF9C27B0), '${_stats?['total_revenue'] ?? 0} FCFA'),
                 ],
               ),
             ),
@@ -312,24 +338,22 @@ class _AdminOverviewState extends State<_AdminOverview> {
                     Container(
                       height: 140,
                       width: double.infinity,
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: AppTheme.primary.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.show_chart_rounded,
-                                color: AppTheme.primary.withValues(alpha: 0.4), size: 56),
-                            const SizedBox(height: 8),
-                            Text('Activity Chart',
-                                style: TextStyle(
-                                    color: AppTheme.primary.withValues(alpha: 0.6),
-                                    fontSize: 12)),
-                          ],
-                        ),
-                      ),
+                      child: _growthSeries.isEmpty
+                          ? Center(
+                              child: Text('New user registrations (last 7 days)',
+                                  style: TextStyle(
+                                      color: AppTheme.primary.withValues(alpha: 0.6),
+                                      fontSize: 12)),
+                            )
+                          : CustomPaint(
+                              size: const Size(double.infinity, 116),
+                              painter: _AdminMiniBarChart(_growthSeries),
+                            ),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -342,7 +366,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                                 color: AppTheme.primary,
                                 borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 6),
-                        Text('Users',
+                        Text('New users',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -355,7 +379,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                                 color: AppTheme.accent,
                                 borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 6),
-                        Text('Diagnoses',
+                        Text('7 days',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -368,7 +392,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                                 color: AppTheme.info,
                                 borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 6),
-                        Text('Orders',
+                        Text('Growth',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -443,17 +467,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _act(Icons.person_add_rounded, 'New dealer registration',
-                        'Jean Mbeki - Yaounde', '2 min ago', AppTheme.success),
-                    const SizedBox(height: 12),
-                    _act(Icons.payment_rounded, 'Payment confirmed',
-                        '18,500 FCFA - Order #AGR-10482', '15 min ago', AppTheme.info),
-                    const SizedBox(height: 12),
-                    _act(Icons.edit_rounded, 'Content updated',
-                        'Disease database article', '1 hour ago', AppTheme.warning),
-                    const SizedBox(height: 12),
-                    _act(Icons.report_rounded, 'Report submitted',
-                        'User reported inappropriate content', '3 hours ago', AppTheme.error),
+                    ..._recentActivityItems(),
                   ],
                 ),
               ),
@@ -463,6 +477,49 @@ class _AdminOverviewState extends State<_AdminOverview> {
         ),
       ),
     );
+  }
+
+  /// Real recent orders + diagnoses from the admin stats endpoint.
+  List<Widget> _recentActivityItems() {
+    final items = <Widget>[];
+    final recentOrders = (_stats?['recent_orders'] as List? ?? []).take(3).toList();
+    final recentDiagnoses = (_stats?['recent_diagnoses'] as List? ?? []).take(2).toList();
+
+    for (final order in recentOrders) {
+      items.add(_act(
+        Icons.receipt_long_rounded,
+        'New order #${order['id']}',
+        '${order['farmer']} · ${order['product']} · ${order['amount']} FCFA',
+        _timeAgo(order['date']),
+        AppTheme.info,
+      ));
+      items.add(const SizedBox(height: 12));
+    }
+    for (final d in recentDiagnoses) {
+      items.add(_act(
+        Icons.eco_rounded,
+        'AI diagnosis',
+        '${d['user']} · ${d['crop']}: ${d['disease']} (${d['confidence']}%)',
+        _timeAgo(d['date']),
+        AppTheme.success,
+      ));
+      items.add(const SizedBox(height: 12));
+    }
+    if (items.isEmpty) {
+      items.add(Text('No activity yet — orders and diagnoses will appear here.',
+          style: TextStyle(color: AppTheme.textMuted, fontSize: 12)));
+    }
+    return items;
+  }
+
+  String _timeAgo(String? dateTime) {
+    final date = DateTime.tryParse(dateTime ?? '');
+    if (date == null) return '';
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} h ago';
+    return '${diff.inDays} d ago';
   }
 
   Widget _stat(String v, String l, IconData i, Color bg, Color ic, String s) =>
@@ -891,10 +948,54 @@ class _AdminUsersState extends State<_AdminUsers> {
             ),
           ],
           const SizedBox(width: 8),
-          Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400, size: 24),
+          GestureDetector(
+            onTap: () => _deleteUser(u),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.delete_rounded, size: 16, color: AppTheme.error),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _deleteUser(dynamic u) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: Text('${u['first_name'] ?? ''} ${u['last_name'] ?? ''} (@${u['username']}) '
+            'will be permanently removed from the platform. This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiService().deleteUser(u['id']);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User deleted'), backgroundColor: AppTheme.success),
+        );
+        _loadUsers();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete user: $e'), backgroundColor: AppTheme.error),
+      );
+    }
   }
 
   Future<void> _toggleUserActive(int userId, bool active) async {
@@ -920,10 +1021,43 @@ class _AdminUsersState extends State<_AdminUsers> {
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
-class _AdminOrders extends StatelessWidget {
+class _AdminOrders extends StatefulWidget {
   const _AdminOrders();
+
+  @override
+  State<_AdminOrders> createState() => _AdminOrdersState();
+}
+
+class _AdminOrdersState extends State<_AdminOrders> {
+  List<dynamic> _orders = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      final orders = await ApiService().getOrders();
+      if (mounted) setState(() {
+        _orders = orders is List ? orders : [];
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final total = _orders.length;
+    final pending = _orders.where((o) => o['status'] == 'pending').length;
+    final inTransit = _orders.where((o) => o['status'] == 'shipped').length;
+    final completed = _orders.where((o) => o['status'] == 'delivered').length;
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -938,47 +1072,22 @@ class _AdminOrders extends StatelessWidget {
                 colors: [Color(0xFF1A3A1A), Color(0xFF2D5016)],
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Order Management',
-                        style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20)),
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle),
-                      child: const Icon(Icons.receipt_long_rounded,
-                          color: Colors.white, size: 22),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                Text('Order Management',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20)),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16)),
-                  child: Row(
-                    children: [
-                      Icon(Icons.search_rounded,
-                          color: Colors.grey.shade400, size: 22),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text('Search orders by ID or customer...',
-                            style: TextStyle(
-                                color: Colors.grey.shade400, fontSize: 14)),
-                      ),
-                    ],
-                  ),
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.receipt_long_rounded,
+                      color: Colors.white, size: 22),
                 ),
               ],
             ),
@@ -987,63 +1096,111 @@ class _AdminOrders extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: Row(
               children: [
-                _os('326', 'Total Orders', AppTheme.primary),
+                _os('$total', 'Total Orders', AppTheme.primary),
                 const SizedBox(width: 12),
-                _os('24', 'Pending', AppTheme.warning),
+                _os('$pending', 'Pending', AppTheme.warning),
                 const SizedBox(width: 12),
-                _os('18', 'In Transit', AppTheme.info),
+                _os('$inTransit', 'In Transit', AppTheme.info),
                 const SizedBox(width: 12),
-                _os('271', 'Completed', AppTheme.success),
+                _os('$completed', 'Completed', AppTheme.success),
               ],
             ),
           ),
           const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: ['All', 'Pending', 'In Transit', 'Completed', 'Issues']
-                  .map((t) {
-                final s = t == 'All';
-                return Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color:
-                              s ? AppTheme.primaryDark : Colors.transparent,
-                          width: 3,
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                : _orders.isEmpty
+                    ? Center(
+                        child: Text('No orders yet', style: TextStyle(color: AppTheme.textMuted)),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        color: AppTheme.primary,
+                        child: ListView.builder(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          itemCount: _orders.length,
+                          itemBuilder: (context, index) => _buildOrderItem(_orders[index]),
                         ),
                       ),
-                    ),
-                    child: Text(t,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight:
-                                s ? FontWeight.w700 : FontWeight.w500,
-                            color:
-                                s ? AppTheme.primaryDark : AppTheme.textMuted)),
-                  ),
-                );
-              }).toList(),
-            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderItem(dynamic order) {
+    final status = order['status'] ?? 'pending';
+    final statusColor = {
+      'pending': AppTheme.warning,
+      'confirmed': AppTheme.info,
+      'shipped': AppTheme.info,
+      'delivered': AppTheme.success,
+      'cancelled': AppTheme.error,
+    }[status] ?? AppTheme.textMuted;
+    final farmer = order['farmer_name'] ?? 'Farmer';
+    final product = order['product_name'] ?? 'Product';
+    final amount = '${order['total_price'] ?? 0} FCFA';
+    final details = '${order['quantity']}x $product · ${order['payment_status'] ?? 'unpaid'}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.inventory_2_rounded, color: statusColor, size: 26),
+          ),
+          const SizedBox(width: 16),
           Expanded(
-            child: ListView(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _oi('#AGR-10482', 'Marie Nkoum', 'Yaounde', '9,500 FCFA',
-                    'Pending', AppTheme.warning, '2 items • 15 min ago'),
-                _oi('#AGR-10481', 'Jean Mbeki', 'Bafoussam', '18,500 FCFA',
-                    'In Transit', AppTheme.info, '1 item • 1 hour ago'),
-                _oi('#AGR-10479', 'Amina Bello', 'Douala', '42,000 FCFA',
-                    'Completed', AppTheme.success, '3 items • 3 hours ago'),
-                _oi('#AGR-10476', 'Samuel N.', 'Bamenda', '12,750 FCFA',
-                    'Issue', AppTheme.error, '1 item • 5 hours ago'),
+                Text('Order #${order['id']}',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppTheme.textPrimary)),
+                const SizedBox(height: 4),
+                Text(farmer,
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(details, style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
               ],
             ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(amount,
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppTheme.textPrimary)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(status.toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 11, color: statusColor, fontWeight: FontWeight.w700)),
+              ),
+            ],
           ),
         ],
       ),
@@ -1152,6 +1309,65 @@ class _AdminOrders extends StatelessWidget {
 
 class _AdminSettings extends StatelessWidget {
   const _AdminSettings();
+
+  Future<void> _editProfile(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final firstName = TextEditingController(text: user.firstName);
+    final lastName = TextEditingController(text: user.lastName);
+    final phone = TextEditingController(text: user.phoneNumber);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: firstName, decoration: const InputDecoration(labelText: 'First name')),
+              const SizedBox(height: 8),
+              TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Last name')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone number'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await auth.updateProfile(
+          firstName: firstName.text.trim(),
+          lastName: lastName.text.trim(),
+          phoneNumber: phone.text.trim(),
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated'), backgroundColor: AppTheme.success),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Update failed: $e'), backgroundColor: AppTheme.error),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
@@ -1227,7 +1443,7 @@ class _AdminSettings extends StatelessWidget {
                     ),
                   ),
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => _editProfile(context),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: AppTheme.primaryDark),
                       shape: RoundedRectangleBorder(
@@ -1431,4 +1647,41 @@ class _AdminSettings extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Lightweight vertical bar chart for the admin overview (no chart dependency).
+class _AdminMiniBarChart extends CustomPainter {
+  final List<(String, double)> points;
+  _AdminMiniBarChart(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    final maxValue = points.map((p) => p.$2).reduce((a, b) => a > b ? a : b);
+    final safeMax = maxValue <= 0 ? 1.0 : maxValue;
+    final barWidth = size.width / points.length * 0.5;
+
+    final gridPaint = Paint()
+      ..color = Colors.grey.shade300
+      ..strokeWidth = 0.8;
+    for (var i = 1; i <= 3; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    for (var i = 0; i < points.length; i++) {
+      final height = (points[i].$2 / safeMax) * (size.height - 6);
+      final left = i * (size.width / points.length) +
+          (size.width / points.length - barWidth) / 2;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, size.height - height, barWidth, height),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(rect, Paint()..color = AppTheme.primary.withOpacity(0.85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AdminMiniBarChart oldDelegate) =>
+      oldDelegate.points != points;
 }

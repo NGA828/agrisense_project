@@ -1,0 +1,5 @@
+# Production dependencies (in addition to requirements.txt)
+gunicorn==22.0.0
+daphne==4.1.2
+channels-redis==4.2.0
+python-dotenv==1.0.1

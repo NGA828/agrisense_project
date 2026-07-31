@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 // Importing original imports. Fallbacks are included to ensure seamless compilation.
 import '../../providers/weather_provider.dart';
+import '../notifications/notifications_screen.dart';
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
@@ -165,10 +166,9 @@ class _WeatherScreenState extends State<WeatherScreen> with TickerProviderStateM
                   shape: BoxShape.circle,
                   border: Border.all(color: const Color(0xFFE2EBE2)),
                 ),
-                child: IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF2E322E), size: 20),
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: const Center(
+                  child: NotificationBell(color: Color(0xFF2E322E), size: 20),
                 ),
               ),
             ],
