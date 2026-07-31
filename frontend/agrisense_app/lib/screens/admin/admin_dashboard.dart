@@ -103,6 +103,7 @@ class _AdminOverview extends StatefulWidget {
 
 class _AdminOverviewState extends State<_AdminOverview> {
   Map<String, dynamic>? _stats;
+  Map<String, dynamic>? _analytics;
   bool _isLoading = true;
 
   @override
@@ -116,13 +117,35 @@ class _AdminOverviewState extends State<_AdminOverview> {
     try {
       final api = ApiService();
       final r = await api.getAdminStats();
+      Map<String, dynamic>? analytics;
+      try {
+        analytics = await api.getAdminAnalytics('7d');
+      } catch (_) {
+        analytics = null;
+      }
       setState(() {
         _stats = r;
+        _analytics = analytics;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  /// User-growth series as (label, value) pairs for the overview chart.
+  List<(String, double)> get _growthSeries {
+    final raw = _analytics?['user_growth'];
+    if (raw is! Map || raw.isEmpty) return [];
+    final entries = raw.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    return entries
+        .map((e) {
+          final date = DateTime.tryParse(e.key);
+          final label = date == null ? e.key : '${date.day}/${date.month}';
+          final value = e.value is num ? (e.value as num).toDouble() : 0.0;
+          return (label, value);
+        })
+        .toList();
   }
 
   @override
@@ -315,24 +338,22 @@ class _AdminOverviewState extends State<_AdminOverview> {
                     Container(
                       height: 140,
                       width: double.infinity,
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: AppTheme.primary.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.show_chart_rounded,
-                                color: AppTheme.primary.withValues(alpha: 0.4), size: 56),
-                            const SizedBox(height: 8),
-                            Text('Activity Chart',
-                                style: TextStyle(
-                                    color: AppTheme.primary.withValues(alpha: 0.6),
-                                    fontSize: 12)),
-                          ],
-                        ),
-                      ),
+                      child: _growthSeries.isEmpty
+                          ? Center(
+                              child: Text('New user registrations (last 7 days)',
+                                  style: TextStyle(
+                                      color: AppTheme.primary.withValues(alpha: 0.6),
+                                      fontSize: 12)),
+                            )
+                          : CustomPaint(
+                              size: const Size(double.infinity, 116),
+                              painter: _AdminMiniBarChart(_growthSeries),
+                            ),
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -345,7 +366,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                                 color: AppTheme.primary,
                                 borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 6),
-                        Text('Users',
+                        Text('New users',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -358,7 +379,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                                 color: AppTheme.accent,
                                 borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 6),
-                        Text('Diagnoses',
+                        Text('7 days',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -371,7 +392,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                                 color: AppTheme.info,
                                 borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 6),
-                        Text('Orders',
+                        Text('Growth',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -1567,4 +1588,41 @@ class _AdminSettings extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Lightweight vertical bar chart for the admin overview (no chart dependency).
+class _AdminMiniBarChart extends CustomPainter {
+  final List<(String, double)> points;
+  _AdminMiniBarChart(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    final maxValue = points.map((p) => p.$2).reduce((a, b) => a > b ? a : b);
+    final safeMax = maxValue <= 0 ? 1.0 : maxValue;
+    final barWidth = size.width / points.length * 0.5;
+
+    final gridPaint = Paint()
+      ..color = Colors.grey.shade300
+      ..strokeWidth = 0.8;
+    for (var i = 1; i <= 3; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    for (var i = 0; i < points.length; i++) {
+      final height = (points[i].$2 / safeMax) * (size.height - 6);
+      final left = i * (size.width / points.length) +
+          (size.width / points.length - barWidth) / 2;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, size.height - height, barWidth, height),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(rect, Paint()..color = AppTheme.primary.withOpacity(0.85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AdminMiniBarChart oldDelegate) =>
+      oldDelegate.points != points;
 }

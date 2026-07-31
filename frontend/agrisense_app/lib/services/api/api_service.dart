@@ -527,11 +527,18 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> upgradePremium(int userId, {int durationMonths = 1}) async {
+  Future<Map<String, dynamic>> upgradePremium(
+    int userId, {
+    int durationMonths = 1,
+    String? phoneNumber,
+  }) async {
     final response = await _send((h) => http.post(
           Uri.parse('$baseUrl/users/$userId/upgrade_premium/'),
           headers: h,
-          body: jsonEncode({'duration_months': durationMonths}),
+          body: jsonEncode({
+            'duration_months': durationMonths,
+            if (phoneNumber != null && phoneNumber.isNotEmpty) 'phone_number': phoneNumber,
+          }),
         ));
     if (response.statusCode == 200) return jsonDecode(response.body);
     throw ApiException(_messageFrom(response, fallback: 'Failed to upgrade to premium'));

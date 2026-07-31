@@ -15,20 +15,42 @@ class PremiumScreen extends StatefulWidget {
 class _PremiumScreenState extends State<PremiumScreen> {
   bool _isUpgrading = false;
   int _selectedMonths = 1;
+  final TextEditingController _phoneController = TextEditingController();
 
   /// Must match the backend PREMIUM_PRICE_PER_MONTH (FCFA).
   static const double premiumPricePerMonth = 1000;
 
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
   Future<void> _handleUpgrade() async {
     final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
     if (user == null || user.id == null) return;
+
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter your mobile money number to pay for premium'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isUpgrading = true);
     try {
       final api = ApiService();
       // Creates a premium payment (payment_required) — premium activates only
       // once the mobile-money payment completes.
-      final result = await api.upgradePremium(user.id!, durationMonths: _selectedMonths);
+      final result = await api.upgradePremium(
+        user.id!,
+        durationMonths: _selectedMonths,
+        phoneNumber: phone,
+      );
       final paymentId = result['payment_id'];
 
       if (paymentId == null) {
@@ -45,7 +67,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       } else {
         if (mounted) {
           _showResult(
-            'Payment failed. Please check your mobile money number and try again.',
+            'Payment ${payment['status'] ?? 'failed'}. Check your mobile money number and try again.',
             isSuccess: false,
           );
         }
@@ -157,6 +179,27 @@ class _PremiumScreenState extends State<PremiumScreen> {
                               const SizedBox(width: 8),
                               _buildDurationChip(6, '6 Months', '${(premiumPricePerMonth * 6).toInt()}'),
                             ],
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            decoration: InputDecoration(
+                              labelText: 'Mobile money number',
+                              hintText: 'e.g. +237 6XX XX XX XX',
+                              prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                              filled: true,
+                              fillColor: const Color(0xFFFAFAFA),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Premium activates instantly after payment is confirmed.',
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
                           ),
                         ],
                       ),

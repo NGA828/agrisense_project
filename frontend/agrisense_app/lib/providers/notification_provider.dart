@@ -11,11 +11,26 @@ class NotificationProvider with ChangeNotifier {
   int _unreadCount = 0;
   bool _isLoading = false;
   String? _error;
+  DateTime _lastUnreadFetch = DateTime.fromMillisecondsSinceEpoch(0);
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount => _unreadCount;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  /// Refresh the unread badge at most once per 20 seconds (called from the
+  /// bell widget on rebuilds) — avoids hammering the API.
+  Future<void> loadUnreadCount({bool force = false}) async {
+    if (!force &&
+        DateTime.now().difference(_lastUnreadFetch).inSeconds < 20) {
+      return;
+    }
+    _lastUnreadFetch = DateTime.now();
+    try {
+      _unreadCount = await _api.getUnreadNotificationCount();
+      notifyListeners();
+    } catch (_) {}
+  }
 
   Future<void> loadNotifications() async {
     _isLoading = true;
@@ -33,13 +48,6 @@ class NotificationProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  Future<void> loadUnreadCount() async {
-    try {
-      _unreadCount = await _api.getUnreadNotificationCount();
-      notifyListeners();
-    } catch (_) {}
   }
 
   Future<void> markRead(AppNotification notification) async {

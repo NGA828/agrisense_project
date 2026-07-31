@@ -14,6 +14,7 @@ import 'screens/splash/onboarding_screen.dart';
 import 'screens/farmer/farmer_dashboard.dart';
 import 'screens/dealer/dealer_dashboard.dart';
 import 'screens/admin/admin_dashboard.dart';
+import 'screens/chat/chat_list_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -54,6 +55,7 @@ class AgriSenseApp extends StatelessWidget {
             systemOverlayStyle: SystemUiOverlayStyle.light,
           ),
         ),
+        navigatorObservers: [chatRouteObserver],
         home: const StartupGate(),
       ),
     );

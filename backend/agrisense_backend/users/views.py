@@ -213,6 +213,7 @@ class UserViewSet(viewsets.ModelViewSet):
         # Self-service: create a payment that must be processed before premium
         # becomes active. `activate_premium` is idempotent and safe to re-call.
         total = PREMIUM_PRICE_PER_MONTH * duration_months
+        phone = str(request.data.get('phone_number') or '').strip() or user.phone_number or ''
         payment, created = Payment.objects.get_or_create(
             user=user,
             order=None,
@@ -221,7 +222,7 @@ class UserViewSet(viewsets.ModelViewSet):
             description=f'Premium dealer subscription ({duration_months} month(s))',
             defaults={
                 'amount': total,
-                'phone_number': user.phone_number or '',
+                'phone_number': phone,
                 'transaction_id': f'PREM-{user.id}-{timezone.now().strftime("%Y%m%d%H%M%S")}',
                 'payment_type': 'premium',
             },

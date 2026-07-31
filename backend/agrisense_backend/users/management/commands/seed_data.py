@@ -65,8 +65,10 @@ class Command(BaseCommand):
                                  'jean@farmer.com', '+237670000001', 'farmer')
         self._get_or_create_user('farmer2', 'password123', 'Marie', 'Ngo',
                                  'marie@farmer.com', '+237670000002', 'farmer')
+        # Phone ends in an even digit so the sandbox mobile-money simulator
+        # accepts premium payments out of the box.
         self._get_or_create_user('dealer1', 'password123', 'Paul', 'Mbarga',
-                                 'paul@agroshop.com', '+237670000003', 'dealer',
+                                 'paul@agroshop.com', '+237670000008', 'dealer',
                                  is_premium=True)
         self._get_or_create_user('dealer2', 'password123', 'Mary', 'Ekotto',
                                  'mary@farmstore.com', '+237670000004', 'dealer')

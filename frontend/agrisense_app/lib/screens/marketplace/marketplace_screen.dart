@@ -447,7 +447,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   Row(
                     children: [
                       Text(
-                        'Special Offer',
+                        'Premium Dealers',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -463,7 +463,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          '20% OFF',
+                          'BOOSTED',
                           style: GoogleFonts.poppins(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
@@ -475,7 +475,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Get discounts on top fertilizers this season!',
+                    'Premium dealer products rank first in every search.',
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w400,
                       fontSize: 12,
