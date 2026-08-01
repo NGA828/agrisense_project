@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Sum
@@ -9,6 +10,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.throttling import ScopedRateThrottle
+from django.db.models import Q as models_Q
 
 from .models import User
 from .serializers import UserSerializer, FarmerSerializer, DealerSerializer
@@ -16,6 +18,53 @@ from .serializers import UserSerializer, FarmerSerializer, DealerSerializer
 # Roles that may be self-assigned at registration. Administrators can only be
 # created by an existing admin (or via `createsuperuser`).
 SELF_REGISTERABLE_ROLES = ('farmer', 'dealer')
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def request_otp(request):
+    """Request a one-time-password for a phone number (registration / reset).
+
+    Body: {phone_number, purpose: 'register'|'password_reset'}
+    Returns ``debug_code`` (the plaintext code) ONLY when DEBUG is on.
+    """
+    from .otp_service import send_otp
+
+    phone = str(request.data.get('phone_number') or '').strip()
+    purpose = str(request.data.get('purpose') or 'register').lower()
+    if purpose not in ('register', 'password_reset'):
+        return Response({'error': "purpose must be 'register' or 'password_reset'"},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if len(phone) < 7:
+        return Response({'error': 'A valid phone number is required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    code = send_otp(phone, purpose)
+    resp = {'message': 'Verification code sent to your phone.'}
+    if code is not None:
+        resp['debug_code'] = code  # DEBUG only (dev/demo)
+    return Response(resp, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def verify_otp_view(request):
+    """Verify an OTP code. Body: {phone_number, purpose, code}."""
+    from .otp_service import verify_otp
+
+    phone = str(request.data.get('phone_number') or '').strip()
+    purpose = str(request.data.get('purpose') or 'register').lower()
+    code = str(request.data.get('code') or '').strip()
+    if not phone or not code:
+        return Response({'error': 'phone_number and code are required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    ok, error = verify_otp(phone, purpose, code)
+    if not ok:
+        return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'Verified successfully.'})
 
 
 @api_view(['POST'])
@@ -49,6 +98,13 @@ def register_view(request):
     except ValidationError as exc:
         return Response({'error': 'Weak password', 'details': list(exc.messages)},
                         status=status.HTTP_400_BAD_REQUEST)
+
+    # Optional phone OTP verification before creating the account.
+    if settings.OTP_REQUIRED_FOR_REGISTRATION:
+        from .otp_service import verify_otp
+        ok, error = verify_otp(data['phone_number'], 'register', data.get('otp_code', ''))
+        if not ok:
+            return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
 
     # Dealer accounts start unverified and must be approved by an admin.
     user = User.objects.create_user(
@@ -107,6 +163,11 @@ class UserViewSet(viewsets.ModelViewSet):
         """Only admins may delete accounts (fraud moderation)."""
         if request.user.role != 'admin':
             return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
+        user = self.get_object()
+        from auditlog.services import log_action
+        log_action(request.user, 'delete_user', target_type='user', target_id=user.id,
+                   description=f'Deleted account {user.username}',
+                   metadata={'email': user.email}, request=request)
         return super().destroy(request, *args, **kwargs)
 
     # ── Reads / self-service update ───────────────────────────────────
@@ -165,6 +226,10 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.get_object()
         user.is_active = False
         user.save(update_fields=['is_active'])
+        from auditlog.services import log_action
+        log_action(request.user, 'suspend_user', target_type='user', target_id=user.id,
+                   description=f'Suspended account {user.username}',
+                   metadata={'reason': request.data.get('reason', '')}, request=request)
         return Response({'message': f'User {user.username} has been suspended'})
 
     @action(detail=True, methods=['post'])
@@ -174,6 +239,9 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.get_object()
         user.is_active = True
         user.save(update_fields=['is_active'])
+        from auditlog.services import log_action
+        log_action(request.user, 'activate_user', target_type='user', target_id=user.id,
+                   description=f'Reactivated account {user.username}', request=request)
         return Response({'message': f'User {user.username} has been activated'})
 
     @action(detail=True, methods=['post'])
@@ -188,6 +256,10 @@ class UserViewSet(viewsets.ModelViewSet):
             approve = approve.lower() in ('1', 'true', 'yes')
         user.is_verified = approve
         user.save(update_fields=['is_verified'])
+        from auditlog.services import log_action
+        log_action(request.user, 'verify_dealer', target_type='user', target_id=user.id,
+                   description=f'{"Verified" if approve else "Rejected"} dealer {user.username}',
+                   metadata={'approve': approve}, request=request)
         return Response({
             'message': f'Dealer {user.username} {"verified" if approve else "rejected"}',
             'is_verified': user.is_verified,
@@ -226,6 +298,11 @@ class UserViewSet(viewsets.ModelViewSet):
             user.is_premium = True
             user.premium_expiry = timezone.now() + timedelta(days=30 * duration_months)
             user.save(update_fields=['is_premium', 'premium_expiry'])
+            from auditlog.services import log_action
+            log_action(request.user, 'grant_premium', target_type='user', target_id=user.id,
+                       description=f'Granted premium to {user.username} for {duration_months} month(s)',
+                       metadata={'duration_months': duration_months, 'skip_payment': True},
+                       request=request)
             return Response({
                 'message': f'{user.username} upgraded to premium for {duration_months} month(s)',
                 'premium_expiry': user.premium_expiry,
@@ -292,6 +369,13 @@ def password_reset_view(request):
         return Response({'error': 'Verification failed. Check the username and phone number.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
+    # Optional phone OTP verification before resetting the password.
+    if settings.OTP_REQUIRED_FOR_PASSWORD_RESET:
+        from .otp_service import verify_otp
+        ok, error = verify_otp(phone, 'password_reset', request.data.get('otp_code', ''))
+        if not ok:
+            return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
         validate_password(new_password, user=user)
     except ValidationError as exc:
@@ -301,6 +385,84 @@ def password_reset_view(request):
     user.set_password(new_password)
     user.save(update_fields=['password'])
     return Response({'message': 'Password reset successfully. You can now log in.'})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def dealer_analytics(request):
+    """Sales analytics for the authenticated dealer (Phase D).
+
+    Query params:
+        period: 7d | 30d | 90d | 1y   (default 30d)
+    Returns revenue/order time-series plus top products and recent orders scoped
+    to the dealer's own products.
+    """
+    from products.models import Product, Order
+
+    if request.user.role != 'dealer':
+        return Response({'error': 'Dealer only'}, status=status.HTTP_403_FORBIDDEN)
+
+    period = request.query_params.get('period', '30d')
+    days = {'7d': 7, '30d': 30, '90d': 90, '1y': 365}.get(period, 30)
+    since = timezone.now() - timedelta(days=days)
+
+    my_orders = Order.objects.filter(product__dealer=request.user)
+
+    # Revenue time-series (only paid/fulfilled orders count as revenue).
+    revenue_qs = my_orders.filter(
+        created_at__gte=since, payment_status='paid',
+    ).annotate(day=TruncDate('created_at')).values('day').annotate(
+        total=Sum('total_price')).order_by('day')
+    revenue = {str(item['day']): float(item['total'] or 0) for item in revenue_qs}
+
+    # Order volume time-series.
+    vol_qs = my_orders.filter(created_at__gte=since).annotate(
+        day=TruncDate('created_at')).values('day').annotate(count=Count('id')).order_by('day')
+    order_volume = {str(item['day']): item['count'] for item in vol_qs}
+
+    # Product-level performance.
+    top_products = (
+        my_orders.filter(created_at__gte=since)
+        .values('product__id_product', 'product__name')
+        .annotate(units=Sum('quantity'), revenue=Sum('total_price'))
+        .order_by('-revenue')[:10]
+    )
+
+    summary = my_orders.aggregate(
+        total_orders=Count('id'),
+        total_revenue=Sum('total_price', filter=models_Q(payment_status='paid')),
+    )
+
+    # Stock health.
+    low_stock = Product.objects.filter(dealer=request.user, stock_quantity__lte=5).count()
+
+    recent = my_orders.select_related('farmer', 'product').order_by('-created_at')[:10]
+    recent_data = [{
+        'id': o.id,
+        'farmer': f'{o.farmer.first_name} {o.farmer.last_name}',
+        'product': o.product.name,
+        'quantity': o.quantity,
+        'amount': float(o.total_price),
+        'status': o.status,
+        'payment_status': o.payment_status,
+        'date': o.created_at.strftime('%Y-%m-%d %H:%M'),
+    } for o in recent]
+
+    return Response({
+        'period': period,
+        'days': days,
+        'revenue': revenue,
+        'order_volume': order_volume,
+        'top_products': [
+            {'id': p['product__id_product'], 'name': p['product__name'],
+             'units': p['units'], 'revenue': float(p['revenue'] or 0)}
+            for p in top_products
+        ],
+        'total_orders': summary['total_orders'] or 0,
+        'total_revenue': float(summary['total_revenue'] or 0),
+        'low_stock_products': low_stock,
+        'recent_orders': recent_data,
+    })
 
 
 @api_view(['GET'])
@@ -371,6 +533,104 @@ def admin_stats(request):
         'recent_orders': recent_orders_data,
         'recent_diagnoses': recent_diagnoses_data,
     })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def admin_regional_analytics(request):
+    """Regional disease analytics (admin).
+
+    Aggregates diagnoses geographically so admins can spot outbreak clusters.
+    Returns disease counts by crop, by region (bucketed lat/lon grid), and the
+    most-affected crops/diseases. Query params:
+        period: 7d | 30d | 90d | 1y   (default 90d)
+    """
+    if request.user.role != 'admin':
+        return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
+
+    from diagnosis.models import Diagnosis
+    from django.db.models import Count
+
+    period = request.query_params.get('period', '90d')
+    days = {'7d': 7, '30d': 30, '90d': 90, '1y': 365}.get(period, 90)
+    since = timezone.now() - timedelta(days=days)
+
+    qs = Diagnosis.objects.filter(created_at__gte=since)
+
+    # Disease counts by crop.
+    by_crop_rows = qs.values('crop_type', 'disease_name').annotate(
+        count=Count('id')).order_by('-count')
+    by_crop = {}
+    for row in by_crop_rows:
+        by_crop.setdefault(row['crop_type'], {})[row['disease_name']] = row['count']
+
+    # Geo clusters: bucket lat/lon onto a ~0.4 degree grid so nearby diagnoses
+    # (same village/area) cluster into a single outbreak point.
+    grid = {}
+    for d in qs.select_related('location').filter(location__isnull=False).iterator():
+        if d.location is None:
+            continue
+        lat = round(d.location.latitude / 0.4) * 0.4
+        lon = round(d.location.longitude / 0.4) * 0.4
+        key = (lat, lon)
+        bucket = grid.setdefault(key, {'lat': lat, 'lon': lon, 'total': 0, 'diseases': {}})
+        bucket['total'] += 1
+        bucket['diseases'][d.disease_name] = bucket['diseases'].get(d.disease_name, 0) + 1
+
+    geo_points = sorted(
+        ({'lat': b['lat'], 'lon': b['lon'], 'total': b['total'],
+          'top_disease': max(b['diseases'], key=b['diseases'].get),
+          'diseases': b['diseases']} for b in grid.values()),
+        key=lambda p: p['total'], reverse=True,
+    )[:50]
+
+    return Response({
+        'period': period,
+        'days': days,
+        'total_diagnoses': qs.count(),
+        'by_crop': by_crop,
+        'geo_points': geo_points,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def admin_outbreaks(request):
+    """Admin outbreak console: list detected outbreak alerts.
+
+    Query params:
+        status: active | notified | expired  (default: all)
+        q: filter by disease name (optional)
+    """
+    if request.user.role != 'admin':
+        return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
+
+    from diagnosis.models import OutbreakAlert
+
+    qs = OutbreakAlert.objects.all()
+    status_filter = request.query_params.get('status')
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    search = request.query_params.get('q')
+    if search:
+        qs = qs.filter(disease_name__icontains=search)
+
+    alerts = [{
+        'id': a.id,
+        'disease_name': a.disease_name,
+        'crop_name': a.crop_name,
+        'latitude': a.latitude,
+        'longitude': a.longitude,
+        'radius_km': a.radius_km,
+        'cluster_size': a.cluster_size,
+        'previous_size': a.previous_size,
+        'notified_users': a.notified_users,
+        'status': a.status,
+        'cooldown_until': a.cooldown_until,
+        'created_at': a.created_at,
+    } for a in qs]
+
+    return Response({'count': len(alerts), 'alerts': alerts})
 
 
 @api_view(['GET'])

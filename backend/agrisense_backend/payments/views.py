@@ -1,14 +1,18 @@
-from datetime import timedelta
+import hashlib
+import hmac
 
+from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.parsers import JSONParser
 
 from .models import Payment
 from .serializers import PaymentSerializer
 from .gateway import get_gateway, PaymentError
+from .services import complete_payment, finalize_payment_failed, refund_payment
 
 # Payment statuses from which a payment may transition into processing/completed.
 PROCESSABLE_FROM = {'pending', 'failed'}
@@ -49,6 +53,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_403_FORBIDDEN)
         if order.payment_status == 'paid':
             return Response({'error': 'Order is already paid'}, status=status.HTTP_400_BAD_REQUEST)
+        if order.status in ('cancelled', 'expired', 'delivered'):
+            return Response({'error': f'Order is {order.status} and cannot be paid.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         amount = data.get('amount')
         try:
@@ -92,20 +99,61 @@ class PaymentViewSet(viewsets.ModelViewSet):
     def process_payment(self, request, pk=None):
         """Initiate collection with the provider gateway and finalize the payment.
 
+        Two-phase execution:
+        1. Inside a transaction: lock the payment (+ order), validate the
+           transition, and re-hold stock on a retry of a ``payment_failed`` order.
+        2. Outside the transaction: call the provider gateway (the only slow /
+           external part), then finalize the outcome in a fresh transaction so a
+           failure releases stock and a success marks the order paid + ledged.
+
         Guards:
         * only the payer (or an admin) can process a payment;
         * a payment can only move from pending/failed -> processing/completed;
-        * completing an order payment marks the order paid + confirmed;
-        * completing a premium payment activates the dealer's premium tier.
+        * completing an order payment marks the order paid + confirmed and posts
+          a ledger entry (escrow);
+        * completing a premium payment activates the dealer's premium tier and
+          posts a ledger entry (income);
+        * failing an order payment releases the reserved stock and marks the
+          order ``payment_failed`` (retryable).
         """
-        payment = self.get_object()
-        if request.user.id != payment.user_id and request.user.role != 'admin':
-            return Response({'error': 'Not authorized'}, status=status.HTTP_403_FORBIDDEN)
+        # Phase 1 — validation & reservation inside a transaction.
+        with transaction.atomic():
+            payment = Payment.objects.select_for_update().get(pk=pk)
+            if request.user.id != payment.user_id and request.user.role != 'admin':
+                return Response({'error': 'Not authorized'}, status=status.HTTP_403_FORBIDDEN)
+            if payment.status not in PROCESSABLE_FROM:
+                return Response(
+                    {'error': f'Payment is already {payment.status} and cannot be reprocessed'},
+                    status=status.HTTP_400_BAD_REQUEST)
 
-        if payment.status not in PROCESSABLE_FROM:
-            return Response({'error': f'Payment is already {payment.status} and cannot be reprocessed'},
+            order = None
+            if payment.payment_type == 'order' and payment.order_id:
+                from products.models import Order, Product
+                order = Order.objects.select_for_update().get(id=payment.order_id)
+                if order.status in ('cancelled', 'expired', 'delivered') \
+                        or order.payment_status == 'paid':
+                    return Response(
+                        {'error': f'Order is closed ({order.status}); cannot process payment.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+                if order.status == 'payment_failed':
+                    # Retry: re-reserve the stock within the reservation window,
+                    # using the same row-locked product the order path uses.
+                    product = Product.objects.select_for_update().get(
+                        id_product=order.product_id)
+                    if product.stock_quantity < order.quantity:
+                        return Response(
+                            {'error': f'Insufficient stock. Only {product.stock_quantity} left.'},
                             status=status.HTTP_400_BAD_REQUEST)
+                    product.stock_quantity -= order.quantity
+                    if product.stock_quantity == 0:
+                        product.is_available = False
+                    product.save(update_fields=['stock_quantity', 'is_available'])
+                    order.status = 'pending'
+                    order.reserved_until = timezone.now() + timezone.timedelta(
+                        minutes=settings.ORDER_RESERVATION_MINUTES)
+                    order.save(update_fields=['status', 'reserved_until'])
 
+        # Phase 2 — external provider call (kept outside the DB transaction).
         gateway = get_gateway(payment.payment_method)
         try:
             result = gateway.request_payment(
@@ -115,18 +163,22 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 transaction_id=payment.transaction_id,
             )
         except PaymentError as exc:
-            payment.status = 'failed'
-            payment.save(update_fields=['status'])
+            finalize_payment_failed(payment.pk, provider_error=str(exc))
             return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         new_status = result.get('status', 'processing')
         if new_status not in ('completed', 'failed', 'processing', 'pending'):
             new_status = 'processing'
-        payment.status = new_status
-        payment.save(update_fields=['status'])
 
-        if new_status == 'completed':
-            self._on_completed(payment)
+        if new_status == 'failed':
+            payment = finalize_payment_failed(payment.pk)
+        elif new_status == 'completed':
+            payment = complete_payment(payment.pk)
+        else:
+            with transaction.atomic():
+                payment = Payment.objects.select_for_update().get(pk=payment.pk)
+                payment.status = new_status
+                payment.save(update_fields=['status'])
 
         return Response({
             'status': payment.status,
@@ -152,14 +204,39 @@ class PaymentViewSet(viewsets.ModelViewSet):
             return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         if provider_status == 'completed' and payment.status != 'completed':
-            payment.status = 'completed'
-            payment.save(update_fields=['status'])
-            self._on_completed(payment)
+            payment = complete_payment(payment.pk)
         elif provider_status == 'failed' and payment.status not in ('completed', 'refunded'):
-            payment.status = 'failed'
-            payment.save(update_fields=['status'])
+            payment = finalize_payment_failed(payment.pk)
 
         return Response({'status': payment.status, 'transaction_id': payment.transaction_id})
+
+    @action(detail=True, methods=['post'])
+    def refund(self, request, pk=None):
+        """Refund a completed, unsettled order payment (admin/platform only).
+
+        Reverses the escrow ledger entry, marks the payment ``refunded``,
+        returns the reserved stock, and notifies both the farmer and the dealer.
+        An order that was already settled (delivered) cannot be refunded through
+        this endpoint because the dealer's funds would need clawing back.
+        """
+        if request.user.role != 'admin':
+            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            payment = refund_payment(pk)
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        from auditlog.services import log_action
+        log_action(
+            request.user, 'refund_payment', category='payment',
+            target_type='payment', target_id=payment.transaction_id,
+            description=f'Refunded payment {payment.transaction_id} ({payment.amount:.2f} FCFA)',
+            metadata={'order_id': payment.order_id}, request=request,
+        )
+        return Response({'status': 'refunded',
+                         'transaction_id': payment.transaction_id,
+                         'message': 'Payment refunded and ledger reversed.'})
 
     @action(detail=False, methods=['get'])
     def my_payments(self, request):
@@ -167,53 +244,50 @@ class PaymentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(payments, many=True)
         return Response(serializer.data)
 
-    # ── helpers ───────────────────────────────────────────────────────
-    def _on_completed(self, payment):
-        from announcements.models import notify_user
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def payment_webhook(request):
+    """Provider webhook callback (real MTN/Orange integration).
 
-        if payment.payment_type == 'premium' and payment.user.role == 'dealer':
-            months = self._premium_months(payment.description)
-            user = payment.user
-            base = user.premium_expiry if (user.is_premium and user.premium_expiry and
-                                           user.premium_expiry > timezone.now()) else timezone.now()
-            user.is_premium = True
-            user.premium_expiry = base + timedelta(days=30 * months)
-            user.save(update_fields=['is_premium', 'premium_expiry'])
-            notify_user(
-                user,
-                'Premium activated 🚀',
-                f'Your premium dealer subscription is active until '
-                f'{user.premium_expiry.strftime("%d %b %Y")}. Your products now rank '
-                f'higher in farmer searches.',
-                type='premium',
-            )
-            return
+    Providers call this server-to-server with an event for a ``transaction_id``.
+    The request must carry an ``X-Signature`` header equal to an HMAC-SHA256 of
+    the raw body signed with ``settings.PAYMENT_WEBHOOK_SECRET``.
 
-        if payment.order:
-            order = payment.order
-            order.payment_status = 'paid'
-            if order.status == 'pending':
-                order.status = 'confirmed'
-            order.save(update_fields=['payment_status', 'status'])
-            notify_user(
-                payment.user,
-                'Payment successful ✅',
-                f'Your payment of {payment.amount:.2f} FCFA for {order.product.name} '
-                f'was confirmed. The dealer has been notified.',
-                type='payment',
-                reference_id=order.id,
-            )
-            notify_user(
-                order.product.dealer,
-                'Payment confirmed 💰',
-                f'{payment.user.first_name or payment.user.username} paid '
-                f'{payment.amount:.2f} FCFA for order #{order.id}.',
-                type='payment',
-                reference_id=order.id,
-            )
+    Handling is idempotent: processing an already-final transaction is a no-op.
+    """
+    raw_body = request.body
+    signature = request.META.get('HTTP_X_SIGNATURE', '') or \
+        request.META.get('HTTP_X_WEBHOOK_SIGNATURE', '')
+    if not signature:
+        return Response({'error': 'Missing signature header'}, status=status.HTTP_400_BAD_REQUEST)
 
-    @staticmethod
-    def _premium_months(description):
-        import re
-        match = re.search(r'\((\d+)\s*month', description or '')
-        return max(1, int(match.group(1))) if match else 1
+    expected = hmac.new(
+        settings.PAYMENT_WEBHOOK_SECRET.encode('utf-8'),
+        raw_body, hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        import json
+        payload = json.loads(raw_body)
+    except (ValueError, TypeError):
+        return Response({'error': 'Malformed payload'}, status=status.HTTP_400_BAD_REQUEST)
+
+    txn = payload.get('transaction_id') or payload.get('externalId')
+    event = (payload.get('status') or payload.get('event') or '').lower()
+    if not txn:
+        return Response({'error': 'transaction_id required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        payment = Payment.objects.select_for_update().get(transaction_id=txn)
+    except Payment.DoesNotExist:
+        return Response({'error': 'Unknown transaction'}, status=status.HTTP_404_NOT_FOUND)
+
+    with transaction.atomic():
+        if event in ('completed', 'success', 'paid'):
+            complete_payment(payment.pk)
+        elif event in ('failed', 'rejected', 'cancelled'):
+            finalize_payment_failed(payment.pk)
+
+    return Response({'status': 'ok'})

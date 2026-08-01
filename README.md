@@ -14,36 +14,51 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 | **Backend** | Django 4.2 + Django REST Framework + Channels | Central orchestrator of all business logic |
 | **Auth** | SimpleJWT (access + rotating refresh, blacklist) | Persistent secure sessions |
 | **Database** | MySQL 8 (utf8mb4) — SQLite supported for local dev | Users, products, orders, payments, chats, diagnoses |
+| **Cache / Queue** | Redis (django-redis cache + Celery broker); locmem/eager in dev | Caching, async workers, background scheduling |
+| **Async** | Celery + django-celery-beat schedules (reservations, premiums, reconciliation, weather cleanup) | Background jobs that never block requests |
 | **AI Engine** | Pluggable: rule-based scorer (default) / TensorFlow CNN (optional) | Image-based plant pathology with confidence scoring |
-| **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + live order notifications |
+| **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + push-bus (live notifications & stock) |
 | **External** | OpenWeatherMap, MTN MoMo / Orange Money gateway adapters | Weather forecasts & mobile-money payments |
+| **Observability** | JSON structured logging, request-id tracing, `/api/health/`, optional Sentry | Trace + monitor production |
 
 ## Features
 
 ### Farmer
 - **Persistent session** — auto-login on app start, JWT auto-refresh
 - **Dashboard** — time-aware greeting, live weather mini-card, AI tips, announcements
-- **AI Plant Doctor** — camera/gallery scan → disease + confidence + severity + full treatment plan + recommended products
-- **Marketplace** — searchable catalog with categories, images, prices, verified/premium badges; premium dealers rank first
-- **Real-time chat** — WebSocket messaging with dealers (images supported)
+- **AI Plant Doctor** — camera/gallery scan → disease/healthy/inconclusive + calibrated confidence + severity + full treatment plan + recommended products (crop-mandatory)
+- **Marketplace** — searchable catalog with categories, images, prices, verified/premium badges, ratings/reviews; premium dealers rank first
+- **Real-time chat** — WebSocket messaging with dealers (images, typing indicators, auto-reconnect with backfill)
+- **Live marketplace** — stock availability updates instantly as orders are placed
 - **Payments** — MTN MoMo / Orange Money checkout with amount validation & provider simulation
 - **History** — diagnosis history and order history modules
-- **In-app notifications** — order/payment/premium updates with unread badge
+- **Offline-first** — diagnosis history, marketplace catalog and weather are cached for low-coverage areas, with an offline action outbox
+- **Irrigation dashboard** — register soil-moisture sensors and get live, crop-aware irrigation advice (moisture + rain + thresholds); reachable from the Home quick-access grid
+- **In-app notifications** — order/payment/premium updates with unread badge, delivered live over the push bus
 
 ### Agro-input Dealer
 - **Inventory CRUD** — add/edit/delete products, images, prices, stock; availability toggle
 - **Order management** — live order list, real-time "new order" notifications, accept/ship/deliver/cancel with automatic stock restore
-- **Customer chat** — real-time conversations with farmers
+- **Live inventory** — stock changes push to the dashboard in real time as orders are placed/cancelled
+- **Customer chat** — real-time conversations with farmers (typing indicators)
 - **Premium tier** — subscription via mobile money (or admin grant); products get search visibility boost until expiry
 - **Dashboard** — real product/order/revenue counters
+- **Sales analytics** — revenue/order time-series, top products, stock health
 
 ### Administrator
-- **Analytics dashboard** — real stats + time-series charts (user growth, diagnoses, order volume, revenue) and top products/dealers
+- **Analytics dashboard** — real stats + time-series charts (user growth, diagnoses, order volume, revenue), top products/dealers, and regional/geo disease aggregation
 - **User management** — search, suspend/activate, delete fraudulent accounts
 - **Dealer verification** — pending-application queue with approve/reject
 - **Content & knowledge base** — add/edit/delete diseases; changes immediately affect AI diagnoses
 - **Broadcast center** — targeted announcements (all / farmers / dealers) with active toggle
+- **Audit log** — immutable record of every privileged admin action
+- **Product moderation** — report queue with dismiss/remove resolution
 - **System health** — live API/DB/AI-engine checks
+- **IoT & USSD** — field-sensor ingestion (soil moisture/temp/humidity/rainfall), **precision
+  irrigation advice** (moisture + weather + crop thresholds) and a USSD/SMS companion so
+  feature-phone farmers can check weather & diagnosis
+- **Predictive outbreak alerts** — detects *growing* disease clusters from geo-tagged diagnoses
+  and proactively pushes warnings to nearby farmers
 
 ## Quick Start
 
@@ -159,26 +174,83 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 - Admin: `GET /api/users/` · `GET /api/users/dealer_requests/` · `POST /api/users/{id}/suspend|activate|verify_dealer|upgrade_premium/` · `DELETE /api/users/{id}/`
 
 ### Diagnosis & AI
-- `POST /api/diagnosis/analyze/` (multipart image + crop_type) · `GET /api/diagnosis/history/`
+- `POST /api/diagnosis/analyze/` (multipart image + crop_type — crop is required) · `GET /api/diagnosis/history/`
+- AI v2: returns `healthy` / `inconclusive` outcomes, calibrated confidence, engine+model_version
 - `GET /api/diseases/supported_crops/` · Admin: `GET /api/diseases/list_diseases/`, `POST /api/diseases/add_disease/`, full CRUD
+
+### Regional Analytics
+- `GET /api/admin/regional/?period=7d|30d|90d|1y` — disease counts by crop + geo-clustered outbreak points (admin)
 
 ### Marketplace & Orders
 - `GET /api/products/marketplace/?category=&search=` (premium-boosted ranking)
 - Dealer: `GET /api/products/my_products/`, POST/PUT/DELETE `/api/products/{id}/`, `POST /api/products/{id}/toggle_availability/`
-- `POST /api/orders/` (stock-safe) · `GET /api/orders/` · `POST /api/orders/{id}/update_status/`
+- `POST /api/orders/` (stock-safe, reserves stock) · `GET /api/orders/` · `POST /api/orders/{id}/update_status/` (ship/deliver) · `POST /api/orders/{id}/cancel/` (farmer/dealer/admin)
 
 ### Payments
-- `POST /api/payments/` (validates amount + ownership) · `POST /api/payments/{id}/process_payment/` · `GET /api/payments/{id}/verify/` · `GET /api/payments/my_payments/`
+- `POST /api/payments/` (validates amount + ownership) · `POST /api/payments/{id}/process_payment/` · `GET /api/payments/{id}/verify/` · `POST /api/payments/{id}/refund/` (admin) · `GET /api/payments/my_payments/`
+- `POST /api/payments/webhook/` (HMAC-signed, idempotent provider callback)
+
+### Ledger & Settlement
+- Double-entry ledger records every collection (→ escrow), fulfilment (→ dealer + platform fee),
+  and refund (escrow reversal) with an immutable audit trail.
+
+### Reviews, Reports & Trust
+- `POST /api/reviews/` (farmers, verified purchases only) · `GET /api/reviews/?product=`
+  · one review per farmer+product; product rating/avg surfaced in the catalog
+- `POST /api/product_reports/` (report a product) · `POST /api/product_reports/{id}/resolve/` (admin)
+  · moderation queue (pending → dismissed/removed)
+
+### Audit Log
+- `GET /api/audit_logs/` (admin; filterable by category) · `GET /api/audit_logs/summary/`
+  · immutable write-through from suspend/verify/delete/premium/refund/moderation/content actions
+
+### Dealer Analytics & OTP
+- `GET /api/dealers/analytics/?period=7d|30d|90d|1y` — dealer-scoped revenue/orders/top products
+- `POST /api/auth/otp/send/` · `POST /api/auth/otp/verify/` — phone OTP for registration/password reset
+
+### IoT Sensors (Phase F)
+- `POST /api/sensors/` (register a field sensor, optional `crop`) · `POST /api/sensors/{id}/ingest/` (single/batch readings)
+- `GET /api/sensors/{id}/latest/` — latest reading + irrigation advice
+- `GET /api/sensors/{id}/irrigation_advice/?crop=Tomato` — precision irrigation recommendation
+  (moisture + trend + local rain probability + crop thresholds: `irrigate_now` / `delay_rain` / `monitor` / `adequate`)
+- Celery beat `monitor-irrigation` (30 min) auto-pushes an alert when irrigation is due (throttled per sensor)
+
+### Predictive Outbreak Alerting (Phase F)
+- `GET /api/admin/outbreaks/` — admin outbreak console (list detected alerts)
+- Celery beat `detect-outbreaks` (hourly) detects *growing* disease clusters from geo-tagged
+  diagnoses and pushes targeted warnings to nearby farmers
+- Run manually: `python manage.py detect_outbreaks`
+
+### USSD / SMS Companion (Phase F)
+- `POST /api/ussd/` — gateway callback with `{phoneNumber, text}`; serves weather/diagnosis menus
+  to feature-phone farmers
+
+### Load testing
+- `load_tests/locustfile.py` (scenario-based) and `load_tests/k6_smoke.js` (CI smoke gate)
 
 ### Chat (REST + WebSocket)
 - `GET/POST /api/chat/` · `GET /api/chat/{id}/messages/` · `POST /api/chat/{id}/send_message|mark_read/`
-- `WS /ws/chat/{room_id}/?token=<JWT>` — authenticated + membership-checked
+- `WS /ws/chat/{room_id}/?token=<JWT>` — authenticated + membership-checked, typing events
+
+### Realtime Push Bus
+- `WS /ws/push/?token=<JWT>` — one persistent per-user connection delivering
+  `notification`, `stock_update` and broadcast events live
+- `POST /api/push/register/` · `POST /api/push/unregister/` — FCM/APNs device tokens for true push
 
 ### Weather, Announcements, Notifications, System
 - `POST /api/weather/`
-- `GET/POST /api/announcements/` · `GET /api/announcements/active/` (audience-targeted)
+- `GET/POST /api/announcements/` · `GET /api/announcements/active/` (audience-targeted);
+  activating a broadcast fans out to the target users' notifications + push
 - `GET /api/notifications/` · `GET /api/notifications/unread_count/` · `POST .../{id}/mark_read/`
-- `GET /api/admin/stats/` · `GET /api/admin/analytics/?period=7d|30d|90d|1y` · `GET /api/health/`
+- `GET /api/admin/stats/` · `GET /api/admin/analytics/?period=7d|30d|90d|1y`
+- `GET /api/health/` — DB, cache/Redis, AI-engine, push and payments dependency liveness
+
+### Background tasks (Celery)
+- `release_stale_reservations_task` (every 5 min) · `expire_premiums_task` (daily)
+- `reconcile_payments_task` (every 15 min) · `cleanup_weather_task` (daily)
+- `fan_out_announcement_task` (on broadcast). Run `worker`/`beat` services in
+  docker-compose, or `celery -A agrisense_backend worker/beat`. Without a broker
+  (no `CELERY_BROKER_URL`) tasks run eagerly — no server needed for dev/tests.
 
 ## Security highlights
 
@@ -187,8 +259,19 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 - JWT rotation with **blacklist**; short access tokens + transparent client refresh
 - **Authenticated & participant-checked WebSockets** — sender identity always comes from the token
 - **Transactional, stock-safe orders** with `SELECT ... FOR UPDATE` and quantity validation
+- **Reservation model** — an unpaid order holds stock only until `ORDER_RESERVATION_MINUTES`;
+  payment failure releases stock, retries re-hold, farmer cancel restores it, and a reconciler
+  command (`release_stale_reservations`) expires abandoned reservations.
 - Payment **amount integrity**, ownership checks and idempotent processing (gateway adapter pattern)
+- **Payment failure handling** — a failed collection marks the order `payment_failed` and releases
+  its stock (retryable within the reservation window).
+- **Refund + settlement** — completed payments can be refunded (escrow reversal) and fulfilled
+  orders settle funds to the dealer via an auditable double-entry ledger (commission configurable).
+- **HMAC-signed webhook** endpoint for real provider callbacks, with idempotent processing.
 - Env-driven secrets, CORS/ALLOWED_HOSTS allow-lists, DRF throttling, image type validation
+- **Custom production-security system checks** (`agrisense.W*`) fail the gate on
+  insecure defaults; `manage.py check --deploy` surfaces them.
+- **Structured JSON logging** with request-id tracing; optional Sentry error tracking.
 - DB constraints: non-negative price/stock/quantity
 
 ## Tests
@@ -196,9 +279,11 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 ```bash
 cd backend/agrisense_backend
 DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3 python manage.py test
-# 88 tests: auth/RBAC, JWT rotation, orders/stock, payments, chat permissions,
-# disease-DB authorization, AI determinism, analytics aggregation, health checks,
-# profile-photo uploads (PATCH /users/me/), multipart product booleans, media URLs
+# 186 tests: auth/RBAC, JWT rotation, orders/stock + reservation lifecycle,
+# payment failure/retry/refund, ledger settlement, HMAC webhook, realtime push
+# bus (auth, fan-out, ping/pong), push-token registration, broadcast fan-out,
+# Celery tasks (eager), weather auth/cache/cleanup, custom security checks,
+# chat permissions, disease-DB authorization, AI determinism, analytics, health
 ```
 
 See `docs/ARCHITECTURE_ANALYSIS.md` for the full architecture & gap analysis, `docs/DEPLOYMENT.md` for production deployment (Docker, daphne, Redis channel layer, payment/weather keys), `docs/ADMIN_DASHBOARD_REDESIGN.md` for the admin-console UI/UX overhaul plus the image-upload debugging guide & fixes, `docs/FARMER_DASHBOARD_REDESIGN.md` for the farmer experience redesign, and `docs/DEALER_DASHBOARD_REDESIGN.md` for the dealer-console redesign strategy (workflows, data visualization and usability).
@@ -208,7 +293,7 @@ See `docs/ARCHITECTURE_ANALYSIS.md` for the full architecture & gap analysis, `d
 ```
 agrisense_project/
 ├── backend/agrisense_backend/
-│   ├── agrisense_backend/     # settings, urls, asgi (WS + WebSockets)
+│   ├── agrisense_backend/     # settings, urls, asgi, celery, logging, checks
 │   ├── users/                 # custom user, registration, admin management
 │   ├── diagnosis/             # diagnoses, treatment plans, disease knowledge base
 │   ├── ai_engine/             # plant-pathology engine (rule-based + TF adapter)
@@ -217,6 +302,11 @@ agrisense_project/
 │   ├── chat/                  # chat rooms, messages, JWT WebSocket consumer
 │   ├── weather/               # weather API + farming-advice engine
 │   ├── announcements/         # broadcasts + per-user in-app notifications
+│   ├── realtime/              # push-bus WS consumer, FCM/APNs push provider
+│   ├── ledger/                # double-entry accounting, settlement, refunds
+│   ├── auditlog/              # immutable admin action audit trail
+│   ├── sensors/               # IoT field-sensor ingestion + irrigation advisory
+│   ├── ussd/                  # USSD/SMS feature-phone companion
 │   └── system/                # /api/health/ probes
 ├── frontend/agrisense_app/
 │   └── lib/
@@ -224,6 +314,8 @@ agrisense_project/
 │       ├── providers/         # auth, diagnosis, marketplace, weather, chat, ...
 │       ├── screens/           # farmer/dealer/admin UIs
 │       ├── services/api/      # ApiService (JWT refresh, media resolution, WS urls)
+│       ├── services/local/    # offline cache + action outbox
+│       ├── l10n/              # EN/FR localization
 │       ├── theme/             # green premium theme
 │       └── widgets/
 ├── docs/                      # architecture analysis + deployment guide

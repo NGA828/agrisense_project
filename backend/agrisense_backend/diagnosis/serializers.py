@@ -33,6 +33,7 @@ class DiagnosisSerializer(serializers.ModelSerializer):
     class Meta:
         model = Diagnosis
         fields = ['id', 'user', 'user_email', 'crop_type', 'image', 'symptoms',
-                  'confidence', 'disease_name', 'severity', 'causes', 'prevention',
+                  'confidence', 'disease_name', 'severity', 'is_healthy',
+                  'is_inconclusive', 'causes', 'prevention',
                   'created_at', 'location', 'location_data', 'treatment_plan']
         read_only_fields = ['user', 'confidence', 'disease_name', 'symptoms', 'severity']

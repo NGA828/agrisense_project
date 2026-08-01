@@ -35,6 +35,7 @@ services:
       timeout: 3s
       retries: 10
 
+  # Backend image used by the web/ASGI, worker and beat services.
   backend:
     build: .
     restart: unless-stopped
@@ -44,9 +45,9 @@ services:
     volumes:
       - ./backend/agrisense_backend/media:/app/media
       - ./backend/agrisense_backend/staticfiles:/app/staticfiles
-    environment:
-      DEBUG: "False"
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key-change-me}
+    environment: &backend-env
+      DEBUG: ${DEBUG:-"False"}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
       DB_ENGINE: django.db.backends.mysql
       DB_NAME: agrisense_db
@@ -54,14 +55,51 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-password123}
       DB_HOST: db
       DB_PORT: "3306"
-      CORS_ALLOW_ALL: "true"
+      # Restrict origins in production (browser clients). Mobile apps are
+      # unaffected by CORS; keep this explicit rather than wide-open.
+      CORS_ALLOW_ALL: ${CORS_ALLOW_ALL:-"false"}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       CHANNEL_LAYER_BACKEND: redis
       CHANNEL_LAYER_REDIS_URL: redis://redis:6379/0
+      # Phase C — cache + async workers on Redis
+      CACHE_BACKEND: redis
+      REDIS_CACHE_URL: redis://redis:6379/2
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
       JWT_ACCESS_MINUTES: "30"
       JWT_REFRESH_DAYS: "7"
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-dev-webhook-secret}
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-noop}
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery worker — runs background tasks (fan-out, reservations, reconcile).
+  worker:
+    build: .
+    restart: unless-stopped
+    command: celery -A agrisense_backend worker -l info
+    environment: *backend-env
+    volumes:
+      - ./backend/agrisense_backend/media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery beat — schedules periodic tasks (reservations, premiums, reconcile,
+  # weather cleanup) via CELERY_BEAT_SCHEDULE.
+  beat:
+    build: .
+    restart: unless-stopped
+    command: celery -A agrisense_backend beat -l info
+    environment: *backend-env
     depends_on:
       db:
         condition: service_healthy

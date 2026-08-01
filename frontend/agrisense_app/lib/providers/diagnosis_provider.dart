@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../models/diagnosis.dart';
 import '../services/api/api_service.dart';
+import '../services/local/cache_service.dart';
 
 class DiagnosisProvider with ChangeNotifier {
   final ApiService _api = ApiService();
@@ -20,9 +21,20 @@ class DiagnosisProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      _history = await _api.getDiagnosisHistory();
+      final fetched = await _api.getDiagnosisHistory();
+      _history = fetched.cast<Diagnosis>();
+      // Cache a JSON copy for offline reads.
+      await LocalCacheService.instance
+          .cacheDiagnosisHistory(fetched.map((d) => d.toJson()).toList());
     } catch (e) {
+      // Offline-first: fall back to the last-known cached history.
       _error = e.toString();
+      final cached = await LocalCacheService.instance.getDiagnosisHistory();
+      if (cached != null) {
+        _history = cached
+            .map((j) => Diagnosis.fromJson(j as Map<String, dynamic>))
+            .toList();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -1,7 +1,7 @@
 import io
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from PIL import Image
 
 from ai_engine.services import (RuleBasedEngine, analyze_disease,
@@ -45,6 +45,35 @@ class RuleBasedEngineTests(TestCase):
         brown = png_bytes(color=(150, 90, 70))
         result = RuleBasedEngine().analyze(brown, 'Tomato')
         self.assertIn(result['disease_name'], ['Tomato Late Blight', 'Tomato Early Blight'])
+
+
+class RuleBasedEngineV2Tests(TestCase):
+    """AI v2: healthy outcome, calibrated confidence, honest inconclusive."""
+
+    def test_healthy_leaf_returns_healthy(self):
+        # Bright green, no lesion -> 'Healthy' outcome, not a disease.
+        result = RuleBasedEngine().analyze(png_bytes(color=(80, 160, 70)), 'Tomato')
+        self.assertTrue(result['is_healthy'])
+        self.assertEqual(result['disease_name'], 'Healthy')
+        self.assertEqual(result['treatment_type'], 'No treatment required')
+
+    def test_confidence_is_calibrated_lower(self):
+        # Temperature scaling must not overclaim ~95% certainty.
+        result = RuleBasedEngine().analyze(png_bytes(), 'Tomato')
+        self.assertLessEqual(float(result['confidence']), 90.0)
+
+    def test_low_confidence_returns_inconclusive(self):
+        # Force the low-confidence threshold high so any disease match is
+        # declared inconclusive (honest "consult an agronomist" path).
+        with override_settings(AI_LOW_CONFIDENCE_THRESHOLD=99.0):
+            result = RuleBasedEngine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Inconclusive')
+        self.assertTrue(result.get('low_confidence'))
+        self.assertIn('agronomist', result['treatment_type'].lower())
+
+    def test_v2_model_version(self):
+        result = RuleBasedEngine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['model_version'], 'v2.0-rules')
 
 
 class KnowledgeBaseTests(TestCase):

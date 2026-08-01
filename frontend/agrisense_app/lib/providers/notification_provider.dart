@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/notification.dart';
 import '../services/api/api_service.dart';
+import 'realtime_provider.dart';
 
 /// In-app notifications for the current user (order alerts, payment
 /// confirmations, premium updates, system broadcasts).
@@ -12,6 +15,32 @@ class NotificationProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   DateTime _lastUnreadFetch = DateTime.fromMillisecondsSinceEpoch(0);
+  StreamSubscription<Map<String, dynamic>>? _rtSub;
+
+  NotificationProvider() {
+    // Receive notifications live over the push bus (no polling needed while
+    // the app is open). Polling fallback still works via loadNotifications().
+    _rtSub = RealtimeProvider.instance.events.listen((event) {
+      if (event['type'] == 'notification') {
+        _handleLive(event['payload'] as Map<String, dynamic>? ?? {});
+      }
+    });
+  }
+
+  void _handleLive(Map<String, dynamic> payload) {
+    final notification = AppNotification(
+      id: payload['id'] ?? 0,
+      title: payload['title']?.toString() ?? '',
+      message: payload['message']?.toString() ?? '',
+      type: payload['type']?.toString() ?? 'system',
+      referenceId: payload['reference_id']?.toString() ?? '',
+      isRead: false,
+      createdAt: DateTime.now(),
+    );
+    _notifications = [notification, ..._notifications];
+    _unreadCount += 1;
+    notifyListeners();
+  }
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount => _unreadCount;
@@ -87,5 +116,11 @@ class NotificationProvider with ChangeNotifier {
       _unreadCount = 0;
       notifyListeners();
     } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _rtSub?.cancel();
+    super.dispose();
   }
 }

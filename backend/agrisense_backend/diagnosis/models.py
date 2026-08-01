@@ -13,8 +13,11 @@ class Diagnosis(models.Model):
     severity = models.CharField(max_length=20, choices=[
         ('low', 'Low'),
         ('medium', 'Medium'),
-        ('high', 'High')
+        ('high', 'High'),
+        ('unknown', 'Unknown')
     ], default='low')
+    is_healthy = models.BooleanField(default=False)
+    is_inconclusive = models.BooleanField(default=False)
     causes = models.TextField(blank=True, default='')
     prevention = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -62,6 +65,46 @@ class TreatmentPlan(models.Model):
 
     class Meta:
         db_table = 'treatment_plan'
+
+
+class OutbreakAlert(models.Model):
+    """A detected, growing disease cluster (predictive outbreak alerting).
+
+    Created by the ``detect_outbreak_alerts`` service / Celery task when the
+    number of diagnoses for a disease in a geographic bucket grows significantly
+    vs. the previous window. Used to proactively warn nearby farmers and for the
+    admin outbreak console. Re-notification is throttled by ``cooldown_until``.
+    """
+    STATUS_CHOICES = (
+        ('active', 'Active'),
+        ('notified', 'Notified'),
+        ('expired', 'Expired'),
+    )
+
+    disease_name = models.CharField(max_length=200)
+    crop_name = models.CharField(max_length=100, blank=True, default='')
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    radius_km = models.IntegerField(default=50)
+    cluster_size = models.IntegerField(default=0)      # current window count
+    previous_size = models.IntegerField(default=0)     # prior window count
+    notified_users = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    cooldown_until = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.disease_name} @ ({self.latitude:.1f},{self.longitude:.1f}) x{self.cluster_size}'
+
+    class Meta:
+        db_table = 'outbreak_alert'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='idx_outbreak_status'),
+            models.Index(fields=['disease_name', 'latitude', 'longitude'],
+                         name='idx_outbreak_disease_loc'),
+        ]
 
 
 class Disease(models.Model):

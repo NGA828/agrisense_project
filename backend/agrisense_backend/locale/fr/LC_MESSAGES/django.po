@@ -1,0 +1,19 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AgriSense AI\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Only farmers can place orders"
+msgstr "Seuls les agriculteurs peuvent passer des commandes"
+
+msgid "Insufficient stock. Only %(count)s left."
+msgstr "Stock insuffisant. Seulement %(count)s restant(s)."
+
+msgid "Payment processed successfully"
+msgstr "Paiement traité avec succès"
+
+msgid "Payment is being processed"
+msgstr "Paiement en cours de traitement"

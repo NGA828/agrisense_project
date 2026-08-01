@@ -51,6 +51,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except json.JSONDecodeError:
             return
 
+        msg_type = data.get('type')
+        if msg_type == 'typing':
+            # Broadcast a typing indicator to the room (sender excluded from UI
+            # logic on the client; we include sender_id for attribution).
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_typing',
+                    'sender_id': self.user.id,
+                    'sender_name': self.user.get_full_name() or self.user.username,
+                    'typing': bool(data.get('typing', True)),
+                },
+            )
+            return
+
         message = (data.get('message') or '').strip()
         if not message:
             return
@@ -82,6 +97,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'sender_name': event['sender_name'],
             'image_url': event.get('image_url'),
             'created_at': event['created_at'],
+        }))
+
+    async def chat_typing(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'typing',
+            'sender_id': event['sender_id'],
+            'sender_name': event['sender_name'],
+            'typing': event['typing'],
         }))
 
     # ── DB helpers ────────────────────────────────────────────────────
