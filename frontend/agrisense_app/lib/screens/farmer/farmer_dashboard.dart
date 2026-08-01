@@ -225,16 +225,15 @@ class _ProfileStatsState extends State<_ProfileStats> {
       children: [
         _buildItem('$_scans', 'Scans', Icons.eco_rounded, AppTheme.primary),
         _buildDivider(),
-        _buildItem('$_orders', 'Orders', Icons.shopping_bag_rounded,
-            FarmerTheme.sun),
+        _buildItem(
+            '$_orders', 'Orders', Icons.shopping_bag_rounded, FarmerTheme.sun),
         _buildDivider(),
         _buildItem('$_chats', 'Chats', Icons.chat_rounded, FarmerTheme.grape),
       ],
     );
   }
 
-  Widget _buildItem(
-      String value, String label, IconData icon, Color color) {
+  Widget _buildItem(String value, String label, IconData icon, Color color) {
     return Expanded(
       child: Column(
         children: [
@@ -374,8 +373,7 @@ class _ProfileScreen extends StatelessWidget {
                             : (user.profilePhoto != null &&
                                     user.profilePhoto!.isNotEmpty
                                 ? CachedNetworkImageProvider(
-                                    ApiService.resolveMedia(
-                                        user.profilePhoto))
+                                    ApiService.resolveMedia(user.profilePhoto))
                                 : null),
                         child: (profilePhoto == null &&
                                 (user.profilePhoto == null ||
@@ -593,7 +591,8 @@ class _ProfileScreen extends StatelessWidget {
                 offset: const Offset(0, -22),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
                   decoration: FarmerTheme.cardDecoration,
                   child: const _ProfileStats(),
                 ),
@@ -660,7 +659,6 @@ class _ProfileScreen extends StatelessWidget {
                             builder: (_) => const NotificationsListScreen()),
                       ),
                     ),
-
                     const SizedBox(height: 20),
                     Text('Support', style: FarmerTheme.sectionTitle()),
                     const SizedBox(height: 10),
@@ -691,7 +689,6 @@ class _ProfileScreen extends StatelessWidget {
                       subtitle: 'Version 1.0.0',
                       onTap: () => _showAboutDialog(context),
                     ),
-
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
@@ -710,8 +707,7 @@ class _ProfileScreen extends StatelessWidget {
                                   style: GoogleFonts.poppins(fontSize: 14)),
                               actions: [
                                 TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(ctx, false),
+                                  onPressed: () => Navigator.pop(ctx, false),
                                   child: Text('Cancel',
                                       style: GoogleFonts.poppins(
                                           color: AppTheme.textMuted)),

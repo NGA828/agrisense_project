@@ -277,7 +277,8 @@ class FarmerStatCard extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               footnote!,
-              style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                  color: color, fontSize: 10, fontWeight: FontWeight.w700),
             ),
           ],
         ],
@@ -396,8 +397,7 @@ class FarmerProductThumb extends StatelessWidget {
               errorWidget: (_, __, ___) => Icon(fallbackIcon,
                   color: AppTheme.primaryLight, size: size * 0.45),
             )
-          : Icon(fallbackIcon,
-              color: AppTheme.primaryLight, size: size * 0.45),
+          : Icon(fallbackIcon, color: AppTheme.primaryLight, size: size * 0.45),
     );
   }
 }
@@ -441,7 +441,8 @@ class FarmerEmptyState extends StatelessWidget {
               const SizedBox(height: 6),
               Text(subtitle!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+                  style:
+                      const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
             ],
             if (action != null) ...[
               const SizedBox(height: 18),
@@ -459,7 +460,8 @@ class FarmerErrorState extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const FarmerErrorState({super.key, required this.message, required this.onRetry});
+  const FarmerErrorState(
+      {super.key, required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -473,7 +475,8 @@ class FarmerErrorState extends StatelessWidget {
         label: const Text('Retry'),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -564,16 +567,22 @@ class FarmerDrawer extends StatelessWidget {
                 children: [
                   _group('MY FARM'),
                   _item(context, 0, Icons.home_rounded, 'Home', tab: true),
-                  _item(context, 1, Icons.camera_alt_rounded, 'AI Crop Scan', tab: true),
-                  _page(context, Icons.wb_cloudy_rounded, 'Weather Forecast', 100),
-                  _item(context, 2, Icons.shopping_bag_rounded, 'Marketplace', tab: true),
+                  _item(context, 1, Icons.camera_alt_rounded, 'AI Crop Scan',
+                      tab: true),
+                  _page(context, Icons.wb_cloudy_rounded, 'Weather Forecast',
+                      100),
+                  _item(context, 2, Icons.shopping_bag_rounded, 'Marketplace',
+                      tab: true),
                   _group('ACTIVITY'),
-                  _page(context, Icons.history_rounded, 'Diagnosis History', 101),
+                  _page(
+                      context, Icons.history_rounded, 'Diagnosis History', 101),
                   _page(context, Icons.receipt_long_rounded, 'My Orders', 102),
-                  _page(context, Icons.notifications_rounded, 'Notifications', 103),
+                  _page(context, Icons.notifications_rounded, 'Notifications',
+                      103),
                   _item(context, 3, Icons.chat_rounded, 'Messages', tab: true),
                   _group('ACCOUNT'),
-                  _item(context, 4, Icons.person_rounded, 'My Profile', tab: true),
+                  _item(context, 4, Icons.person_rounded, 'My Profile',
+                      tab: true),
                 ],
               ),
             ),
@@ -647,7 +656,8 @@ class FarmerDrawer extends StatelessWidget {
         ),
       );
 
-  Widget _item(BuildContext context, int id, IconData icon, String label, {bool tab = false}) {
+  Widget _item(BuildContext context, int id, IconData icon, String label,
+      {bool tab = false}) {
     final selected = tab && selectedTab == id;
     return ListTile(
       dense: true,
