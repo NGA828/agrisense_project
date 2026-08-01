@@ -2,8 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Note: If AppTheme is imported from your project, keep it. 
-// We provide fallback/placeholder colors to ensure compilation works flawlessly.
 import '../../theme/app_theme.dart';
 import '../auth/role_selection_screen.dart';
 
@@ -14,54 +12,72 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with TickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+    _fadeController.forward();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _fadeController.dispose();
+    super.dispose();
+  }
 
   final List<_OnboardingData> _pages = [
     _OnboardingData(
       icon: Icons.camera_alt_rounded,
       title: 'Detect Crop\nDiseases Instantly',
       subtitle: 'Take a photo of your plant and our AI identifies the disease, severity, and provides treatment plans in seconds.',
-      primaryColor: const Color(0xFF4CAF50), // Fallback if AppTheme.primary is unavailable
+      primaryColor: const Color(0xFF4CAF50),
       bgGradient: [
         const Color(0xFF0C2B11),
         const Color(0xFF1B5E20),
-        const Color(0xFF388E3C),
+        const Color(0xFF2E7D32),
       ],
-      glowColor: const Color(0xFF4CAF50).withOpacity(0.4),
+      glowColor: const Color(0xFF4CAF50).withValues(alpha: 0.4),
     ),
     _OnboardingData(
       icon: Icons.wb_sunny_rounded,
       title: 'Smart Weather\n& Farming Advice',
       subtitle: 'Get localized weather forecasts and AI-powered farming recommendations tailored to your crops.',
-      primaryColor: const Color(0xFF2196F3), // Fallback if AppTheme.info is unavailable
+      primaryColor: const Color(0xFF2196F3),
       bgGradient: [
         const Color(0xFF0D1E36),
         const Color(0xFF1565C0),
         const Color(0xFF1976D2),
       ],
-      glowColor: const Color(0xFF42A5F5).withOpacity(0.4),
+      glowColor: const Color(0xFF42A5F5).withValues(alpha: 0.4),
     ),
     _OnboardingData(
       icon: Icons.shopping_cart_rounded,
       title: 'Buy From\nVerified Dealers',
       subtitle: 'Browse quality seeds, fertilizers, and pesticides from trusted agro-dealers. Pay securely via MoMo.',
-      primaryColor: const Color(0xFFFF9800), // Fallback if AppTheme.accent is unavailable
+      primaryColor: const Color(0xFFFF9800),
       bgGradient: [
         const Color(0xFF2E1502),
         const Color(0xFFE65100),
         const Color(0xFFF57C00),
       ],
-      glowColor: const Color(0xFFFF9800).withOpacity(0.4),
+      glowColor: const Color(0xFFFF9800).withValues(alpha: 0.4),
     ),
   ];
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,16 +97,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         child: Stack(
           children: [
-            // Ambient Decorative Glow Bubbles for Organic Depth
+            // Ambient Decorative Glow
             Positioned(
-              top: -100,
-              left: -100,
-              child: _AmbientGlowBubble(color: activePage.primaryColor.withOpacity(0.25)),
+              top: -120,
+              left: -120,
+              child: _AmbientGlowBubble(color: activePage.primaryColor.withValues(alpha: 0.25)),
             ),
             Positioned(
-              top: screenHeight * 0.4,
-              right: -150,
-              child: _AmbientGlowBubble(color: activePage.primaryColor.withOpacity(0.15)),
+              top: screenHeight * 0.35,
+              right: -180,
+              child: _AmbientGlowBubble(color: activePage.primaryColor.withValues(alpha: 0.15)),
+            ),
+            Positioned(
+              bottom: -100,
+              left: -50,
+              child: _AmbientGlowBubble(color: activePage.primaryColor.withValues(alpha: 0.1)),
             ),
 
             SafeArea(
@@ -98,43 +119,46 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   // App Branding & Skip Button
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // App Brand Logo/Text
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
-                                shape: BoxShape.circle,
+                        // App Brand
+                        FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: const Icon(
+                                  Icons.eco_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.eco_rounded,
-                                color: Colors.white,
-                                size: 18,
+                              const SizedBox(width: 10),
+                              Text(
+                                'AgriSense AI',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'AgriSense AI',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         // Skip Button
                         TextButton(
                           onPressed: _navigateToLogin,
                           style: TextButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.1),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            backgroundColor: Colors.white.withValues(alpha: 0.12),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
                             ),
@@ -142,7 +166,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: Text(
                             'Skip',
                             style: GoogleFonts.poppins(
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
@@ -152,7 +176,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
 
-                  // Carousel Area (Adaptive Layout)
+                  // Carousel Area
                   Expanded(
                     child: PageView.builder(
                       controller: _pageController,
@@ -163,53 +187,51 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         return Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // Beautiful Breathing Glassmorphic Icon Container
+                            // Glassmorphic Icon Container
                             _FloatingWidget(
-                              child: Center(
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    // Soft Outer Glow ring
-                                    Container(
-                                      width: 170,
-                                      height: 170,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: page.glowColor,
-                                            blurRadius: 40,
-                                            spreadRadius: 10,
-                                          )
-                                        ],
-                                      ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Outer glow
+                                  Container(
+                                    width: 180,
+                                    height: 180,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: page.glowColor,
+                                          blurRadius: 50,
+                                          spreadRadius: 15,
+                                        ),
+                                      ],
                                     ),
-                                    // Inner Glassmorphic Box
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(40),
-                                      child: BackdropFilter(
-                                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                        child: Container(
-                                          width: 140,
-                                          height: 140,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withOpacity(0.12),
-                                            borderRadius: BorderRadius.circular(40),
-                                            border: Border.all(
-                                              color: Colors.white.withOpacity(0.25),
-                                              width: 1.5,
-                                            ),
+                                  ),
+                                  // Inner Glassmorphic Box
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(45),
+                                    child: BackdropFilter(
+                                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                      child: Container(
+                                        width: 150,
+                                        height: 150,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(45),
+                                          border: Border.all(
+                                            color: Colors.white.withValues(alpha: 0.25),
+                                            width: 1.5,
                                           ),
-                                          child: Icon(
-                                            page.icon,
-                                            size: 64,
-                                            color: Colors.white,
-                                          ),
+                                        ),
+                                        child: Icon(
+                                          page.icon,
+                                          size: 70,
+                                          color: Colors.white,
                                         ),
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -218,25 +240,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
 
-                  // Integrated Content & Control Bottom Card
+                  // Bottom Card with Content
                   ClipRRect(
                     borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(38),
-                      topRight: Radius.circular(38),
+                      topLeft: Radius.circular(40),
+                      topRight: Radius.circular(40),
                     ),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF121511).withOpacity(0.45), // Modern Dark Glass look
+                          color: const Color(0xFF121511).withValues(alpha: 0.5),
                           borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(38),
-                            topRight: Radius.circular(38),
+                            topLeft: Radius.circular(40),
+                            topRight: Radius.circular(40),
                           ),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.12),
+                            color: Colors.white.withValues(alpha: 0.12),
                             width: 1.5,
                           ),
                         ),
@@ -249,39 +271,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               children: List.generate(
                                 _pages.length,
                                 (index) => AnimatedContainer(
-                                  duration: const Duration(milliseconds: 350),
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  width: _currentPage == index ? 28 : 8,
-                                  height: 8,
+                                  duration: const Duration(milliseconds: 400),
+                                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                                  width: _currentPage == index ? 32 : 10,
+                                  height: 10,
                                   decoration: BoxDecoration(
                                     color: _currentPage == index
                                         ? Colors.white
-                                        : Colors.white.withOpacity(0.25),
-                                    borderRadius: BorderRadius.circular(4),
+                                        : Colors.white.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(5),
                                     boxShadow: _currentPage == index
                                         ? [
                                             BoxShadow(
-                                              color: Colors.white.withOpacity(0.4),
-                                              blurRadius: 6,
-                                              offset: const Offset(0, 1),
-                                            )
+                                              color: Colors.white.withValues(alpha: 0.5),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
                                           ]
                                         : [],
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 32),
 
-                            // Dynamic Text Content Container
+                            // Dynamic Text Content
                             AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 400),
+                              duration: const Duration(milliseconds: 450),
                               transitionBuilder: (child, animation) {
                                 return FadeTransition(
                                   opacity: animation,
                                   child: SlideTransition(
                                     position: Tween<Offset>(
-                                      begin: const Offset(0.0, 0.15),
+                                      begin: const Offset(0.0, 0.2),
                                       end: Offset.zero,
                                     ).animate(animation),
                                     child: child,
@@ -295,23 +317,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                     activePage.title,
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
-                                      fontSize: 26,
+                                      fontSize: 28,
                                       fontWeight: FontWeight.w800,
                                       color: Colors.white,
-                                      height: 1.25,
+                                      height: 1.2,
                                       letterSpacing: -0.5,
                                     ),
                                   ),
-                                  const SizedBox(height: 14),
+                                  const SizedBox(height: 16),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
                                     child: Text(
                                       activePage.subtitle,
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.inter(
-                                        color: Colors.white.withOpacity(0.8),
-                                        fontSize: 14.5,
-                                        height: 1.5,
+                                        color: Colors.white.withValues(alpha: 0.8),
+                                        fontSize: 15,
+                                        height: 1.6,
                                         fontWeight: FontWeight.w400,
                                       ),
                                     ),
@@ -319,12 +341,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 36),
+                            const SizedBox(height: 40),
 
-                            // Styled Primary Action Button
+                            // Primary Action Button
                             SizedBox(
                               width: double.infinity,
-                              height: 56,
+                              height: 58,
                               child: ElevatedButton(
                                 onPressed: () {
                                   if (_currentPage < _pages.length - 1) {
@@ -340,41 +362,55 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   backgroundColor: Colors.white,
                                   foregroundColor: activePage.primaryColor,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(18),
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
-                                  elevation: 4,
-                                  shadowColor: activePage.primaryColor.withOpacity(0.3),
+                                  elevation: 8,
+                                  shadowColor: activePage.primaryColor.withValues(alpha: 0.4),
                                 ),
-                                child: Text(
-                                  _currentPage < _pages.length - 1 ? 'Continue' : 'Get Started',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: activePage.primaryColor,
-                                    letterSpacing: 0.5,
-                                  ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      _currentPage < _pages.length - 1 ? 'Continue' : 'Get Started',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: activePage.primaryColor,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    if (_currentPage < _pages.length - 1) ...[
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        Icons.arrow_forward_rounded,
+                                        color: activePage.primaryColor,
+                                        size: 20,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ),
                             const SizedBox(height: 20),
 
-                            // Already have account Log In Link
+                            // Login Link
                             GestureDetector(
                               onTap: _navigateToLogin,
                               child: Text.rich(
                                 TextSpan(
                                   text: 'Already have an account? ',
                                   style: GoogleFonts.inter(
-                                    color: Colors.white.withOpacity(0.65),
-                                    fontSize: 13,
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    fontSize: 14,
                                   ),
                                   children: [
                                     TextSpan(
                                       text: 'Log In',
                                       style: GoogleFonts.inter(
                                         color: Colors.white,
-                                        fontWeight: FontWeight.bold,
+                                        fontWeight: FontWeight.w700,
                                         decoration: TextDecoration.underline,
+                                        decorationColor: Colors.white,
                                       ),
                                     ),
                                   ],
@@ -402,7 +438,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// Custom widget to create ambient organic glowing background blobs
+// Custom widgets
 class _AmbientGlowBubble extends StatelessWidget {
   final Color color;
   const _AmbientGlowBubble({required this.color});
@@ -410,8 +446,8 @@ class _AmbientGlowBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 300,
-      height: 300,
+      width: 350,
+      height: 350,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: color,
@@ -420,7 +456,6 @@ class _AmbientGlowBubble extends StatelessWidget {
   }
 }
 
-// Helper widget to implement a fluid breathing float animation
 class _FloatingWidget extends StatefulWidget {
   final Widget child;
   const _FloatingWidget({required this.child});
@@ -442,7 +477,7 @@ class _FloatingWidgetState extends State<_FloatingWidget>
       vsync: this,
     )..repeat(reverse: true);
 
-    _animation = Tween<double>(begin: -10, end: 10).animate(
+    _animation = Tween<double>(begin: -12, end: 12).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
   }
