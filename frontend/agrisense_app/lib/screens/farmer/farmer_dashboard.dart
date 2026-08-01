@@ -93,32 +93,37 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
       ),
       extendBody: true,
       bottomNavigationBar: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+            BoxShadow(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 5),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(28),
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildNavItem(0, Icons.home_rounded, 'Home'),
-                  _buildNavItem(1, Icons.camera_alt_rounded, 'Scan'),
-                  _buildNavItem(2, Icons.shopping_bag_rounded, 'Market'),
-                  _buildNavItem(3, Icons.chat_rounded, 'Chat'),
-                  _buildNavItem(4, Icons.person_rounded, 'Profile'),
+                  _buildNavItem(0, Icons.home_rounded, 'Home', Icons.home_outlined),
+                  _buildNavItem(1, Icons.camera_alt_rounded, 'Scan', Icons.camera_alt_outlined),
+                  _buildNavItem(2, Icons.shopping_bag_rounded, 'Market', Icons.shopping_bag_outlined),
+                  _buildNavItem(3, Icons.chat_rounded, 'Chat', Icons.chat_outlined),
+                  _buildNavItem(4, Icons.person_rounded, 'Profile', Icons.person_outline),
                 ],
               ),
             ),
@@ -128,41 +133,57 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label) {
+  Widget _buildNavItem(int index, IconData activeIcon, String label, IconData inactiveIcon) {
     final isSelected = index == _selectedIndex;
     return GestureDetector(
       onTap: () => _onItemTapped(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOutCubic,
         padding: EdgeInsets.symmetric(
-          horizontal: isSelected ? 14 : 6,
-          vertical: 6,
+          horizontal: isSelected ? 16 : 10,
+          vertical: 8,
         ),
         decoration: BoxDecoration(
           color: isSelected
               ? AppTheme.primary.withValues(alpha: 0.12)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: isSelected ? 24 : 22,
-              color: isSelected ? AppTheme.primary : AppTheme.textMuted,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: isSelected ? 10.5 : 10,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                isSelected ? activeIcon : inactiveIcon,
+                key: ValueKey('$index-$isSelected'),
+                size: isSelected ? 26 : 24,
                 color: isSelected ? AppTheme.primary : AppTheme.textMuted,
               ),
             ),
+            const SizedBox(height: 4),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: GoogleFonts.poppins(
+                fontSize: isSelected ? 11 : 10,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? AppTheme.primary : AppTheme.textMuted,
+              ),
+              child: Text(label),
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 4),
+              Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
           ],
         ),
       ),
