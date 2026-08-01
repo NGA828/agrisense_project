@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../models/user.dart';
@@ -66,12 +67,14 @@ class AuthProvider with ChangeNotifier {
     String? firstName,
     String? lastName,
     String? phoneNumber,
+    File? profilePhoto,
   }) async {
     try {
       await _apiService.updateProfile(
         firstName: firstName,
         lastName: lastName,
         phoneNumber: phoneNumber,
+        profilePhoto: profilePhoto,
       );
       _currentUser = await _apiService.getCurrentUser();
       notifyListeners();
