@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/user.dart';
 import '../services/api/api_service.dart';
+import '../services/local/cache_service.dart';
+import 'realtime_provider.dart';
 
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -24,6 +26,8 @@ class AuthProvider with ChangeNotifier {
     try {
       await _apiService.login(username, password);
       _currentUser = await _apiService.getCurrentUser();
+      // Open the realtime push bus for live notifications / stock updates.
+      RealtimeProvider.instance.connect();
     } catch (e) {
       _error = e.toString();
       rethrow;
@@ -35,20 +39,35 @@ class AuthProvider with ChangeNotifier {
 
   /// Called on app start: if a stored token exists, restore the session so
   /// the farmer is not asked to log in again ("persistent session management").
+  ///
+  /// Guarantees a minimum display time (``_minSplashDuration``) so the splash
+  /// logo animation always plays to completion before navigating — on a fresh
+  /// launch with no stored token, ``restoreSession`` would otherwise resolve in
+  /// a few hundred milliseconds and cut the animation off.
+  static const Duration _minSplashDuration = Duration(milliseconds: 2200);
+
   Future<void> restoreSession() async {
     if (!_isRestoring) {
       _isRestoring = true;
       notifyListeners();
     }
+    final stopwatch = Stopwatch()..start();
     try {
       if (await _apiService.hasStoredTokens) {
         _currentUser = await _apiService.getCurrentUser();
+        RealtimeProvider.instance.connect();
       }
     } catch (e) {
       // Token invalid/expired and refresh failed -> start clean.
       await _apiService.clearSession();
       _currentUser = null;
     } finally {
+      // Hold the splash for the rest of the animation duration (if any).
+      stopwatch.stop();
+      final remaining = _minSplashDuration - stopwatch.elapsed;
+      if (remaining > Duration.zero) {
+        await Future.delayed(remaining);
+      }
       _isRestoring = false;
       notifyListeners();
     }
@@ -87,6 +106,9 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     await _apiService.logout();
     _currentUser = null;
+    RealtimeProvider.instance.disconnect();
+    // Clear the offline cache so no data leaks between accounts.
+    await LocalCacheService.instance.clearAll();
     notifyListeners();
   }
 }

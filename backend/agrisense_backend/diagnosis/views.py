@@ -60,7 +60,21 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
                 {'error': 'Unsupported image. Upload a valid JPEG, PNG or WebP photo.'},
                 status=status.HTTP_400_BAD_REQUEST)
 
-        crop_type = request.data.get('crop_type', 'unknown')
+        # Crop-mandatory guard (AI v2): an "unknown"/missing crop is rejected
+        # rather than silently diagnosed against Tomato. Forces the farmer to
+        # select the crop for an honest, relevant result.
+        from ai_engine.services import get_available_crops
+        crop_type = str(request.data.get('crop_type') or '').strip()
+        supported = get_available_crops()
+        if not crop_type:
+            return Response({'error': 'Please select the crop you are diagnosing.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if crop_type not in supported:
+            return Response(
+                {'error': f'"{crop_type}" is not a supported crop. Supported crops: '
+                          f'{", ".join(supported)}.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
         symptoms_text = request.data.get('symptoms', '')
 
         # Call AI engine (DB knowledge base + rule-based/TF backend)
@@ -90,6 +104,8 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
             confidence=ai_result['confidence'],
             disease_name=ai_result['disease_name'],
             severity=ai_result['severity'],
+            is_healthy=ai_result.get('is_healthy', False),
+            is_inconclusive=ai_result.get('low_confidence', False),
             causes=ai_result['causes'],
             prevention=ai_result['prevention'],
             location=location,
@@ -139,18 +155,35 @@ class DiseaseDatabaseViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         self._admin_or_403()
-        return super().create(request, *args, **kwargs)
+        instance = super().create(request, *args, **kwargs)
+        from auditlog.services import log_action
+        log_action(request.user, 'create_disease', category='content',
+                   target_type='disease', target_id=instance.data.get('id', ''),
+                   description=f'Added disease "{instance.data.get("disease_name")}" '
+                               f'({instance.data.get("crop_name")})', request=request)
+        return instance
 
     def update(self, request, *args, partial=False, **kwargs):
         self._admin_or_403()
-        return super().update(request, *args, partial=partial, **kwargs)
+        instance = super().update(request, *args, partial=partial, **kwargs)
+        from auditlog.services import log_action
+        log_action(request.user, 'update_disease', category='content',
+                   target_type='disease', target_id=kwargs.get('pk', ''),
+                   description=f'Updated disease {instance.data.get("disease_name")}',
+                   request=request)
+        return instance
 
     def partial_update(self, request, *args, **kwargs):
-        self._admin_or_403()
-        return super().partial_update(request, *args, partial=True, **kwargs)
+        return self.update(request, *args, partial=True, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         self._admin_or_403()
+        disease = self.get_object()
+        from auditlog.services import log_action
+        log_action(request.user, 'delete_disease', category='content',
+                   target_type='disease', target_id=disease.id,
+                   description=f'Deleted disease {disease.disease_name} '
+                               f'({disease.crop_name})', request=request)
         return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):

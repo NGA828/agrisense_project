@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import 'l10n/app_localizations.dart';
 
 import 'providers/auth_provider.dart';
 import 'providers/diagnosis_provider.dart';
@@ -44,6 +47,16 @@ class AgriSenseApp extends StatelessWidget {
       child: MaterialApp(
         title: 'AgriSense AI',
         debugShowCheckedModeBanner: false,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('en'),
+          Locale('fr'),
+        ],
         theme: ThemeData(
           primarySwatch: Colors.green,
           primaryColor: AppTheme.primary,
@@ -138,13 +151,13 @@ class _AgriSenseSplashScreenState extends State<AgriSenseSplashScreen>
 
     _controller.forward();
 
-    // Restore session after animation starts
+    // Restore the persisted session. AuthProvider guarantees a minimum splash
+    // display time (>= the 2s logo animation) before clearing `isRestoring`, so
+    // the animation plays to completion even on a fresh (no-session) launch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          context.read<AuthProvider>().restoreSession();
-        }
-      });
+      if (mounted) {
+        context.read<AuthProvider>().restoreSession();
+      }
     });
   }
 

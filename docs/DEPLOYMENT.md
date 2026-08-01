@@ -42,6 +42,13 @@ flutter run --dart-define=API_BASE_URL=http://192.168.x.x:8000/api
 The default `API_BASE_URL` already adapts per platform (`10.0.2.2` on Android,
 `localhost` elsewhere) so plain `flutter run` also works on emulators.
 
+> **Splash screen note:** the splash is driven by `AuthProvider.restoreSession()`,
+> which holds the splash for a minimum ~2.2 s so the logo animation always
+> completes even on a fresh (no-session) launch. Ensure the `assets/app_icon/`
+> directory is present (the only asset dir used by the app) — stale
+> `assets/images/` / `assets/icons/` entries were removed from `pubspec.yaml`
+> because they did not exist and would fail the build.
+
 ### Demo accounts (from `seed_data`)
 
 | Role | Username | Password | Notes |
@@ -75,6 +82,38 @@ docker compose exec backend python manage.py seed_data
 - [ ] Restrict `/admin/` (VPN / IP allow-list).
 - [ ] Run `python manage.py expire_premiums` daily (cron) so expired dealer
       subscriptions lose their search boost.
+- [ ] Run `python manage.py release_stale_reservations` every few minutes (cron /
+      Celery beat) so abandoned unpaid orders free their reserved stock.
+- [ ] Set a strong `PAYMENT_WEBHOOK_SECRET` and configure provider callbacks to
+      `POST /api/payments/webhook/` (HMAC-signed) for real MTN/Orange money flows.
+- [ ] Set `ORDER_RESERVATION_MINUTES` and, once monetising, `PLATFORM_COMMISSION_RATE`.
+- [ ] For true push notifications, set `PUSH_PROVIDER=fcm` and `FCM_CREDENTIALS_PATH`
+      to a Firebase service-account JSON; the app registers device tokens via
+      `POST /api/push/register/`. With `PUSH_PROVIDER=noop` (default), notifications
+      are delivered in-app over the `WS /ws/push/` bus only.
+- [ ] Run the Celery **worker** and **beat** services (included in `docker-compose.yml`)
+      so background tasks execute; set `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` to
+      Redis. (Without a broker, tasks run eagerly in-process — fine for dev.)
+- [ ] Set `CACHE_BACKEND=redis` + `REDIS_CACHE_URL` (production); `CACHE_BACKEND=locmem`
+      needs no server in dev/test.
+- [ ] Set `PAYMENT_WEBHOOK_SECRET` to a long random value and configure provider callbacks.
+- [ ] Optional: set `SENTRY_DSN` for error tracking; keep `JSON_LOGS=true` and a sane
+      `LOG_LEVEL` for structured, request-id-tagged logging.
+- [ ] CI (`.github/workflows/ci.yml`) runs backend checks + tests and `flutter analyze`/test.
+- [ ] For phone OTP, set `SMS_PROVIDER` (noop logs the code / debug returns it;
+      africastalking / twilio for real delivery) and enable
+      `OTP_REQUIRED_FOR_REGISTRATION` / `OTP_REQUIRED_FOR_PASSWORD_RESET` when ready.
+- [ ] Review the immutable **audit log** (`/api/audit_logs/`) for governance; product
+      reports land in `/api/product_reports/` for moderation.
+- [ ] The Flutter app ships **offline-first** (cached history/catalog/weather + an action
+      outbox) and supports **EN/FR** via `flutter_localizations`. For backend API-message
+      translations, compile `locale/fr/LC_MESSAGES/django.po` with `django-admin compilemessages`
+      (requires GNU gettext).
+- [ ] AI v2 tuning: adjust `AI_TEMPERATURE` / `AI_LOW_CONFIDENCE_THRESHOLD` to set how
+      conservative the confidence reporting is.
+- [ ] (Phase F, optional) Wire an IoT/MQTT bridge to `POST /api/sensors/{id}/ingest/` and a
+      USSD/SMS gateway to `POST /api/ussd/`. Run `load_tests/` (Locust/k6) against staging
+      before scaling out workers.
 - [ ] Configure real MTN MoMo / Orange Money credentials and set
       `MTN_MOMO_ENABLED`/`ORANGE_MONEY_ENABLED`; provide the callback host for
       webhook-style payment verification.

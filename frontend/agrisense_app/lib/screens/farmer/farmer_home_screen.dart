@@ -16,6 +16,7 @@ import '../diagnosis/diagnosis_result_screen.dart';
 import '../marketplace/marketplace_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../weather/weather_screen.dart';
+import '../irrigation/irrigation_screen.dart';
 import 'farmer_widgets.dart';
 import 'order_history_screen.dart';
 
@@ -802,6 +803,26 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                     context,
                     MaterialPageRoute(
                         builder: (_) => const DiagnosisHistoryScreen()),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Third row — irrigation
+          Row(
+            children: [
+              Expanded(
+                child: _quickTile(
+                  title: 'Irrigation',
+                  subtitle: 'Field sensors & advice',
+                  icon: Icons.water_drop_rounded,
+                  color: const Color(0xFF00897B),
+                  bg: const Color(0xFFE0F2F1),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const IrrigationScreen()),
                   ),
                 ),
               ),

@@ -60,6 +60,8 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
         return AppTheme.error;
       case 'medium':
         return AppTheme.warning;
+      case 'unknown':
+        return Colors.grey; // inconclusive result
       default:
         return AppTheme.success;
     }
@@ -71,6 +73,8 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
         return 'High';
       case 'medium':
         return 'Moderate';
+      case 'unknown':
+        return 'Unknown';
       default:
         return 'Low';
     }
@@ -82,6 +86,8 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
         return 0.85;
       case 'medium':
         return 0.55;
+      case 'unknown':
+        return 0.1; // indeterminate
       default:
         return 0.25;
     }

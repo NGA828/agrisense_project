@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/api/api_service.dart';
+import '../services/local/cache_service.dart';
 
 class WeatherData {
   final double temperature;
@@ -87,8 +88,15 @@ class WeatherProvider with ChangeNotifier {
       
       final data = await _api.getWeather(lat: latitude, lon: longitude);
       _weather = WeatherData.fromApi(data);
+      // Cache the latest weather for offline display.
+      await LocalCacheService.instance.cacheWeather(data);
     } catch (e) {
+      // Offline-first: fall back to the last-known cached weather.
       _error = e.toString();
+      final cached = await LocalCacheService.instance.getWeather();
+      if (cached != null) {
+        _weather = WeatherData.fromApi(cached);
+      }
     } finally {
       _isLoading = false;
       notifyListeners();

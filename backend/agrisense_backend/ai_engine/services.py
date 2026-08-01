@@ -209,6 +209,11 @@ class RuleBasedEngine(PlantPathologyEngine):
         except Exception:
             return default
 
+    # Healthy signature: a clearly healthy leaf is green-dominant with no lesion.
+    # The scorer returns this when the image strongly resembles a healthy leaf,
+    # giving the "no disease" outcome the spec expects.
+    HEALTHY_SIGNATURE = (0.62, 0.40, 0.08)  # (mean_green, mean_red, lesion_fraction)
+
     def _score(self, features, candidate_name):
         fx = DISEASE_SIGNATURES.get(candidate_name, (0.5, 0.5, 0.4))
         distance = sum((a - b) ** 2 for a, b in zip(features, fx)) ** 0.5
@@ -216,16 +221,95 @@ class RuleBasedEngine(PlantPathologyEngine):
         confidence = 97.0 - min(19.0, (distance / 1.732) * 19.0)
         return confidence
 
+    @staticmethod
+    def _calibrate(raw):
+        """Temperature scaling (calibration) to avoid overclaiming confidence.
+
+        Pulls every score toward a neutral 82%: a marginal match can no longer
+        claim ~95% certainty. Kept monotonic so ranking is unchanged, but the
+        absolute number is an honest confidence estimate.
+        """
+        from django.conf import settings
+        temperature = getattr(settings, 'AI_TEMPERATURE', 1.6)
+        neutral = 82.0
+        calibrated = neutral + (raw - neutral) / temperature
+        return max(50.0, min(97.0, calibrated))
+
+    @staticmethod
+    def _looks_healthy(features):
+        """A clearly healthy leaf: green-dominant and essentially no lesion."""
+        mean_green, _mean_red, lesion = features
+        return mean_green > 0.55 and lesion < 0.10
+
     def analyze(self, image, crop_type):
         features, ok = self._extract_features(image)
+
+        # Healthy outcome first: a healthy leaf is not a disease.
+        if self._looks_healthy(features):
+            return self._build_healthy_result(ok)
+
         diseases = self._candidates(crop_type)
         if not diseases:
             diseases = self._candidates('Tomato')
 
         scored = [(self._score(features, d['disease_name']), d) for d in diseases]
         scored.sort(key=lambda pair: pair[0], reverse=True)
-        confidence, disease = scored[0]
+        raw, disease = scored[0]
+        confidence = self._calibrate(raw)
+
+        # Low confidence -> honest "inconclusive" outcome instead of a wrong
+        # confident diagnosis.
+        from django.conf import settings
+        low_threshold = getattr(settings, 'AI_LOW_CONFIDENCE_THRESHOLD', 80.0)
+        if confidence < low_threshold:
+            return self._build_inconclusive_result(crop_type, confidence, ok)
+
         return self._build_result(disease, confidence, ok)
+
+    @staticmethod
+    def _build_healthy_result(ok):
+        return {
+            'is_healthy': True,
+            'disease_name': 'Healthy',
+            'confidence': Decimal('88.0'),
+            'severity': 'low',
+            'symptoms': 'No disease symptoms detected.',
+            'causes': 'The plant appears healthy.',
+            'prevention': 'Continue good agronomic practices: proper watering, '
+                          'spacing, soil care and regular monitoring.',
+            'treatment_type': 'No treatment required',
+            'medication': 'No pesticide needed. Maintain plant health with '
+                          'balanced nutrients.',
+            'instructions': 'Keep monitoring for early signs of pests or disease.',
+            'duration': 0,
+            'follow_up_date': None,
+            'engine': 'rule-based',
+            'model_version': 'v2.0-rules',
+            'image_parsed': ok,
+        }
+
+    @staticmethod
+    def _build_inconclusive_result(crop_type, confidence, ok):
+        return {
+            'is_healthy': False,
+            'disease_name': 'Inconclusive',
+            'confidence': Decimal(str(round(confidence, 1))),
+            'severity': 'unknown',
+            'symptoms': 'The image could not be confidently matched to a known disease.',
+            'causes': 'Low image clarity, unusual lighting, or an uncommon presentation.',
+            'prevention': 'Retake the photo in good, even lighting, close to the '
+                          'affected area, and include the whole leaf.',
+            'treatment_type': 'Consult an agronomist',
+            'medication': 'Do not apply chemicals without a confirmed diagnosis.',
+            'instructions': f'Share this photo with a local agronomist or AgriSense '
+                            f'support for a {crop_type} follow-up.',
+            'duration': 0,
+            'follow_up_date': None,
+            'engine': 'rule-based',
+            'model_version': 'v2.0-rules',
+            'image_parsed': ok,
+            'low_confidence': True,
+        }
 
     def _candidates(self, crop_type):
         from diagnosis.models import Disease
@@ -264,7 +348,7 @@ class RuleBasedEngine(PlantPathologyEngine):
             'duration': duration,
             'follow_up_date': (datetime.now() + timedelta(days=duration)).date(),
             'engine': 'rule-based',
-            'model_version': 'v1.0-rules',
+            'model_version': 'v2.0-rules',
             'image_parsed': ok,
         }
 

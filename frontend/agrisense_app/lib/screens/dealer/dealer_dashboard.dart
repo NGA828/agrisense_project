@@ -18,6 +18,7 @@ import 'add_product_screen.dart';
 import 'dealer_widgets.dart';
 import 'edit_product_screen.dart';
 import 'premium_screen.dart';
+import 'dealer_analytics_screen.dart';
 
 /// AgriSense dealer console.
 ///
@@ -2042,6 +2043,18 @@ class _DealerProfile extends StatelessWidget {
                           .findAncestorStateOfType<_DealerDashboardState>();
                       state?._onItemTapped(2);
                     },
+                  ),
+                  _menuItem(
+                    context,
+                    icon: Icons.analytics_rounded,
+                    color: AppTheme.success,
+                    title: 'Sales Analytics',
+                    subtitle: 'Revenue, top products & trends',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const DealerAnalyticsScreen()),
+                    ),
                   ),
                   _menuItem(
                     context,

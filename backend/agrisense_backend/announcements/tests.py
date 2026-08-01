@@ -58,6 +58,32 @@ class AnnouncementTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertFalse(resp.data['is_active'])
 
+    def test_active_announcement_fans_out_to_target_users(self):
+        """Creating/activating a broadcast materialises per-user notifications."""
+        farmer = make_user('farmer2', 'farmer')
+        dealer = make_user('dealer1', 'dealer')
+        self.auth(self.admin)
+        resp = self.client.post(reverse('announcement-list'), {
+            'title': 'Locust alert', 'content': 'Spray your fields',
+            'target_audience': 'farmers', 'is_active': True,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        # Farmers (both) get a notification; the dealer does not.
+        self.assertEqual(farmer.notifications.count(), 1)
+        self.assertEqual(self.farmer.notifications.count(), 1)
+        self.assertEqual(dealer.notifications.count(), 0)
+        self.assertEqual(farmer.notifications.first().reference_id,
+                         f"announcement:{resp.data['id']}")
+
+    def test_activating_inactive_announcement_broadcasts(self):
+        ann = Announcement.objects.create(title='A', content='a',
+                                          target_audience='all', created_by=self.admin,
+                                          is_active=False)
+        self.auth(self.admin)
+        self.assertEqual(self.farmer.notifications.count(), 0)
+        self.client.post(reverse('announcement-toggle-active', args=[ann.id]))
+        self.assertEqual(self.farmer.notifications.count(), 1)
+
 
 class NotificationTests(APITestCase):
     def setUp(self):
