@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/diagnosis_provider.dart';
@@ -330,43 +333,78 @@ class _ProfileScreen extends StatelessWidget {
     final firstName = TextEditingController(text: user.firstName);
     final lastName = TextEditingController(text: user.lastName);
     final phone = TextEditingController(text: user.phoneNumber);
+    File? profilePhoto;
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Profile'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: firstName,
-                decoration: const InputDecoration(labelText: 'First name'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: lastName,
-                decoration: const InputDecoration(labelText: 'Last name'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: phone,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone number'),
-              ),
-            ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Edit Profile'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final picked = await picker.pickImage(source: ImageSource.gallery);
+                    if (picked != null) {
+                      setStateDialog(() => profilePhoto = File(picked.path));
+                    }
+                  },
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: AppTheme.primary.withOpacity(0.1),
+                        backgroundImage: profilePhoto != null
+                            ? FileImage(profilePhoto!) as ImageProvider
+                            : (user.profilePhoto != null && user.profilePhoto!.isNotEmpty
+                                ? CachedNetworkImageProvider(ApiService.resolveMedia(user.profilePhoto))
+                                : null),
+                        child: (profilePhoto == null && (user.profilePhoto == null || user.profilePhoto!.isEmpty))
+                            ? const Icon(Icons.person, size: 40, color: AppTheme.primary)
+                            : null,
+                      ),
+                      Container(
+                        width: 80, height: 80,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withOpacity(0.3)),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 24),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: firstName,
+                  decoration: const InputDecoration(labelText: 'First name'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: lastName,
+                  decoration: const InputDecoration(labelText: 'Last name'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone number'),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
 
@@ -376,10 +414,11 @@ class _ProfileScreen extends StatelessWidget {
           firstName: firstName.text.trim(),
           lastName: lastName.text.trim(),
           phoneNumber: phone.text.trim(),
+          profilePhoto: profilePhoto,
         );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile updated'), backgroundColor: AppTheme.success),
+            const SnackBar(content: Text('Profile updated successfully'), backgroundColor: AppTheme.success),
           );
         }
       } catch (e) {
