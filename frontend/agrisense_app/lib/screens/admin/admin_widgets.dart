@@ -228,7 +228,8 @@ class AdminStatCard extends StatelessWidget {
             ),
           ),
           Text(label,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
           if (footnote != null) ...[
             const SizedBox(height: 4),
             Container(
@@ -394,7 +395,8 @@ class AdminEmptyState extends StatelessWidget {
               const SizedBox(height: 6),
               Text(subtitle!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+                  style:
+                      const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
             ],
             if (action != null) ...[
               const SizedBox(height: 18),
@@ -412,7 +414,8 @@ class AdminErrorState extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const AdminErrorState({super.key, required this.message, required this.onRetry});
+  const AdminErrorState(
+      {super.key, required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -426,7 +429,8 @@ class AdminErrorState extends StatelessWidget {
         label: const Text('Retry'),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppTheme.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -471,8 +475,8 @@ class AdminUserAvatar extends StatelessWidget {
                 child: SizedBox(
                   width: radius * 0.7,
                   height: radius * 0.7,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: color),
+                  child:
+                      CircularProgressIndicator(strokeWidth: 2, color: color),
                 ),
               ),
               errorWidget: (_, __, ___) => _fallback(color, initials),
@@ -544,8 +548,7 @@ class AdminProductThumb extends StatelessWidget {
               errorWidget: (_, __, ___) => Icon(fallbackIcon,
                   color: AppTheme.primaryLight, size: size * 0.45),
             )
-          : Icon(fallbackIcon,
-              color: AppTheme.primaryLight, size: size * 0.45),
+          : Icon(fallbackIcon, color: AppTheme.primaryLight, size: size * 0.45),
     );
   }
 }
@@ -607,8 +610,8 @@ class _AdminBarChartPainter extends CustomPainter {
 
     for (var i = 0; i < points.length; i++) {
       final h = (points[i].$2 / safeMax) * (size.height - 8);
-      final left =
-          i * (size.width / points.length) + (size.width / points.length - barWidth) / 2;
+      final left = i * (size.width / points.length) +
+          (size.width / points.length - barWidth) / 2;
       final rrect = RRect.fromRectAndRadius(
         Rect.fromLTWH(left, size.height - h, barWidth, h),
         const Radius.circular(4),
@@ -617,7 +620,10 @@ class _AdminBarChartPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0.95), color.withValues(alpha: 0.55)],
+          colors: [
+            color.withValues(alpha: 0.95),
+            color.withValues(alpha: 0.55)
+          ],
         ).createShader(rrect.outerRect);
       canvas.drawRRect(rrect, paint);
     }
@@ -643,8 +649,10 @@ class AdminNavItem {
 class AdminDrawer extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelect;
+
   /// Fired when a standalone page item (isPage == true) is tapped.
   final ValueChanged<int> onPageSelected;
+
   /// Standalone page entries shown under the "Management" group.
   final List<AdminNavItem> pages;
   final VoidCallback onLogout;
@@ -719,8 +727,8 @@ class AdminDrawer extends StatelessWidget {
                   _group('MAIN'),
                   _item(context, 0, Icons.space_dashboard_rounded,
                       Icons.space_dashboard_rounded, 'Overview'),
-                  _item(context, 1, Icons.people_alt_rounded, Icons.people_alt_rounded,
-                      'User Management'),
+                  _item(context, 1, Icons.people_alt_rounded,
+                      Icons.people_alt_rounded, 'User Management'),
                   _item(context, 2, Icons.receipt_long_rounded,
                       Icons.receipt_long_rounded, 'Orders'),
                   if (pages.isNotEmpty) _group('MANAGEMENT'),
@@ -733,8 +741,8 @@ class AdminDrawer extends StatelessWidget {
                     }),
                   ),
                   _group('PLATFORM'),
-                  _item(context, 3, Icons.settings_rounded, Icons.settings_rounded,
-                      'Settings'),
+                  _item(context, 3, Icons.settings_rounded,
+                      Icons.settings_rounded, 'Settings'),
                 ],
               ),
             ),
@@ -808,7 +816,8 @@ class AdminDrawer extends StatelessWidget {
         ),
       );
 
-  Widget _item(BuildContext context, int id, IconData icon, IconData activeIcon, String label) {
+  Widget _item(BuildContext context, int id, IconData icon, IconData activeIcon,
+      String label) {
     final selected = selectedIndex == id;
     return ListTile(
       dense: true,
@@ -856,8 +865,8 @@ class AdminDrawer extends StatelessWidget {
           fontSize: 13.5,
         ),
       ),
-      trailing:
-          const Icon(Icons.chevron_right_rounded, color: Colors.white38, size: 18),
+      trailing: const Icon(Icons.chevron_right_rounded,
+          color: Colors.white38, size: 18),
       onTap: onTap,
     );
   }
