@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
-import '../../theme/app_theme.dart';
 import '../../services/api/api_service.dart';
+import '../../theme/app_theme.dart';
+import '../farmer/farmer_widgets.dart';
 
+/// Farmer order history: track purchases and deliveries with live status.
 class OrderHistoryScreen extends StatefulWidget {
   const OrderHistoryScreen({super.key});
 
@@ -14,6 +17,8 @@ class OrderHistoryScreen extends StatefulWidget {
 class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   List<dynamic> _orders = [];
   bool _isLoading = true;
+  String? _error;
+  String _statusFilter = 'all';
 
   @override
   void initState() {
@@ -22,61 +27,198 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   }
 
   Future<void> _loadOrders() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
       final api = ApiService();
       final response = await api.getOrders();
-      setState(() {
-        _orders = response is List ? response : [];
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _orders = response is List ? response : [];
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  List<dynamic> get _filtered => _statusFilter == 'all'
+      ? _orders
+      : _orders.where((o) => o['status'] == _statusFilter).toList();
+
+  Color _statusColor(String status) {
+    return switch (status) {
+      'pending' => AppTheme.warning,
+      'confirmed' => AppTheme.info,
+      'shipped' => AppTheme.primary,
+      'delivered' => AppTheme.success,
+      'cancelled' => AppTheme.error,
+      _ => AppTheme.textMuted,
+    };
+  }
+
+  IconData _statusIcon(String status) {
+    return switch (status) {
+      'pending' => Icons.hourglass_empty_rounded,
+      'confirmed' => Icons.check_circle_outline_rounded,
+      'shipped' => Icons.local_shipping_rounded,
+      'delivered' => Icons.check_circle_rounded,
+      'cancelled' => Icons.cancel_rounded,
+      _ => Icons.receipt_rounded,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
+    final active = _orders
+        .where((o) =>
+            o['status'] == 'pending' ||
+            o['status'] == 'confirmed' ||
+            o['status'] == 'shipped')
+        .length;
+    final delivered =
+        _orders.where((o) => o['status'] == 'delivered').length;
+
     return Scaffold(
-      backgroundColor: AppTheme.bgLight,
+      backgroundColor: FarmerTheme.canvas,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(color: Colors.white),
-              child: Row(children: [
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios, size: 20)),
-                const Icon(Icons.receipt_long_rounded, color: AppTheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text('My Orders', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15)),
-              ]),
+            FarmerHeader(
+              title: 'My Orders',
+              subtitle: 'Track your purchases & deliveries',
+              showBack: true,
+              leading: const Icon(Icons.receipt_long_rounded,
+                  color: Colors.white, size: 22),
+              trailing: [
+                IconButton(
+                  onPressed: _loadOrders,
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 22),
+                ),
+              ],
             ),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-                  : _orders.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey.shade300),
-                              const SizedBox(height: 12),
-                              Text('No orders yet', style: AppTheme.bodyMedium),
-                              const SizedBox(height: 8),
-                              Text('Your orders will appear here', style: AppTheme.bodySmall),
-                            ],
+            // Stats row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: Row(
+                children: [
+                  _countChip('${_orders.length}', 'Total', AppTheme.primary),
+                  const SizedBox(width: 10),
+                  _countChip('$active', 'Active', AppTheme.info),
+                  const SizedBox(width: 10),
+                  _countChip('$delivered', 'Delivered', AppTheme.success),
+                ],
+              ),
+            ),
+            // Status filter chips
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    'All', 'Pending', 'Confirmed', 'Shipped', 'Delivered',
+                    'Cancelled'
+                  ].map((t) {
+                    final f = t.toLowerCase();
+                    final selected = _statusFilter == f;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () => setState(() => _statusFilter = f),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: selected ? AppTheme.primary : Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color:
+                                  selected ? AppTheme.primary : Colors.grey.shade300,
+                            ),
                           ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadOrders,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _orders.length,
-                            itemBuilder: (context, index) => _buildOrderCard(_orders[index]),
+                          child: Text(
+                            t,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: selected
+                                  ? Colors.white
+                                  : AppTheme.textSecondary,
+                            ),
                           ),
                         ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppTheme.primary))
+                  : _error != null
+                      ? FarmerErrorState(
+                          message: _error!, onRetry: _loadOrders)
+                      : _filtered.isEmpty
+                          ? FarmerEmptyState(
+                              icon: Icons.receipt_long_outlined,
+                              title: _orders.isEmpty
+                                  ? 'No orders yet'
+                                  : 'No orders in this status',
+                              subtitle: _orders.isEmpty
+                                  ? 'Products you buy will appear here'
+                                  : 'Try a different status filter.',
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _loadOrders,
+                              color: AppTheme.primary,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 8, 20, 24),
+                                itemCount: _filtered.length,
+                                itemBuilder: (context, index) =>
+                                    _buildOrderCard(_filtered[index]),
+                              ),
+                            ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _countChip(String value, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(value,
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w800, fontSize: 17, color: color)),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -85,107 +227,113 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
 
   Widget _buildOrderCard(dynamic order) {
     final status = order['status'] ?? 'pending';
+    final statusColor = _statusColor(status);
     final paymentStatus = order['payment_status'] ?? 'unpaid';
+    final paid = paymentStatus == 'paid' || paymentStatus == 'completed';
     final total = order['total_price'] ?? 0;
     final productName = order['product_name'] ?? 'Product';
-    final createdAt = order['created_at']?.toString() ?? '';
-
-    final statusColor = {
-      'pending': AppTheme.warning,
-      'confirmed': AppTheme.info,
-      'shipped': AppTheme.primary,
-      'delivered': AppTheme.success,
-      'cancelled': AppTheme.error,
-    }[status] ?? AppTheme.textMuted;
-
-    final statusIcon = {
-      'pending': Icons.hourglass_empty_rounded,
-      'confirmed': Icons.check_circle_outline_rounded,
-      'shipped': Icons.local_shipping_rounded,
-      'delivered': Icons.check_circle_rounded,
-      'cancelled': Icons.cancel_rounded,
-    }[status] ?? Icons.receipt_rounded;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.cardDecoration,
+      padding: const EdgeInsets.all(14),
+      decoration: FarmerTheme.cardDecoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Order #${order['id']}', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(statusIcon, size: 14, color: statusColor),
-                    const SizedBox(width: 4),
-                    Text(status.toUpperCase(), style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.w700)),
-                  ],
-                ),
+              Expanded(
+                child: Text('Order #${order['id']}',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700, fontSize: 14)),
+              ),
+              FarmerPill(
+                label: status,
+                color: statusColor,
+                icon: _statusIcon(status),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Container(
-                width: 50, height: 50,
-                decoration: BoxDecoration(color: AppTheme.bgLight, borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.inventory_2_rounded, color: AppTheme.primary, size: 24),
+              FarmerProductThumb(
+                imageUrl: order['product_image'],
+                size: 52,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(productName, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text(productName,
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                            color: AppTheme.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
                     Row(children: [
-                      const Icon(Icons.shopping_cart_rounded, size: 12, color: AppTheme.textMuted),
+                      const Icon(Icons.shopping_cart_rounded,
+                          size: 12, color: AppTheme.textMuted),
                       const SizedBox(width: 4),
-                      Text('Qty: ${order['quantity']}', style: AppTheme.bodySmall),
+                      Text('Qty: ${order['quantity']}',
+                          style: const TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 12)),
                     ]),
                   ],
                 ),
               ),
-              Text('$total Fcfa', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: AppTheme.primary)),
+              Text(
+                '$total FCFA',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppTheme.primary),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFF0F0F0)),
+          const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(children: [
                 Icon(
-                  paymentStatus == 'paid' ? Icons.check_circle_rounded : Icons.pending_rounded,
+                  paid ? Icons.check_circle_rounded : Icons.pending_rounded,
                   size: 14,
-                  color: paymentStatus == 'paid' ? AppTheme.success : AppTheme.warning,
+                  color: paid ? AppTheme.success : AppTheme.warning,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   'Payment: $paymentStatus',
                   style: TextStyle(
                     fontSize: 11,
-                    color: paymentStatus == 'paid' ? AppTheme.success : AppTheme.warning,
+                    color: paid ? AppTheme.success : AppTheme.warning,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ]),
               Row(children: [
-                const Icon(Icons.calendar_today_rounded, size: 12, color: AppTheme.textMuted),
+                const Icon(Icons.calendar_today_rounded,
+                    size: 12, color: AppTheme.textMuted),
                 const SizedBox(width: 4),
-                Text(createdAt.length >= 10 ? createdAt.substring(0, 10) : '', style: AppTheme.bodySmall),
+                Text(_dateLabel(order['created_at']),
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 11)),
               ]),
             ],
           ),
         ],
       ),
     );
+  }
+
+  String _dateLabel(String? raw) {
+    final date = DateTime.tryParse(raw ?? '');
+    if (date == null) return '';
+    return DateFormat('d MMM yyyy').format(date);
   }
 }

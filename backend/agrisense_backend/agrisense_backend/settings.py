@@ -149,7 +149,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL = 'media/'
+# Media files configuration
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -186,6 +187,12 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
+    # Return relative media paths (e.g. "profile_photos/abc.png") instead of
+    # absolute URLs built from the request's Host header. Clients (Flutter)
+    # resolve them against their own configured API base URL, so images keep
+    # working from emulators, physical devices and behind reverse proxies
+    # whose Host header differs from the client-reachable host.
+    'UPLOADED_FILES_USE_URL': False,
 }
 
 # JWT Settings
@@ -248,10 +255,6 @@ else:
             'BACKEND': 'channels.layers.InMemoryChannelLayer',
         },
     }
-
-# Media files configuration
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB

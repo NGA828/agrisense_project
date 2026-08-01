@@ -109,9 +109,30 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
 
-    # ── Reads ─────────────────────────────────────────────────────────
-    @action(detail=False, methods=['get'])
+    # ── Reads / self-service update ───────────────────────────────────
+    @action(detail=False, methods=['get', 'patch', 'put'])
     def me(self, request):
+        """Current profile. GET returns it; PATCH/PUT update it.
+
+        PATCH (and PUT) must be accepted here because the mobile clients
+        call ``PATCH /api/users/me/`` (multipart) to upload a profile photo.
+        Before this fix the action only allowed GET, so profile-picture
+        uploads failed with HTTP 405.
+        """
+        if request.method in ('PATCH', 'PUT'):
+            privileged = {'role', 'is_staff', 'is_superuser', 'is_verified', 'is_active',
+                          'is_premium', 'premium_expiry'}
+            if request.user.role != 'admin' and privileged.intersection(request.data.keys()):
+                return Response({'error': 'Changing privileged fields requires admin rights'},
+                                status=status.HTTP_403_FORBIDDEN)
+            serializer = UserSerializer(
+                request.user,
+                data=request.data,
+                partial=(request.method == 'PATCH'),
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 

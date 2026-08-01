@@ -1,5 +1,8 @@
+import struct
+import zlib
 from datetime import timedelta
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -198,6 +201,81 @@ class UserManagementTests(APITestCase):
         payment = Payment.objects.filter(user=self.dealer, payment_type='premium').first()
         self.assertIsNotNone(payment)
         self.assertEqual(float(payment.amount), 2000)
+
+
+class ProfilePhotoUploadTests(APITestCase):
+    """Regression tests for profile-picture uploads via /api/users/me/.
+
+    The mobile client uploads photos with a multipart PATCH to
+    /api/users/me/. The `me` action must accept PATCH (it used to be
+    GET-only, which produced HTTP 405 and silently dropped the photo).
+    """
+
+    def setUp(self):
+        self.farmer = make_user('farmer1', 'farmer')
+        self.admin = make_user('admin1', 'admin', is_staff=True, is_superuser=True)
+
+    def auth(self, user):
+        self.client.force_authenticate(user=user)
+
+    @staticmethod
+    def _photo(name='photo.png'):
+        """Build a minimal valid 1x1 PNG (Pillow must be able to open it)."""
+        def chunk(tag, data):
+            body = tag + data
+            return (struct.pack('>I', len(data)) + body
+                    + struct.pack('>I', zlib.crc32(body)))
+        ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+        idat = zlib.compress(b'\x00\x2e\x7d\x32')
+        png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr)
+               + chunk(b'IDAT', idat) + chunk(b'IEND', b''))
+        return SimpleUploadedFile(name, png, content_type='image/png')
+
+    def test_patch_me_accepts_multipart_profile_photo(self):
+        self.auth(self.farmer)
+        resp = self.client.patch(
+            reverse('user-me'),
+            {'first_name': 'Jean', 'profile_photo': self._photo()},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['first_name'], 'Jean')
+        # Response must carry the stored photo as a relative media path so the
+        # client resolves it against its own base URL.
+        self.assertTrue(resp.data['profile_photo'].startswith('profile_photos/'))
+        self.farmer.refresh_from_db()
+        self.assertTrue(self.farmer.profile_photo.name.startswith('profile_photos/'))
+
+    def test_patch_me_without_photo_keeps_existing_photo(self):
+        self.auth(self.farmer)
+        self.farmer.profile_photo = self._photo('existing.png')
+        self.farmer.save()
+        resp = self.client.patch(
+            reverse('user-me'),
+            {'phone_number': '+237600000001'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.farmer.refresh_from_db()
+        # The media directory persists across test runs, so the storage may
+        # append a random suffix on name collisions — only the prefix matters.
+        self.assertTrue(
+            self.farmer.profile_photo.name.startswith('profile_photos/existing'),
+            self.farmer.profile_photo.name,
+        )
+
+    def test_patch_me_cannot_promote_self(self):
+        self.auth(self.farmer)
+        resp = self.client.patch(reverse('user-me'), {'role': 'admin'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.farmer.refresh_from_db()
+        self.assertEqual(self.farmer.role, 'farmer')
+
+    def test_get_me_still_returns_profile(self):
+        self.auth(self.admin)
+        resp = self.client.get(reverse('user-me'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['username'], 'admin1')
 
 
 class AdminStatsTests(APITestCase):

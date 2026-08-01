@@ -71,4 +71,11 @@ class User {
   bool get isFarmer => role == 'farmer';
   bool get isDealer => role == 'dealer';
   bool get isAdmin => role == 'admin';
+
+  /// Premium is only 'active' if not expired (mirrors the backend property).
+  bool get isPremiumActive {
+    if (!isPremium) return false;
+    if (premiumExpiry == null) return true;
+    return premiumExpiry!.isAfter(DateTime.now());
+  }
 }
