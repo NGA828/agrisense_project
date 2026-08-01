@@ -19,11 +19,36 @@ class MarketplaceScreen extends StatefulWidget {
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   /// Display label -> backend category value.
   final List<Map<String, dynamic>> _categories = [
-    {'name': 'Seeds', 'value': 'seed', 'icon': Icons.eco_rounded, 'color': const Color(0xFF43A047)},
-    {'name': 'Fertilizers', 'value': 'fertilizer', 'icon': Icons.science_rounded, 'color': const Color(0xFFFF9800)},
-    {'name': 'Fungicides', 'value': 'fungicide', 'icon': Icons.healing_rounded, 'color': const Color(0xFFE91E63)},
-    {'name': 'Pesticides', 'value': 'pesticide', 'icon': Icons.bug_report_rounded, 'color': const Color(0xFF1E88E5)},
-    {'name': 'Equipment', 'value': 'equipment', 'icon': Icons.build_rounded, 'color': const Color(0xFF607D8B)},
+    {
+      'name': 'Seeds',
+      'value': 'seed',
+      'icon': Icons.eco_rounded,
+      'color': const Color(0xFF43A047)
+    },
+    {
+      'name': 'Fertilizers',
+      'value': 'fertilizer',
+      'icon': Icons.science_rounded,
+      'color': const Color(0xFFFF9800)
+    },
+    {
+      'name': 'Fungicides',
+      'value': 'fungicide',
+      'icon': Icons.healing_rounded,
+      'color': const Color(0xFFE91E63)
+    },
+    {
+      'name': 'Pesticides',
+      'value': 'pesticide',
+      'icon': Icons.bug_report_rounded,
+      'color': const Color(0xFF1E88E5)
+    },
+    {
+      'name': 'Equipment',
+      'value': 'equipment',
+      'icon': Icons.build_rounded,
+      'color': const Color(0xFF607D8B)
+    },
   ];
   String _selectedCategory = 'Seeds';
   final TextEditingController _searchController = TextEditingController();
@@ -97,7 +122,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           onRefresh: _refresh,
                           child: GridView.builder(
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
                               crossAxisSpacing: 14,
                               mainAxisSpacing: 14,
@@ -697,16 +723,39 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   // ─────────────────────────────────────────────
   Widget _buildProductCard(dynamic product, int index) {
     final categoryColors = {
-      'seed': {'bg': const Color(0xFFE8F5E9), 'icon': AppTheme.primary, 'accent': const Color(0xFF43A047)},
-      'fertilizer': {'bg': const Color(0xFFFFF3E0), 'icon': AppTheme.accent, 'accent': const Color(0xFFFF9800)},
-      'pesticide': {'bg': const Color(0xFFE3F2FD), 'icon': AppTheme.info ?? const Color(0xFF1E88E5), 'accent': const Color(0xFF1E88E5)},
-      'fungicide': {'bg': const Color(0xFFFCE4EC), 'icon': const Color(0xFFE91E63), 'accent': const Color(0xFFE91E63)},
-      'equipment': {'bg': const Color(0xFFECEFF1), 'icon': const Color(0xFF607D8B), 'accent': const Color(0xFF607D8B)},
+      'seed': {
+        'bg': const Color(0xFFE8F5E9),
+        'icon': AppTheme.primary,
+        'accent': const Color(0xFF43A047)
+      },
+      'fertilizer': {
+        'bg': const Color(0xFFFFF3E0),
+        'icon': AppTheme.accent,
+        'accent': const Color(0xFFFF9800)
+      },
+      'pesticide': {
+        'bg': const Color(0xFFE3F2FD),
+        'icon': AppTheme.info ?? const Color(0xFF1E88E5),
+        'accent': const Color(0xFF1E88E5)
+      },
+      'fungicide': {
+        'bg': const Color(0xFFFCE4EC),
+        'icon': const Color(0xFFE91E63),
+        'accent': const Color(0xFFE91E63)
+      },
+      'equipment': {
+        'bg': const Color(0xFFECEFF1),
+        'icon': const Color(0xFF607D8B),
+        'accent': const Color(0xFF607D8B)
+      },
     };
 
-    final catData = categoryColors[product.category.toLowerCase()] ?? {
-      'bg': Colors.grey.shade100, 'icon': Colors.grey, 'accent': Colors.grey.shade600,
-    };
+    final catData = categoryColors[product.category.toLowerCase()] ??
+        {
+          'bg': Colors.grey.shade100,
+          'icon': Colors.grey,
+          'accent': Colors.grey.shade600,
+        };
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -984,7 +1033,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
-                            product.dealerName.isEmpty ? 'Agro-dealer' : product.dealerName,
+                            product.dealerName.isEmpty
+                                ? 'Agro-dealer'
+                                : product.dealerName,
                             style: GoogleFonts.poppins(
                               fontSize: 9,
                               color: AppTheme.textMuted,
