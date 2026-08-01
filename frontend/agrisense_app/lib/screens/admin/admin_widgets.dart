@@ -197,25 +197,61 @@ class AdminStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AdminCard(
-      padding: const EdgeInsets.all(14),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+        border: Border.all(
+          color: color.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                width: 34,
-                height: 34,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: color, size: 18),
+                child: Icon(icon, color: color, size: 24),
               ),
-              const Spacer(),
               if (footnote != null)
-                Icon(Icons.trending_up_rounded, size: 14, color: color),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.trending_up_rounded, size: 14, color: color),
+                      const SizedBox(width: 5),
+                      Text(
+                        footnote!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
           const Spacer(),
@@ -223,27 +259,20 @@ class AdminStatCard extends StatelessWidget {
             value,
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.w800,
-              fontSize: 22,
+              fontSize: 24,
               color: AppTheme.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
-          Text(label,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-          if (footnote != null) ...[
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                footnote!,
-                style: TextStyle(
-                    color: color, fontSize: 10, fontWeight: FontWeight.w700),
-              ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              color: AppTheme.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
-          ],
+          ),
         ],
       ),
     );
