@@ -64,6 +64,7 @@ class ChatConversation {
   final String role;
   final String phone;
   final bool isVerified;
+  final bool isOnline;
   final String lastMessage;
   final int unread;
 
@@ -74,6 +75,7 @@ class ChatConversation {
     this.role = '',
     this.phone = '',
     this.isVerified = false,
+    this.isOnline = false,
     this.lastMessage = '',
     this.unread = 0,
   });
@@ -86,6 +88,7 @@ class ChatConversation {
       role: json['other_user_role'] ?? '',
       phone: json['other_user_phone'] ?? '',
       isVerified: json['other_is_verified'] ?? false,
+      isOnline: json['is_online'] ?? json['other_is_online'] ?? false,
       lastMessage: json['last_message'] ?? '',
       unread: json['unread_count'] ?? 0,
     );
@@ -196,6 +199,7 @@ class ChatProvider with ChangeNotifier {
         role: c.role,
         phone: c.phone,
         isVerified: c.isVerified,
+        isOnline: c.isOnline,
         lastMessage:
             '${message.senderName.isNotEmpty ? '${message.senderName}: ' : ''}${message.text}',
         unread: c.unread,

@@ -50,10 +50,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return '';
   }
 
-  void _refresh() {
+  Future<void> _refresh() async {
     final provider = context.read<MarketplaceProvider>();
     final query = _searchController.text.trim();
-    provider.loadProducts(
+    await provider.loadProducts(
       category: _selectedCategoryValue,
       search: query.isEmpty ? null : query,
     );
