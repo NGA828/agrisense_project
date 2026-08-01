@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/api/api_service.dart';
 import '../../theme/app_theme.dart';
+import 'admin_widgets.dart';
 
 /// Admin console for the AI knowledge base: list, search, add, edit and
 /// delete diseases. Changes here immediately affect diagnosis results.
@@ -10,7 +11,8 @@ class ContentManagementScreen extends StatefulWidget {
   const ContentManagementScreen({super.key});
 
   @override
-  State<ContentManagementScreen> createState() => _ContentManagementScreenState();
+  State<ContentManagementScreen> createState() =>
+      _ContentManagementScreenState();
 }
 
 class _ContentManagementScreenState extends State<ContentManagementScreen> {
@@ -32,15 +34,19 @@ class _ContentManagementScreenState extends State<ContentManagementScreen> {
     });
     try {
       final diseases = await ApiService().getDiseases();
-      if (mounted) setState(() {
-        _diseases = diseases;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _diseases = diseases;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -48,8 +54,14 @@ class _ContentManagementScreenState extends State<ContentManagementScreen> {
     if (_searchQuery.isEmpty) return _diseases;
     return _diseases
         .where((d) =>
-            (d['disease_name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            (d['crop_name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()))
+            (d['disease_name'] ?? '')
+                .toString()
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()) ||
+            (d['crop_name'] ?? '')
+                .toString()
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()))
         .toList();
   }
 
@@ -68,9 +80,12 @@ class _ContentManagementScreenState extends State<ContentManagementScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete disease?'),
-        content: Text('"${disease['disease_name']}" will be removed from the AI knowledge base.'),
+        content: Text(
+            '"${disease['disease_name']}" will be removed from the AI knowledge base.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
@@ -84,14 +99,22 @@ class _ContentManagementScreenState extends State<ContentManagementScreen> {
       await ApiService().deleteDisease(disease['id']);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Disease deleted'), backgroundColor: AppTheme.success),
+          SnackBar(
+            content: const Text('Disease deleted'),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
         _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: AppTheme.error),
+          SnackBar(
+            content: Text('Failed to delete: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -100,91 +123,68 @@ class _ContentManagementScreenState extends State<ContentManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F3),
+      backgroundColor: AdminTheme.canvas,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            // Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1A3A1A), Color(0xFF2D5016)]),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 20)),
-                      Text('Disease Knowledge Base',
-                          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20)),
-                      IconButton(
-                        onPressed: () => _openForm(),
-                        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 24),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    height: 46,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.search_rounded, color: AppTheme.textMuted, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            onChanged: (v) => setState(() => _searchQuery = v),
-                            decoration: const InputDecoration(
-                              hintText: 'Search diseases or crops...',
-                              border: InputBorder.none,
-                              isDense: true,
-                            ),
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+            AdminHeader(
+              title: 'Disease Knowledge Base',
+              subtitle:
+                  '${_diseases.length} disease record(s) powering AI diagnoses',
+              showBack: true,
+              trailing: [
+                IconButton(
+                  onPressed: () => _openForm(),
+                  icon: const Icon(Icons.add_rounded,
+                      color: Colors.white, size: 26),
+                  tooltip: 'Add disease',
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: AdminSearchField(
+                hint: 'Search diseases or crops...',
+                onChanged: (v) => setState(() => _searchQuery = v),
               ),
             ),
             const SizedBox(height: 8),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppTheme.primary))
                   : _error != null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.cloud_off_rounded, size: 48, color: Colors.grey.shade400),
-                              const SizedBox(height: 12),
-                              Text(_error!, style: AppTheme.bodySmall, textAlign: TextAlign.center),
-                              const SizedBox(height: 16),
-                              ElevatedButton(onPressed: _load, child: const Text('Retry')),
-                            ],
-                          ),
-                        )
+                      ? AdminErrorState(message: _error!, onRetry: _load)
                       : _filtered.isEmpty
-                          ? Center(child: Text('No diseases found', style: TextStyle(color: AppTheme.textMuted)))
+                          ? AdminEmptyState(
+                              icon: Icons.bug_report_rounded,
+                              title: 'No diseases found',
+                              subtitle:
+                                  _searchQuery.isEmpty
+                                      ? 'Add your first disease to the knowledge base.'
+                                      : 'Try a different search term.',
+                              action: _searchQuery.isEmpty
+                                  ? ElevatedButton.icon(
+                                      onPressed: () => _openForm(),
+                                      icon: const Icon(Icons.add_rounded,
+                                          size: 18),
+                                      label: const Text('Add disease'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.primary,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12)),
+                                      ),
+                                    )
+                                  : null,
+                            )
                           : RefreshIndicator(
                               onRefresh: _load,
                               color: AppTheme.primary,
                               child: ListView.builder(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.fromLTRB(
+                                    16, 8, 16, 24),
                                 itemCount: _filtered.length,
                                 itemBuilder: (context, index) =>
                                     _diseaseCard(_filtered[index]),
@@ -208,60 +208,77 @@ class _ContentManagementScreenState extends State<ContentManagementScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
-      ),
+      decoration: AdminTheme.cardDecoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
-                child: Icon(Icons.bug_report_rounded, color: AppTheme.primary, size: 20),
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child:
+                    const Icon(Icons.bug_report_rounded, color: AppTheme.primary, size: 21),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(disease['disease_name'] ?? 'Unknown',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                    Text('${disease['crop_name'] ?? ''} · ${disease['pathogen'] ?? '—'}',
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                    Text(
+                      disease['disease_name'] ?? 'Unknown',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    Text(
+                      '${disease['crop_name'] ?? ''} · ${disease['pathogen'] ?? '—'}',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: severityColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(severity.toUpperCase(),
-                    style: TextStyle(fontSize: 10, color: severityColor, fontWeight: FontWeight.w700)),
-              ),
+              AdminPill(label: severity, color: severityColor),
             ],
           ),
           const SizedBox(height: 10),
-          Text(disease['medication']?.toString().isNotEmpty == true
-                  ? '💊 ${disease['medication']}'
-                  : 'Cultural management only',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 10),
+          Text(
+            disease['medication']?.toString().isNotEmpty == true
+                ? '💊 ${disease['medication']}'
+                : 'Cultural management only',
+            style: const TextStyle(
+                color: AppTheme.textSecondary, fontSize: 12),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              AdminPill(
+                label: '${disease['treatment_type'] ?? 'Treatment'}',
+                color: AppTheme.info,
+                icon: Icons.healing_rounded,
+              ),
+              const Spacer(),
               TextButton.icon(
                 onPressed: () => _openForm(disease),
-                icon: const Icon(Icons.edit_rounded, size: 16, color: AppTheme.primary),
-                label: const Text('Edit', style: TextStyle(color: AppTheme.primary)),
+                icon: const Icon(Icons.edit_rounded,
+                    size: 16, color: AppTheme.primary),
+                label: const Text('Edit',
+                    style: TextStyle(color: AppTheme.primary)),
               ),
               TextButton.icon(
                 onPressed: () => _delete(disease),
-                icon: const Icon(Icons.delete_rounded, size: 16, color: AppTheme.error),
-                label: const Text('Delete', style: TextStyle(color: AppTheme.error)),
+                icon: const Icon(Icons.delete_rounded,
+                    size: 16, color: AppTheme.error),
+                label: const Text('Delete',
+                    style: TextStyle(color: AppTheme.error)),
               ),
             ],
           ),
@@ -305,10 +322,14 @@ class _DiseaseFormScreenState extends State<DiseaseFormScreen> {
     _pathogenController = TextEditingController(text: d?['pathogen'] ?? '');
     _symptomsController = TextEditingController(text: d?['symptoms'] ?? '');
     _causesController = TextEditingController(text: d?['causes'] ?? '');
-    _preventionController = TextEditingController(text: d?['prevention'] ?? '');
-    _medicationController = TextEditingController(text: d?['medication'] ?? '');
-    _instructionsController = TextEditingController(text: d?['instructions'] ?? '');
-    _durationController = TextEditingController(text: '${d?['duration'] ?? 14}');
+    _preventionController =
+        TextEditingController(text: d?['prevention'] ?? '');
+    _medicationController =
+        TextEditingController(text: d?['medication'] ?? '');
+    _instructionsController =
+        TextEditingController(text: d?['instructions'] ?? '');
+    _durationController =
+        TextEditingController(text: '${d?['duration'] ?? 14}');
     _severity = d?['severity'] ?? 'medium';
   }
 
@@ -365,8 +386,10 @@ class _DiseaseFormScreenState extends State<DiseaseFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isEdit ? 'Disease updated' : 'Disease added to the knowledge base'),
+            content: Text(
+                _isEdit ? 'Disease updated' : 'Disease added to the knowledge base'),
             backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
           ),
         );
         Navigator.pop(context, true);
@@ -374,7 +397,11 @@ class _DiseaseFormScreenState extends State<DiseaseFormScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e'), backgroundColor: AppTheme.error),
+          SnackBar(
+            content: Text('Save failed: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -385,33 +412,60 @@ class _DiseaseFormScreenState extends State<DiseaseFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F3),
+      backgroundColor: AdminTheme.canvas,
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Disease' : 'Add Disease',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white)),
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600, color: Colors.white)),
         backgroundColor: AppTheme.primary,
+        elevation: 0,
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _field(_nameController, 'Disease name', 'e.g. Tomato Late Blight', validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null),
-            _field(_cropController, 'Crop', 'e.g. Tomato', validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null),
-            _field(_pathogenController, 'Pathogen (cause)', 'e.g. Phytophthora infestans'),
-            _field(_symptomsController, 'Symptoms', 'Describe visible symptoms...', maxLines: 3),
-            _field(_causesController, 'Causes & spread', 'What causes it...', maxLines: 2),
-            _field(_preventionController, 'Prevention', 'How to prevent it...', maxLines: 3),
-            _field(_medicationController, 'Recommended medication', 'e.g. Mancozeb 80% WP (50g/20L)', maxLines: 2),
-            _field(_instructionsController, 'Application instructions', 'How to apply...', maxLines: 3),
+            _field(_nameController, 'Disease name',
+                'e.g. Tomato Late Blight',
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null),
+            _field(_cropController, 'Crop', 'e.g. Tomato',
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null),
+            _field(_pathogenController, 'Pathogen (cause)',
+                'e.g. Phytophthora infestans'),
+            _field(_symptomsController, 'Symptoms',
+                'Describe visible symptoms...',
+                maxLines: 3),
+            _field(_causesController, 'Causes & spread', 'What causes it...',
+                maxLines: 2),
+            _field(_preventionController, 'Prevention', 'How to prevent it...',
+                maxLines: 3),
+            _field(_medicationController, 'Recommended medication',
+                'e.g. Mancozeb 80% WP (50g/20L)',
+                maxLines: 2),
+            _field(_instructionsController, 'Application instructions',
+                'How to apply...',
+                maxLines: 3),
             Row(
               children: [
-                Expanded(child: _field(_durationController, 'Duration (days)', '14', keyboardType: TextInputType.number)),
+                Expanded(
+                  child: _field(_durationController, 'Duration (days)', '14',
+                      keyboardType: TextInputType.number),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: _severity,
-                    decoration: const InputDecoration(labelText: 'Severity'),
+                    decoration: const InputDecoration(
+                      labelText: 'Severity',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.all(Radius.circular(12)),
+                          borderSide: BorderSide.none),
+                    ),
                     items: const [
                       DropdownMenuItem(value: 'low', child: Text('Low')),
                       DropdownMenuItem(value: 'medium', child: Text('Medium')),
@@ -428,13 +482,20 @@ class _DiseaseFormScreenState extends State<DiseaseFormScreen> {
               child: ElevatedButton.icon(
                 onPressed: _isSaving ? null : _save,
                 icon: _isSaving
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.save_rounded, color: Colors.white),
-                label: Text(_isSaving ? 'Saving...' : 'Save Disease',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white)),
+                label: Text(
+                    _isSaving ? 'Saving...' : 'Save Disease',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600, color: Colors.white)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                 ),
               ),
             ),
@@ -445,7 +506,9 @@ class _DiseaseFormScreenState extends State<DiseaseFormScreen> {
   }
 
   Widget _field(TextEditingController controller, String label, String hint,
-      {int maxLines = 1, TextInputType? keyboardType, String? Function(String?)? validator}) {
+      {int maxLines = 1,
+      TextInputType? keyboardType,
+      String? Function(String?)? validator}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
@@ -458,8 +521,12 @@ class _DiseaseFormScreenState extends State<DiseaseFormScreen> {
           hintText: hint,
           filled: true,
           fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         ),
       ),
     );

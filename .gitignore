@@ -15,7 +15,9 @@ env/
 backend/agrisense_backend/staticfiles/
 backend/agrisense_backend/media/diagnosis_images/*.jpg
 backend/agrisense_backend/media/diagnosis_images/*.jpeg
+backend/agrisense_backend/media/diagnosis_images/image*
 backend/agrisense_backend/media/product_images/*
+backend/agrisense_backend/media/profile_photos/*
 
 # Flutter/Dart
 frontend/agrisense_app/.dart_tool/
