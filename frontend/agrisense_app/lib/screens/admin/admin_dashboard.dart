@@ -137,15 +137,18 @@ class _AdminOverviewState extends State<_AdminOverview> {
   List<(String, double)> get _growthSeries {
     final raw = _analytics?['user_growth'];
     if (raw is! Map || raw.isEmpty) return [];
+
     final entries = raw.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
-    return entries
-        .map((e) {
-          final date = DateTime.tryParse(e.key);
-          final label = date == null ? e.key : '${date.day}/${date.month}';
-          final value = e.value is num ? (e.value as num).toDouble() : 0.0;
-          return (label, value);
-        })
-        .toList();
+    final List<(String, double)> series = [];
+
+    for (final entry in entries) {
+      final date = DateTime.tryParse(entry.key.toString());
+      final label = date == null ? entry.key.toString() : '${date.day}/${date.month}';
+      final value = entry.value is num ? (entry.value as num).toDouble() : 0.0;
+      series.add((label, value));
+    }
+
+    return series;
   }
 
   @override
