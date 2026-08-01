@@ -1,5 +1,6 @@
+from django.db import models as _models
 from rest_framework import serializers
-from .models import Product, Order
+from .models import Product, Order, Review, ProductReport
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -8,6 +9,8 @@ class ProductSerializer(serializers.ModelSerializer):
     dealer_phone = serializers.CharField(source='dealer.phone_number', read_only=True)
     dealer_is_verified = serializers.BooleanField(source='dealer.is_verified', read_only=True)
     dealer_is_premium = serializers.BooleanField(source='dealer.is_premium', read_only=True)
+    rating_avg = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
 
     # Explicit boolean fields with the model's defaults.
     #
@@ -30,6 +33,13 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_dealer_name(self, obj):
         name = f'{obj.dealer.first_name} {obj.dealer.last_name}'.strip()
         return name or obj.dealer.username
+
+    def get_rating_avg(self, obj):
+        agg = obj.reviews.aggregate(avg=_models.Avg('rating'))
+        return round(agg['avg'], 1) if agg['avg'] is not None else None
+
+    def get_rating_count(self, obj):
+        return obj.reviews.count()
 
     def validate(self, attrs):
         if 'price' in attrs and attrs['price'] < 0:
@@ -56,3 +66,30 @@ class OrderSerializer(serializers.ModelSerializer):
         dealer = obj.product.dealer
         name = f'{dealer.first_name} {dealer.last_name}'.strip()
         return name or dealer.username
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    farmer_name = serializers.CharField(source='farmer.first_name', read_only=True)
+
+    class Meta:
+        model = Review
+        fields = ['id', 'product', 'farmer', 'farmer_name', 'rating', 'comment',
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'farmer', 'farmer_name', 'created_at', 'updated_at']
+
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError('Rating must be between 1 and 5.')
+        return value
+
+
+class ProductReportSerializer(serializers.ModelSerializer):
+    reporter_name = serializers.CharField(source='reporter.first_name', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+
+    class Meta:
+        model = ProductReport
+        fields = ['id', 'product', 'product_name', 'reporter', 'reporter_name',
+                  'reason', 'details', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'reporter', 'reporter_name', 'product_name',
+                            'status', 'created_at', 'updated_at']

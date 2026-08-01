@@ -234,3 +234,118 @@ class OrderTests(APITestCase):
         self.auth(self.dealer)
         resp = self.client.get(reverse('order-order-history'))
         self.assertEqual(len(resp.data), 1)
+
+
+class OrderLifecycleTests(APITestCase):
+    """Phase A: farmer cancel, reservation expiry, settlement on delivery."""
+
+    def setUp(self):
+        self.farmer = make_user('farmer1', 'farmer')
+        self.dealer = make_user('dealer1', 'dealer')
+        self.admin = make_user('admin1', 'admin')
+        self.product = Product.objects.create(
+            dealer=self.dealer, name='Seed', description='s',
+            category='seed', price=1000, stock_quantity=5,
+        )
+
+    def auth(self, user):
+        self.client.force_authenticate(user=user)
+
+    def place_order(self, qty=1):
+        self.auth(self.farmer)
+        resp = self.client.post(reverse('order-list'), {
+            'product': self.product.id_product, 'quantity': qty,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        return resp.data['id']
+
+    def test_farmer_can_cancel_unpaid_order_and_stock_released(self):
+        order_id = self.place_order(2)  # stock 5 -> 3
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 3)
+        self.auth(self.farmer)
+        resp = self.client.post(reverse('order-cancel', args=[order_id]))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 5)
+        order = Order.objects.get(id=order_id)
+        self.assertEqual(order.status, 'cancelled')
+
+    def test_other_farmer_cannot_cancel(self):
+        order_id = self.place_order()
+        other = make_user('farmer2', 'farmer')
+        self.auth(other)
+        resp = self.client.post(reverse('order-cancel', args=[order_id]))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_paid_order_cannot_be_cancelled_without_refund(self):
+        order_id = self.place_order()
+        order = Order.objects.get(id=order_id)
+        order.payment_status = 'paid'
+        order.status = 'confirmed'
+        order.save()
+        self.auth(self.farmer)
+        resp = self.client.post(reverse('order-cancel', args=[order_id]))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_reservation_expiry_releases_stock(self):
+        from django.utils import timezone
+        order_id = self.place_order(2)  # stock 5 -> 3
+        order = Order.objects.get(id=order_id)
+        order.reserved_until = timezone.now() - timezone.timedelta(minutes=1)
+        order.save(update_fields=['reserved_until'])
+
+        from django.core.management import call_command
+        call_command('release_stale_reservations')
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 5)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'expired')
+
+    def test_delivery_settles_funds_to_dealer(self):
+        from payments.models import Payment
+        order_id = self.place_order(1)
+        order = Order.objects.get(id=order_id)
+        order.payment_status = 'paid'
+        order.status = 'confirmed'
+        order.save()
+        Payment.objects.create(
+            order=order, user=self.farmer, amount=1000,
+            payment_method='MTN_MOMO', phone_number='+237670000008',
+            transaction_id='TXN-SETTLE', status='completed',
+        )
+        from ledger import services as ledger
+        ledger.record_payment_collected(Payment.objects.get(transaction_id='TXN-SETTLE'),
+                                        reference=f'order:{order.id}')
+
+        self.auth(self.dealer)
+        resp = self.client.post(reverse('order-update-status', args=[order_id]),
+                                {'status': 'shipped'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        resp = self.client.post(reverse('order-update-status', args=[order_id]),
+                                {'status': 'delivered'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'delivered')
+        self.assertEqual(ledger.dealer_account(self.dealer).balance, 1000)
+        self.assertEqual(ledger.escrow_account().balance, 0)
+
+    def test_unpaid_order_cannot_be_shipped(self):
+        order_id = self.place_order(1)
+        self.auth(self.dealer)
+        resp = self.client.post(reverse('order-update-status', args=[order_id]),
+                                {'status': 'shipped'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_status_cannot_regress(self):
+        order_id = self.place_order(1)
+        order = Order.objects.get(id=order_id)
+        order.payment_status = 'paid'
+        order.status = 'delivered'
+        order.save()
+        self.auth(self.dealer)
+        resp = self.client.post(reverse('order-update-status', args=[order_id]),
+                                {'status': 'shipped'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

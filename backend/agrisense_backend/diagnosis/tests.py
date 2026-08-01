@@ -54,6 +54,38 @@ class DiagnosisTests(APITestCase):
         self.assertIn('treatment_plan', resp.data)
         self.assertTrue(Diagnosis.objects.filter(user=self.farmer).exists())
 
+    def test_analyze_requires_crop_type(self):
+        """AI v2 crop-mandatory guard: no crop -> rejected, not Tomato fallback."""
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes()},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('select the crop', resp.data['error'].lower())
+
+    def test_analyze_rejects_unsupported_crop(self):
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes(), 'crop_type': 'Mango'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_analyze_healthy_leaf_stores_healthy_flag(self):
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes(color=(80, 160, 70)), 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(resp.data['is_healthy'])
+        diagnosis = Diagnosis.objects.get(user=self.farmer)
+        self.assertTrue(diagnosis.is_healthy)
+
     def test_analyze_rejects_bad_type(self):
         self.auth(self.farmer)
         resp = self.client.post(

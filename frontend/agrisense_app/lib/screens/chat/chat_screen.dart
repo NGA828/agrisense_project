@@ -156,6 +156,27 @@ class _ChatScreenState extends State<ChatScreen> {
                         },
                       ),
           ),
+          // ── Typing indicator (real-time) ──
+          if (chatProvider.typingUser(widget.conversationId) != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 6, 24, 0),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppTheme.primary),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${chatProvider.typingUser(widget.conversationId)} is typing…',
+                    style: TextStyle(
+                        color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
           _buildInputBar(chatProvider),
         ],
       ),
@@ -204,6 +225,10 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               child: TextField(
                 controller: _messageController,
+                onChanged: (value) {
+                  _chatProvider.sendTyping(
+                      widget.conversationId, value.trim().isNotEmpty);
+                },
                 decoration: InputDecoration(
                   hintText: 'Type message...',
                   hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -220,6 +245,7 @@ class _ChatScreenState extends State<ChatScreen> {
               final text = _messageController.text.trim();
               if (text.isNotEmpty) {
                 _messageController.clear();
+                _chatProvider.sendTyping(widget.conversationId, false);
                 try {
                   await _chatProvider.sendMessage(widget.conversationId, text);
                 } catch (e) {

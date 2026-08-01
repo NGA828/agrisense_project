@@ -78,12 +78,19 @@ INSTALLED_APPS = [
     'ai_engine',
     'announcements',
     'system',
+    'ledger',
+    'realtime',
+    'auditlog',
+    'sensors',
+    'ussd',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'agrisense_backend.middleware.RequestIDMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -142,8 +149,14 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = 'en-us'
+LANGUAGES = [
+    ('en', 'English'),
+    ('fr', 'Français'),
+]
+LOCALE_PATHS = [BASE_DIR / 'locale']
 TIME_ZONE = 'UTC'
 USE_I18N = True
+USE_L10N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
@@ -160,6 +173,8 @@ THROTTLE_AUTH_RATE = os.getenv('THROTTLE_AUTH_RATE', '10/min')
 THROTTLE_AI_RATE = os.getenv('THROTTLE_AI_RATE', '30/min')
 THROTTLE_ANON_RATE = os.getenv('THROTTLE_ANON_RATE', '60/min')
 THROTTLE_USER_RATE = os.getenv('THROTTLE_USER_RATE', '120/min')
+THROTTLE_WEATHER_RATE = os.getenv('THROTTLE_WEATHER_RATE', '30/min')
+THROTTLE_USSD_RATE = os.getenv('THROTTLE_USSD_RATE', '20/min')
 
 # REST Framework Configuration
 REST_FRAMEWORK = {
@@ -181,6 +196,8 @@ REST_FRAMEWORK = {
         'user': THROTTLE_USER_RATE,
         'auth': THROTTLE_AUTH_RATE,
         'ai': THROTTLE_AI_RATE,
+        'weather': THROTTLE_WEATHER_RATE,
+        'ussd': THROTTLE_USSD_RATE,
     },
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -260,6 +277,165 @@ else:
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+# ── Order / payment / settlement configuration (Phase A — money-flow) ──
+# How long a freshly placed (unpaid) order keeps its stock reserved before the
+# reconciler command releases it. The farmer can retry payment within this
+# window; after it lapses the order is auto-cancelled and stock is freed.
+ORDER_RESERVATION_MINUTES = int(os.getenv('ORDER_RESERVATION_MINUTES', '30'))
+
+# Platform commission on a fulfilled marketplace order (0.0 = none). Applied
+# at settlement (order delivered): the dealer is credited (total - commission)
+# and the platform fee account is credited the commission.
+PLATFORM_COMMISSION_RATE = float(os.getenv('PLATFORM_COMMISSION_RATE', '0.0'))
+
+# Shared secret used to HMAC-sign payment webhook callbacks from real mobile
+# money providers. In production this must be a long random value known to the
+# provider and never shipped in source.
+PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', 'dev-webhook-secret')
+
+# ── Realtime / push (Phase B) ───────────────────────────────────────────
+# Push provider: 'noop' (default) | 'fcm'. Real pushes require FCM credentials.
+PUSH_PROVIDER = os.getenv('PUSH_PROVIDER', 'noop')
+FCM_CREDENTIALS_PATH = os.getenv('FCM_CREDENTIALS_PATH', '')
+
+# ── Weather (Phase C) ───────────────────────────────────────────────────
+OPENWEATHER_API_KEY = os.getenv('OPENWEATHER_API_KEY', '')
+# How long a weather response is cached (seconds) — avoids hammering the
+# external provider and unbounded DB writes on repeated requests.
+WEATHER_CACHE_TTL = int(os.getenv('WEATHER_CACHE_TTL', '900'))
+# Prune weather rows older than this many days (see weather.tasks + command).
+WEATHER_RETENTION_DAYS = int(os.getenv('WEATHER_RETENTION_DAYS', '30'))
+
+# ── Caching (Phase C) ───────────────────────────────────────────────────
+# redis in production, locmem in dev/test so no broker/server is required.
+CACHE_BACKEND = os.getenv('CACHE_BACKEND', 'locmem')
+if CACHE_BACKEND == 'redis':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': os.getenv('REDIS_CACHE_URL', 'redis://127.0.0.1:6379/2'),
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+            'KEY_PREFIX': 'agrisense',
+            'TIMEOUT': 300,
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'agrisense-default',
+        }
+    }
+
+# ── Celery (Phase C) ────────────────────────────────────────────────────
+# Broker defaults to the Redis used for the channel layer when that is Redis;
+# otherwise tasks run eagerly (dev/tests, no broker required).
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', '')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', '')
+CELERY_TASK_ALWAYS_EAGER = not bool(CELERY_BROKER_URL)
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    'release-stale-reservations': {
+        'task': 'products.tasks.release_stale_reservations_task',
+        'schedule': 300.0,  # every 5 minutes
+    },
+    'expire-premiums': {
+        'task': 'users.tasks.expire_premiums_task',
+        'schedule': 86400.0,  # daily
+    },
+    'reconcile-payments': {
+        'task': 'payments.tasks.reconcile_payments_task',
+        'schedule': 900.0,  # every 15 minutes
+    },
+    'cleanup-weather': {
+        'task': 'weather.tasks.cleanup_weather_task',
+        'schedule': 86400.0,  # daily
+    },
+    'monitor-irrigation': {
+        'task': 'sensors.tasks.monitor_irrigation_task',
+        'schedule': 1800.0,  # every 30 minutes
+    },
+    'detect-outbreaks': {
+        'task': 'diagnosis.tasks.detect_outbreak_alerts_task',
+        'schedule': 3600.0,  # hourly
+    },
+}
+
+# ── AI v2 (Phase E) ─────────────────────────────────────────────────────
+# Calibration + honesty thresholds for the rule-based engine.
+AI_TEMPERATURE = float(os.getenv('AI_TEMPERATURE', '1.6'))
+AI_LOW_CONFIDENCE_THRESHOLD = float(os.getenv('AI_LOW_CONFIDENCE_THRESHOLD', '80.0'))
+
+# ── Precision irrigation (Phase F, innovation #2) ───────────────────────
+# How often a given sensor is re-alerted for irrigation (hours).
+IRRIGATION_ALERT_THROTTLE_HOURS = int(os.getenv('IRRIGATION_ALERT_THROTTLE_HOURS', '6'))
+
+# ── Predictive outbreak alerting (Phase F, innovation #4) ───────────────
+OUTBREAK_RECENT_DAYS = int(os.getenv('OUTBREAK_RECENT_DAYS', '7'))
+OUTBREAK_MIN_CLUSTER_SIZE = int(os.getenv('OUTBREAK_MIN_CLUSTER_SIZE', '3'))
+OUTBREAK_GROWTH_FACTOR = float(os.getenv('OUTBREAK_GROWTH_FACTOR', '2.0'))
+OUTBREAK_COOLDOWN_HOURS = int(os.getenv('OUTBREAK_COOLDOWN_HOURS', '24'))
+OUTBREAK_NOTIFY_RADIUS_DEG = float(os.getenv('OUTBREAK_NOTIFY_RADIUS_DEG', '0.8'))
+
+# ── OTP / SMS (Phase D) ─────────────────────────────────────────────────# Phone-based verification for registration & password reset.
+SMS_PROVIDER = os.getenv('SMS_PROVIDER', 'noop')  # noop | africastalking | twilio
+OTP_LENGTH = int(os.getenv('OTP_LENGTH', '6'))
+OTP_TTL_SECONDS = int(os.getenv('OTP_TTL_SECONDS', '300'))
+OTP_MAX_ATTEMPTS = int(os.getenv('OTP_MAX_ATTEMPTS', '5'))
+# When True, registration / password reset require a verified OTP first.
+OTP_REQUIRED_FOR_REGISTRATION = _env_bool('OTP_REQUIRED_FOR_REGISTRATION', False)
+OTP_REQUIRED_FOR_PASSWORD_RESET = _env_bool('OTP_REQUIRED_FOR_PASSWORD_RESET', False)
+
+# ── Logging (Phase C) ───────────────────────────────────────────────────
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'json': {
+            '()': 'agrisense_backend.logging.JsonFormatter',
+        },
+        'verbose': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'json' if _env_bool('JSON_LOGS', not DEBUG) else 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': os.getenv('LOG_LEVEL', 'INFO'),
+    },
+    'loggers': {
+        'django.request': {'level': 'WARNING', 'handlers': ['console'], 'propagate': False},
+        'django.security': {'level': 'WARNING', 'handlers': ['console'], 'propagate': False},
+        'agrisense': {'level': 'INFO', 'handlers': ['console'], 'propagate': False},
+    },
+}
+
+# ── Sentry (optional error tracking) ────────────────────────────────────
+SENTRY_DSN = os.getenv('SENTRY_DSN', '')
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
+
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[DjangoIntegration()],
+            traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.1')),
+            environment=os.getenv('SENTRY_ENVIRONMENT', 'production'),
+        )
+    except Exception:
+        pass  # Sentry is optional; never block startup on it.
 
 # Production security defaults (turned OFF in DEBUG so local dev keeps working)
 if not DEBUG:

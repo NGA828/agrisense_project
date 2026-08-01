@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
@@ -103,12 +105,20 @@ class ChatProvider with ChangeNotifier {
   final Map<int, List<ChatMessage>> _messages = {};
   final Map<int, WebSocketChannel> _channels = {};
   final Set<int> _connectedRooms = {};
+  final Map<int, int> _reconnectAttempts = {};
+  final Map<int, Timer> _reconnectTimers = {};
+  // roomId -> name of the user currently typing (if any)
+  final Map<int, String> _typingUsers = {};
   bool _isLoading = false;
   String? _error;
 
   List<ChatConversation> get conversations => _conversations;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  /// The name of the other participant currently typing in `conversationId`
+  /// (null when nobody is typing). UI can show a typing indicator.
+  String? typingUser(int conversationId) => _typingUsers[conversationId];
 
   List<ChatMessage> getMessages(int conversationId) =>
       _messages[conversationId] ?? [];
@@ -159,27 +169,68 @@ class ChatProvider with ChangeNotifier {
       final channel = WebSocketChannel.connect(uri);
       _channels[roomId] = channel;
       _connectedRooms.add(roomId);
+      _reconnectAttempts.remove(roomId);
       channel.stream.listen(
         (raw) {
           try {
             final event = jsonDecode(raw as String) as Map<String, dynamic>;
-            if (event['type'] == 'chat_message') {
+            final type = event['type'];
+            if (type == 'chat_message') {
               _appendIncoming(roomId, ChatMessage.fromWebSocket(event));
+            } else if (type == 'typing') {
+              _handleTyping(roomId, event);
             }
           } catch (_) {}
         },
-        onDone: () {
-          _channels.remove(roomId);
-          _connectedRooms.remove(roomId);
-        },
-        onError: (_) {
-          _channels.remove(roomId);
-          _connectedRooms.remove(roomId);
-        },
+        onDone: () => _scheduleReconnect(roomId),
+        onError: (_) => _scheduleReconnect(roomId),
+        cancelOnError: true,
       );
     } catch (e) {
-      // REST fallback remains available; real-time will simply not push.
+      _scheduleReconnect(roomId);
     }
+  }
+
+  /// Reconnect with exponential backoff, then backfill missed messages via REST
+  /// so no conversation is lost across a network blip.
+  void _scheduleReconnect(int roomId) {
+    _channels.remove(roomId);
+    _connectedRooms.remove(roomId);
+    _reconnectTimers.remove(roomId)?.cancel();
+    final attempt = _reconnectAttempts[roomId] ?? 0;
+    _reconnectAttempts[roomId] = attempt + 1;
+    final delayMs = min(pow(2, attempt).toInt(), 30) * 1000;
+    _reconnectTimers[roomId] = Timer(Duration(milliseconds: delayMs), () async {
+      await openConversation(roomId); // REST backfill + re-open socket
+    });
+  }
+
+  void _handleTyping(int roomId, Map<String, dynamic> event) {
+    final typing = event['typing'] == true;
+    if (typing) {
+      _typingUsers[roomId] = event['sender_name']?.toString() ?? 'Someone';
+    } else {
+      _typingUsers.remove(roomId);
+    }
+    notifyListeners();
+    // Auto-clear the indicator after 3s in case the 'stopped typing' event
+    // is lost.
+    Timer(const Duration(seconds: 3), () {
+      if (_typingUsers[roomId] != null &&
+          _typingUsers[roomId] == event['sender_name']?.toString()) {
+        _typingUsers.remove(roomId);
+        notifyListeners();
+      }
+    });
+  }
+
+  /// Notify the other participant that the current user is/isn't typing.
+  void sendTyping(int roomId, bool typing) {
+    final channel = _channels[roomId];
+    if (channel == null) return;
+    try {
+      channel.sink.add(jsonEncode({'type': 'typing', 'typing': typing}));
+    } catch (_) {}
   }
 
   void _appendIncoming(int roomId, ChatMessage message) {
@@ -266,6 +317,8 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> closeConversation(int conversationId) async {
+    _reconnectTimers.remove(conversationId)?.cancel();
+    _reconnectAttempts.remove(conversationId);
     final channel = _channels.remove(conversationId);
     _connectedRooms.remove(conversationId);
     try {
@@ -275,12 +328,17 @@ class ChatProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    for (final timer in _reconnectTimers.values) {
+      timer.cancel();
+    }
+    _reconnectTimers.clear();
     for (final channel in _channels.values) {
       try {
         channel.sink.close();
       } catch (_) {}
     }
     _channels.clear();
+    _connectedRooms.clear();
     super.dispose();
   }
 }
