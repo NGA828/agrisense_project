@@ -34,7 +34,8 @@ class ChatMessage {
           : (json['sender'] ?? 0) as int,
       senderName: json['sender_name'] ?? '',
       imageUrl: json['image_url'] as String?,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -46,7 +47,8 @@ class ChatMessage {
           ? int.tryParse(json['sender_id'].toString()) ?? 0
           : (json['sender_id'] ?? 0) as int,
       senderName: json['sender_name'] ?? '',
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -108,7 +110,8 @@ class ChatProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  List<ChatMessage> getMessages(int conversationId) => _messages[conversationId] ?? [];
+  List<ChatMessage> getMessages(int conversationId) =>
+      _messages[conversationId] ?? [];
 
   Future<void> loadConversations() async {
     _isLoading = true;
@@ -143,14 +146,16 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  Future<void> loadMessages(int conversationId) => openConversation(conversationId);
+  Future<void> loadMessages(int conversationId) =>
+      openConversation(conversationId);
 
   Future<void> _connectSocket(int roomId) async {
     if (_connectedRooms.contains(roomId)) return;
     try {
       final token = await _api.getAccessToken();
       if (token == null) return;
-      final uri = Uri.parse('${ApiService.chatWebSocketUrl(roomId)}?token=$token');
+      final uri =
+          Uri.parse('${ApiService.chatWebSocketUrl(roomId)}?token=$token');
       final channel = WebSocketChannel.connect(uri);
       _channels[roomId] = channel;
       _connectedRooms.add(roomId);
@@ -242,9 +247,11 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  Future<ChatConversation?> startConversation({int? dealerId, int? farmerId}) async {
+  Future<ChatConversation?> startConversation(
+      {int? dealerId, int? farmerId}) async {
     try {
-      final room = await _api.createChatRoom(dealerId: dealerId, farmerId: farmerId);
+      final room =
+          await _api.createChatRoom(dealerId: dealerId, farmerId: farmerId);
       final conv = ChatConversation.fromApi(room);
       if (!_conversations.any((c) => c.id == conv.id)) {
         _conversations.insert(0, conv);

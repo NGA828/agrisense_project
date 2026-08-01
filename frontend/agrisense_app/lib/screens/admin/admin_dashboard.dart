@@ -67,7 +67,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 22, color: s ? AppTheme.primaryDark : AppTheme.textMuted),
+          Icon(icon,
+              size: 22, color: s ? AppTheme.primaryDark : AppTheme.textMuted),
           const SizedBox(height: 2),
           Text(
             label,
@@ -138,12 +139,14 @@ class _AdminOverviewState extends State<_AdminOverview> {
     final raw = _analytics?['user_growth'];
     if (raw is! Map || raw.isEmpty) return [];
 
-    final entries = raw.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final entries = raw.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
     final List<(String, double)> series = [];
 
     for (final entry in entries) {
       final date = DateTime.tryParse(entry.key.toString());
-      final label = date == null ? entry.key.toString() : '${date.day}/${date.month}';
+      final label =
+          date == null ? entry.key.toString() : '${date.day}/${date.month}';
       final value = entry.value is num ? (entry.value as num).toDouble() : 0.0;
       series.add((label, value));
     }
@@ -154,7 +157,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+      return const Center(
+          child: CircularProgressIndicator(color: AppTheme.primary));
     }
     return RefreshIndicator(
       onRefresh: _loadStats,
@@ -171,9 +175,14 @@ class _AdminOverviewState extends State<_AdminOverview> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF1A3A1A), Color(0xFF2D5016), Color(0xFF3A6B20)],
+                  colors: [
+                    Color(0xFF1A3A1A),
+                    Color(0xFF2D5016),
+                    Color(0xFF3A6B20)
+                  ],
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(28)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +218,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
                                 decoration: BoxDecoration(
                                   color: AppTheme.error,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
+                                  border:
+                                      Border.all(color: Colors.white, width: 2),
                                 ),
                               ),
                             ),
@@ -237,7 +247,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
                   ),
                   const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(24),
@@ -246,7 +257,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.calendar_today_rounded,
-                            color: Colors.white.withValues(alpha: 0.9), size: 16),
+                            color: Colors.white.withValues(alpha: 0.9),
+                            size: 16),
                         const SizedBox(width: 8),
                         const Text(
                           'July 24, 2026',
@@ -273,18 +285,34 @@ class _AdminOverviewState extends State<_AdminOverview> {
                 mainAxisSpacing: 16,
                 childAspectRatio: 1.4,
                 children: [
-                  _stat('${_stats?['total_users'] ?? 0}', 'Total Users',
-                      Icons.people_rounded, const Color(0xFFE8F5E9), AppTheme.primary,
+                  _stat(
+                      '${_stats?['total_users'] ?? 0}',
+                      'Total Users',
+                      Icons.people_rounded,
+                      const Color(0xFFE8F5E9),
+                      AppTheme.primary,
                       '${_stats?['active_users'] ?? 0} active'),
-                  _stat('${_stats?['total_dealers'] ?? 0}', 'Dealers',
-                      Icons.store_rounded, const Color(0xFFFFF3E0), AppTheme.accent,
+                  _stat(
+                      '${_stats?['total_dealers'] ?? 0}',
+                      'Dealers',
+                      Icons.store_rounded,
+                      const Color(0xFFFFF3E0),
+                      AppTheme.accent,
                       '${_stats?['pending_dealer_requests'] ?? 0} pending'),
-                  _stat('${_stats?['total_diagnoses'] ?? 0}', 'Diagnoses',
-                      Icons.eco_rounded, const Color(0xFFE3F2FD), AppTheme.info,
+                  _stat(
+                      '${_stats?['total_diagnoses'] ?? 0}',
+                      'Diagnoses',
+                      Icons.eco_rounded,
+                      const Color(0xFFE3F2FD),
+                      AppTheme.info,
                       '${_stats?['premium_dealers'] ?? 0} premium dealers'),
-                  _stat('${_stats?['total_orders'] ?? 0}', 'Total Orders',
-                      Icons.receipt_long_rounded, const Color(0xFFF3E5F5),
-                      const Color(0xFF9C27B0), '${_stats?['total_revenue'] ?? 0} FCFA'),
+                  _stat(
+                      '${_stats?['total_orders'] ?? 0}',
+                      'Total Orders',
+                      Icons.receipt_long_rounded,
+                      const Color(0xFFF3E5F5),
+                      const Color(0xFF9C27B0),
+                      '${_stats?['total_revenue'] ?? 0} FCFA'),
                 ],
               ),
             ),
@@ -300,7 +328,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04), blurRadius: 12)
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 12)
                   ],
                 ),
                 child: Column(
@@ -317,7 +346,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
                               color: AppTheme.textPrimary),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: AppTheme.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
@@ -348,9 +378,11 @@ class _AdminOverviewState extends State<_AdminOverview> {
                       ),
                       child: _growthSeries.isEmpty
                           ? Center(
-                              child: Text('New user registrations (last 7 days)',
+                              child: Text(
+                                  'New user registrations (last 7 days)',
                                   style: TextStyle(
-                                      color: AppTheme.primary.withValues(alpha: 0.6),
+                                      color: AppTheme.primary
+                                          .withValues(alpha: 0.6),
                                       fontSize: 12)),
                             )
                           : CustomPaint(
@@ -420,27 +452,43 @@ class _AdminOverviewState extends State<_AdminOverview> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  _action(Icons.analytics_rounded, 'View Analytics', AppTheme.primary,
-                      () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const AnalyticsScreen()))),
+                  _action(
+                      Icons.analytics_rounded,
+                      'View Analytics',
+                      AppTheme.primary,
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const AnalyticsScreen()))),
                   const SizedBox(width: 12),
                   _action(
-                      Icons.verified_user_rounded, 'Verify Dealers', AppTheme.info,
+                      Icons.verified_user_rounded,
+                      'Verify Dealers',
+                      AppTheme.info,
                       () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const DealerVerificationScreen()))),
+                              builder: (_) =>
+                                  const DealerVerificationScreen()))),
                   const SizedBox(width: 12),
-                  _action(Icons.article_rounded, 'Manage Content', AppTheme.success,
+                  _action(
+                      Icons.article_rounded,
+                      'Manage Content',
+                      AppTheme.success,
                       () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const ContentManagementScreen()))),
+                              builder: (_) =>
+                                  const ContentManagementScreen()))),
                   const SizedBox(width: 12),
-                  _action(Icons.notifications_rounded, 'Send Notice',
+                  _action(
+                      Icons.notifications_rounded,
+                      'Send Notice',
                       const Color(0xFF9C27B0),
-                      () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const NotificationsScreen()))),
+                      () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const NotificationsScreen()))),
                 ],
               ),
             ),
@@ -464,7 +512,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04), blurRadius: 12)
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 12)
                   ],
                 ),
                 child: Column(
@@ -485,8 +534,10 @@ class _AdminOverviewState extends State<_AdminOverview> {
   /// Real recent orders + diagnoses from the admin stats endpoint.
   List<Widget> _recentActivityItems() {
     final items = <Widget>[];
-    final recentOrders = (_stats?['recent_orders'] as List? ?? []).take(3).toList();
-    final recentDiagnoses = (_stats?['recent_diagnoses'] as List? ?? []).take(2).toList();
+    final recentOrders =
+        (_stats?['recent_orders'] as List? ?? []).take(3).toList();
+    final recentDiagnoses =
+        (_stats?['recent_diagnoses'] as List? ?? []).take(2).toList();
 
     for (final order in recentOrders) {
       items.add(_act(
@@ -532,7 +583,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
           ],
         ),
         child: Column(
@@ -541,8 +593,8 @@ class _AdminOverviewState extends State<_AdminOverview> {
             Container(
               width: 40,
               height: 40,
-              decoration:
-                  BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                  color: bg, borderRadius: BorderRadius.circular(12)),
               child: Icon(i, color: ic, size: 22),
             ),
             const SizedBox(height: 12),
@@ -550,8 +602,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
                 style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w800, fontSize: 26)),
             Text(l,
-                style:
-                    TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -603,8 +654,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
         ),
       );
 
-  Widget _act(IconData i, String t, String d, String time, Color c) =>
-      Padding(
+  Widget _act(IconData i, String t, String d, String time, Color c) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Row(
           children: [
@@ -633,8 +683,7 @@ class _AdminOverviewState extends State<_AdminOverview> {
               ),
             ),
             Text(time,
-                style:
-                    TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
           ],
         ),
       );
@@ -743,15 +792,18 @@ class _AdminUsersState extends State<_AdminUsers> {
               children: [
                 _us('All', '${_users.length}', AppTheme.primary),
                 const SizedBox(width: 12),
-                _us('Farmers',
+                _us(
+                    'Farmers',
                     '${_users.where((u) => u['role'] == 'farmer').length}',
                     AppTheme.info),
                 const SizedBox(width: 12),
-                _us('Dealers',
+                _us(
+                    'Dealers',
                     '${_users.where((u) => u['role'] == 'dealer').length}',
                     AppTheme.accent),
                 const SizedBox(width: 12),
-                _us('Pending',
+                _us(
+                    'Pending',
                     '${_users.where((u) => u['is_active'] == false).length}',
                     AppTheme.warning),
               ],
@@ -765,14 +817,16 @@ class _AdminUsersState extends State<_AdminUsers> {
                     (t == 'All' && _filter == 'all');
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() =>
-                        _filter = t == 'All' ? 'all' : t.toLowerCase().replaceAll('s', '')),
+                    onTap: () => setState(() => _filter = t == 'All'
+                        ? 'all'
+                        : t.toLowerCase().replaceAll('s', '')),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: s ? AppTheme.primaryDark : Colors.transparent,
+                            color:
+                                s ? AppTheme.primaryDark : Colors.transparent,
                             width: 3,
                           ),
                         ),
@@ -781,8 +835,7 @@ class _AdminUsersState extends State<_AdminUsers> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               fontSize: 13,
-                              fontWeight:
-                                  s ? FontWeight.w700 : FontWeight.w500,
+                              fontWeight: s ? FontWeight.w700 : FontWeight.w500,
                               color: s
                                   ? AppTheme.primaryDark
                                   : AppTheme.textMuted)),
@@ -837,9 +890,12 @@ class _AdminUsersState extends State<_AdminUsers> {
   Widget _uc(dynamic u) {
     final a = u['is_active'] ?? true;
     final r = u['role'] ?? 'farmer';
-    final rc =
-        {'farmer': AppTheme.primary, 'dealer': AppTheme.info, 'admin': AppTheme.accent}[r] ??
-            Colors.grey;
+    final rc = {
+          'farmer': AppTheme.primary,
+          'dealer': AppTheme.info,
+          'admin': AppTheme.accent
+        }[r] ??
+        Colors.grey;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -847,8 +903,7 @@ class _AdminUsersState extends State<_AdminUsers> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
         ],
       ),
       child: Row(
@@ -882,8 +937,8 @@ class _AdminUsersState extends State<_AdminUsers> {
                 ),
                 const SizedBox(height: 4),
                 Text(u['email'] ?? '',
-                    style: TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12)),
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 const SizedBox(height: 4),
                 Container(
                   padding:
@@ -959,7 +1014,8 @@ class _AdminUsersState extends State<_AdminUsers> {
                 color: AppTheme.error.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.delete_rounded, size: 16, color: AppTheme.error),
+              child: const Icon(Icons.delete_rounded,
+                  size: 16, color: AppTheme.error),
             ),
           ),
         ],
@@ -972,10 +1028,13 @@ class _AdminUsersState extends State<_AdminUsers> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete account?'),
-        content: Text('${u['first_name'] ?? ''} ${u['last_name'] ?? ''} (@${u['username']}) '
+        content: Text(
+            '${u['first_name'] ?? ''} ${u['last_name'] ?? ''} (@${u['username']}) '
             'will be permanently removed from the platform. This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
@@ -989,14 +1048,17 @@ class _AdminUsersState extends State<_AdminUsers> {
       await ApiService().deleteUser(u['id']);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User deleted'), backgroundColor: AppTheme.success),
+          const SnackBar(
+              content: Text('User deleted'), backgroundColor: AppTheme.success),
         );
         _loadUsers();
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete user: $e'), backgroundColor: AppTheme.error),
+        SnackBar(
+            content: Text('Failed to delete user: $e'),
+            backgroundColor: AppTheme.error),
       );
     }
   }
@@ -1045,10 +1107,11 @@ class _AdminOrdersState extends State<_AdminOrders> {
     setState(() => _isLoading = true);
     try {
       final orders = await ApiService().getOrders();
-      if (mounted) setState(() {
-        _orders = orders is List ? orders : [];
-        _isLoading = false;
-      });
+      if (mounted)
+        setState(() {
+          _orders = orders is List ? orders : [];
+          _isLoading = false;
+        });
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1112,19 +1175,22 @@ class _AdminOrdersState extends State<_AdminOrders> {
           const SizedBox(height: 16),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppTheme.primary))
                 : _orders.isEmpty
                     ? Center(
-                        child: Text('No orders yet', style: TextStyle(color: AppTheme.textMuted)),
+                        child: Text('No orders yet',
+                            style: TextStyle(color: AppTheme.textMuted)),
                       )
                     : RefreshIndicator(
                         onRefresh: _load,
                         color: AppTheme.primary,
                         child: ListView.builder(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 16),
                           itemCount: _orders.length,
-                          itemBuilder: (context, index) => _buildOrderItem(_orders[index]),
+                          itemBuilder: (context, index) =>
+                              _buildOrderItem(_orders[index]),
                         ),
                       ),
           ),
@@ -1136,16 +1202,18 @@ class _AdminOrdersState extends State<_AdminOrders> {
   Widget _buildOrderItem(dynamic order) {
     final status = order['status'] ?? 'pending';
     final statusColor = {
-      'pending': AppTheme.warning,
-      'confirmed': AppTheme.info,
-      'shipped': AppTheme.info,
-      'delivered': AppTheme.success,
-      'cancelled': AppTheme.error,
-    }[status] ?? AppTheme.textMuted;
+          'pending': AppTheme.warning,
+          'confirmed': AppTheme.info,
+          'shipped': AppTheme.info,
+          'delivered': AppTheme.success,
+          'cancelled': AppTheme.error,
+        }[status] ??
+        AppTheme.textMuted;
     final farmer = order['farmer_name'] ?? 'Farmer';
     final product = order['product_name'] ?? 'Product';
     final amount = '${order['total_price'] ?? 0} FCFA';
-    final details = '${order['quantity']}x $product · ${order['payment_status'] ?? 'unpaid'}';
+    final details =
+        '${order['quantity']}x $product · ${order['payment_status'] ?? 'unpaid'}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1153,7 +1221,9 @@ class _AdminOrdersState extends State<_AdminOrders> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)
+        ],
       ),
       child: Row(
         children: [
@@ -1164,7 +1234,8 @@ class _AdminOrdersState extends State<_AdminOrders> {
               color: statusColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(Icons.inventory_2_rounded, color: statusColor, size: 26),
+            child:
+                Icon(Icons.inventory_2_rounded, color: statusColor, size: 26),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1178,9 +1249,11 @@ class _AdminOrdersState extends State<_AdminOrders> {
                         color: AppTheme.textPrimary)),
                 const SizedBox(height: 4),
                 Text(farmer,
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 const SizedBox(height: 4),
-                Text(details, style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                Text(details,
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
               ],
             ),
           ),
@@ -1194,14 +1267,17 @@ class _AdminOrdersState extends State<_AdminOrders> {
                       color: AppTheme.textPrimary)),
               const SizedBox(height: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(status.toUpperCase(),
                     style: TextStyle(
-                        fontSize: 11, color: statusColor, fontWeight: FontWeight.w700)),
+                        fontSize: 11,
+                        color: statusColor,
+                        fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -1233,8 +1309,8 @@ class _AdminOrdersState extends State<_AdminOrders> {
         ),
       );
 
-  Widget _oi(String id, String c, String city, String amt, String st,
-      Color sc, String details) {
+  Widget _oi(String id, String c, String city, String amt, String st, Color sc,
+      String details) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -1242,8 +1318,7 @@ class _AdminOrdersState extends State<_AdminOrders> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
         ],
       ),
       child: Row(
@@ -1269,12 +1344,11 @@ class _AdminOrdersState extends State<_AdminOrders> {
                         color: AppTheme.textPrimary)),
                 const SizedBox(height: 4),
                 Text('$c - $city',
-                    style: TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12)),
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 const SizedBox(height: 4),
                 Text(details,
-                    style:
-                        TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11)),
               ],
             ),
           ),
@@ -1296,9 +1370,7 @@ class _AdminOrdersState extends State<_AdminOrders> {
                 ),
                 child: Text(st,
                     style: TextStyle(
-                        fontSize: 11,
-                        color: sc,
-                        fontWeight: FontWeight.w700)),
+                        fontSize: 11, color: sc, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -1330,9 +1402,13 @@ class _AdminSettings extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: firstName, decoration: const InputDecoration(labelText: 'First name')),
+              TextField(
+                  controller: firstName,
+                  decoration: const InputDecoration(labelText: 'First name')),
               const SizedBox(height: 8),
-              TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Last name')),
+              TextField(
+                  controller: lastName,
+                  decoration: const InputDecoration(labelText: 'Last name')),
               const SizedBox(height: 8),
               TextField(
                 controller: phone,
@@ -1343,8 +1419,12 @@ class _AdminSettings extends StatelessWidget {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save')),
         ],
       ),
     );
@@ -1358,13 +1438,17 @@ class _AdminSettings extends StatelessWidget {
         );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile updated'), backgroundColor: AppTheme.success),
+            const SnackBar(
+                content: Text('Profile updated'),
+                backgroundColor: AppTheme.success),
           );
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Update failed: $e'), backgroundColor: AppTheme.error),
+            SnackBar(
+                content: Text('Update failed: $e'),
+                backgroundColor: AppTheme.error),
           );
         }
       }
@@ -1417,8 +1501,7 @@ class _AdminSettings extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14)),
+                  color: Colors.white, borderRadius: BorderRadius.circular(14)),
               child: Row(
                 children: [
                   Container(
@@ -1496,7 +1579,8 @@ class _AdminSettings extends StatelessWidget {
                       () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const ContentManagementScreen()))),
+                              builder: (_) =>
+                                  const ContentManagementScreen()))),
                   _si(
                       Icons.verified_user_rounded,
                       'Dealer Verification',
@@ -1504,7 +1588,8 @@ class _AdminSettings extends StatelessWidget {
                       () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const DealerVerificationScreen()))),
+                              builder: (_) =>
+                                  const DealerVerificationScreen()))),
                   const SizedBox(height: 20),
                   Text('Security',
                       style: GoogleFonts.poppins(
@@ -1680,7 +1765,8 @@ class _AdminMiniBarChart extends CustomPainter {
         Rect.fromLTWH(left, size.height - height, barWidth, height),
         const Radius.circular(3),
       );
-      canvas.drawRRect(rect, Paint()..color = AppTheme.primary.withOpacity(0.85));
+      canvas.drawRRect(
+          rect, Paint()..color = AppTheme.primary.withOpacity(0.85));
     }
   }
 
