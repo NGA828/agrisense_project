@@ -64,6 +64,25 @@ class Product {
     };
   }
 
+  /// Full round-trippable serialization (used by the offline cache — every
+  /// field that `fromJson` reads is present).
+  Map<String, dynamic> toJson() => {
+        'id_product': idProduct,
+        'name': name,
+        'description': description,
+        'category': category,
+        'price': price,
+        'stock_quantity': stockQuantity,
+        'image': image, // already resolved absolute URL; fromJson keeps it
+        'is_available': isAvailable,
+        'dealer': dealerId,
+        'dealer_name': dealerName,
+        'dealer_email': dealerEmail,
+        'dealer_phone': dealerPhone,
+        'dealer_is_verified': dealerIsVerified,
+        'dealer_is_premium': dealerIsPremium,
+      };
+
   bool get inStock => stockQuantity > 0 && isAvailable;
   String get categoryLabel {
     switch (category) {

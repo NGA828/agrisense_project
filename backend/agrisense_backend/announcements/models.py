@@ -61,14 +61,58 @@ class Notification(models.Model):
         return f'{self.title} → {self.recipient.username}'
 
 
+def fan_out_announcement(announcement):
+    """Materialise a broadcast into per-user notifications + push them.
+
+    Creates a ``Notification`` row for every active user in the announcement's
+    target audience, so the broadcast shows in each user's in-app list and
+    unread badge, and delivers it over WS + push. (At larger scale this should
+    move to a background task — see the Phase C roadmap.)
+    """
+    from users.models import User
+    qs = User.objects.filter(is_active=True)
+    if announcement.target_audience == 'farmers':
+        qs = qs.filter(role='farmer')
+    elif announcement.target_audience == 'dealers':
+        qs = qs.filter(role='dealer')
+
+    created = 0
+    for user in qs.iterator():
+        if notify_user(user, announcement.title, announcement.content,
+                       type='system', reference_id=f'announcement:{announcement.id}'):
+            created += 1
+    return created
+
+
 def notify_user(user, title, message, type='system', reference_id=''):
-    """Create a notification for a user (no-op if user is inactive)."""
+    """Create an in-app notification for a user and deliver it in realtime.
+
+    In addition to persisting the ``Notification`` row, this pushes the
+    notification over the user's WebSocket push bus (live apps update
+    instantly) and, if push is configured, to their registered FCM/APNs
+    devices. No-op if the user is inactive.
+    """
     if not user or not user.is_active:
         return None
-    return Notification.objects.create(
+    notification = Notification.objects.create(
         recipient=user,
         title=title,
         message=message,
         type=type,
         reference_id=str(reference_id or ''),
     )
+    try:
+        from realtime.services import send_to_user, send_push_notification
+        send_to_user(user.id, 'notification', {
+            'id': notification.id,
+            'title': title,
+            'message': message,
+            'type': type,
+            'reference_id': str(reference_id or ''),
+        })
+        send_push_notification(user, title, message,
+                               data={'type': type, 'reference_id': str(reference_id or '')})
+    except Exception:
+        # Realtime/push are best-effort; never break the business operation.
+        pass
+    return notification

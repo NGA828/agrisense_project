@@ -67,6 +67,147 @@ class ApiService {
     return '$scheme://${httpUrl.replaceFirst(RegExp(r'^https?://'), '')}/ws/chat/$roomId/';
   }
 
+  /// WebSocket URL for the per-user realtime push bus (notifications, stock
+  /// updates, broadcasts). One persistent connection per app session.
+  static String pushWebSocketUrl() {
+    final httpUrl = baseUrl.replaceFirst(RegExp(r'/api$'), '');
+    final scheme = httpUrl.startsWith('https') ? 'wss' : 'ws';
+    return '$scheme://${httpUrl.replaceFirst(RegExp(r'^https?://'), '')}/ws/push/';
+  }
+
+  // ── Realtime push tokens (FCM/APNs) ─────────────────────
+  Future<void> registerPushToken({
+    required String token,
+    required String provider,
+    required String platform,
+  }) async {
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/push/register/'),
+          headers: h,
+          body: jsonEncode({
+            'token': token,
+            'provider': provider,
+            'platform': platform,
+          }),
+        ));
+    if (response.statusCode != 200) {
+      throw ApiException(_messageFrom(response, fallback: 'Failed to register push token'));
+    }
+  }
+
+  Future<void> unregisterPushToken(String token) async {
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/push/unregister/'),
+          headers: h,
+          body: jsonEncode({'token': token}),
+        ));
+    if (response.statusCode != 200) {
+      throw ApiException(_messageFrom(response, fallback: 'Failed to unregister push token'));
+    }
+  }
+
+  // ── Reviews & product reports (Phase D) ───────────────
+  Future<List<dynamic>> getReviews(int productId) async {
+    final response = await _send((h) =>
+        http.get(Uri.parse('$baseUrl/reviews/?product=$productId'), headers: h));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data is List ? data : (data['results'] ?? []);
+    }
+    throw ApiException(_messageFrom(response, fallback: 'Failed to load reviews'));
+  }
+
+  Future<void> createReview({
+    required int productId,
+    required int rating,
+    String comment = '',
+  }) async {
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/reviews/'),
+          headers: h,
+          body: jsonEncode({'product': productId, 'rating': rating, 'comment': comment}),
+        ));
+    if (response.statusCode != 201) {
+      throw ApiException(_messageFrom(response, fallback: 'Failed to submit review'));
+    }
+  }
+
+  Future<void> reportProduct({
+    required int productId,
+    required String reason,
+    String details = '',
+  }) async {
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/product_reports/'),
+          headers: h,
+          body: jsonEncode({'product': productId, 'reason': reason, 'details': details}),
+        ));
+    if (response.statusCode != 201) {
+      throw ApiException(_messageFrom(response, fallback: 'Failed to report product'));
+    }
+  }
+
+  Future<void> resolveReport(int reportId, String decision) async {
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/product_reports/$reportId/resolve/'),
+          headers: h,
+          body: jsonEncode({'decision': decision}),
+        ));
+    if (response.statusCode != 200) {
+      throw ApiException(_messageFrom(response, fallback: 'Failed to resolve report'));
+    }
+  }
+
+  Future<List<dynamic>> getProductReports({String? status}) async {
+    final query = status != null ? '?status=$status' : '';
+    final response = await _send((h) =>
+        http.get(Uri.parse('$baseUrl/product_reports/$query'), headers: h));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data is List ? data : (data['results'] ?? []);
+    }
+    throw ApiException(_messageFrom(response, fallback: 'Failed to load reports'));
+  }
+
+  // ── Audit log (admin) ─────────────────────────────────
+  Future<List<dynamic>> getAuditLogs({String? category}) async {
+    final query = category != null ? '?category=$category' : '';
+    return _fetchAllPages('/audit_logs/$query');
+  }
+
+  // ── Dealer sales analytics ────────────────────────────
+  Future<Map<String, dynamic>> getDealerAnalytics(String period) async {
+    final response = await _send((h) =>
+        http.get(Uri.parse('$baseUrl/dealers/analytics/?period=$period'), headers: h));
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw ApiException(_messageFrom(response, fallback: 'Failed to load analytics'));
+  }
+
+  // ── Phone OTP ─────────────────────────────────────────
+  Future<String?> requestOtp(String phoneNumber, String purpose) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/otp/send/'),
+      headers: _headers,
+      body: jsonEncode({'phone_number': phoneNumber, 'purpose': purpose}),
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['debug_code'] as String?;
+    }
+    throw ApiException(_messageFrom(response, fallback: 'Failed to send verification code'));
+  }
+
+  Future<void> verifyOtp(String phoneNumber, String purpose, String code) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/otp/verify/'),
+      headers: _headers,
+      body: jsonEncode({'phone_number': phoneNumber, 'purpose': purpose, 'code': code}),
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException(_messageFrom(response, fallback: 'Verification failed'));
+    }
+  }
+
   /// Low-level authenticated request with one automatic JWT refresh retry.
   Future<http.Response> _send(
     Future<http.Response> Function(Map<String, String> headers) request, {
@@ -500,15 +641,19 @@ class ApiService {
 
   // ── Weather ───────────────────────────────────────────
   Future<Map<String, dynamic>> getWeather({double? lat, double? lon, String? location}) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/weather/'),
-      headers: _headers,
-      body: jsonEncode({
-        if (lat != null) 'latitude': lat,
-        if (lon != null) 'longitude': lon,
-        if (location != null) 'location': location,
-      }),
-    ).timeout(const Duration(seconds: 15));
+    // The weather endpoint requires authentication (it is rate-limited and
+    // cached server-side). It must go through `_send` so the JWT is attached
+    // (and transparently refreshed on 401) — using `_headers` (no token) here
+    // always returns 401 and broke the app's weather widget.
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/weather/'),
+          headers: h,
+          body: jsonEncode({
+            if (lat != null) 'latitude': lat,
+            if (lon != null) 'longitude': lon,
+            if (location != null) 'location': location,
+          }),
+        )).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) return jsonDecode(response.body);
     throw ApiException(_messageFrom(response, fallback: 'Failed to load weather'));
   }
@@ -528,12 +673,80 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getHealth() async {
-    final origin = baseUrl.replaceFirst(RegExp(r'/api$'), '');
+    // The health endpoint is mounted at /api/health/. baseUrl already ends in
+    // `/api`, so append directly. (Previously this stripped `/api` and hit
+    // `/health/`, which does not exist -> always reported "Service unhealthy".)
     final response = await http
-        .get(Uri.parse('$origin/health/'))
+        .get(Uri.parse('$baseUrl/health/'))
         .timeout(const Duration(seconds: 10));
     if (response.statusCode == 200) return jsonDecode(response.body);
     throw ApiException(_messageFrom(response, fallback: 'Service unhealthy'));
+  }
+
+  // ── IoT sensors & irrigation (Phase F, innovation #2) ─
+  Future<Map<String, dynamic>> registerSensor({
+    required String deviceId,
+    required String sensorType,
+    String name = '',
+    String crop = '',
+    double? latitude,
+    double? longitude,
+  }) async {
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/sensors/'),
+          headers: h,
+          body: jsonEncode({
+            'device_id': deviceId,
+            'sensor_type': sensorType,
+            if (name.isNotEmpty) 'name': name,
+            if (crop.isNotEmpty) 'crop': crop,
+            if (latitude != null) 'latitude': latitude,
+            if (longitude != null) 'longitude': longitude,
+          }),
+        ));
+    if (response.statusCode == 201) return jsonDecode(response.body);
+    throw ApiException(_messageFrom(response, fallback: 'Failed to register sensor'));
+  }
+
+  Future<void> ingestReading(int sensorId, double value, {String? unit}) async {
+    final response = await _send((h) => http.post(
+          Uri.parse('$baseUrl/sensors/$sensorId/ingest/'),
+          headers: h,
+          body: jsonEncode({'value': value, if (unit != null) 'unit': unit}),
+        ));
+    if (response.statusCode != 201) {
+      throw ApiException(_messageFrom(response, fallback: 'Failed to send reading'));
+    }
+  }
+
+  Future<Map<String, dynamic>> getIrrigationAdvice(int sensorId, {String? crop}) async {
+    final query = crop != null ? '?crop=$crop' : '';
+    final response = await _send((h) =>
+        http.get(Uri.parse('$baseUrl/sensors/$sensorId/irrigation_advice/$query'), headers: h));
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw ApiException(_messageFrom(response, fallback: 'Failed to load irrigation advice'));
+  }
+
+  Future<List<dynamic>> getMySensors() async {
+    final response = await _send((h) => http.get(Uri.parse('$baseUrl/sensors/'), headers: h));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data is List ? data : (data['results'] ?? []);
+    }
+    throw ApiException(_messageFrom(response, fallback: 'Failed to load sensors'));
+  }
+
+  // ── Outbreak alerts (Phase F, innovation #4) ──────────
+  Future<Map<String, dynamic>> getOutbreaks({String? status, String? q}) async {
+    final params = <String, String>{
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (q != null && q.isNotEmpty) 'q': q,
+    };
+    final uri = Uri.parse('$baseUrl/admin/outbreaks/')
+        .replace(queryParameters: params.isEmpty ? null : params);
+    final response = await _send((h) => http.get(uri, headers: h));
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw ApiException(_messageFrom(response, fallback: 'Failed to load outbreaks'));
   }
 
   /// Fetch a paginated endpoint page by page until every record is collected.

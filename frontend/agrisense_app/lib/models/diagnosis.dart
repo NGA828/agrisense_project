@@ -11,6 +11,8 @@ class Diagnosis {
   final String severity;
   final String causes;
   final String prevention;
+  final bool isHealthy;
+  final bool isInconclusive;
   final DateTime createdAt;
   final Location? location;
   final TreatmentPlan? treatmentPlan;
@@ -26,6 +28,8 @@ class Diagnosis {
     required this.severity,
     required this.causes,
     required this.prevention,
+    this.isHealthy = false,
+    this.isInconclusive = false,
     required this.createdAt,
     this.location,
     this.treatmentPlan,
@@ -43,6 +47,8 @@ class Diagnosis {
       severity: json['severity'],
       causes: json['causes'],
       prevention: json['prevention'],
+      isHealthy: json['is_healthy'] ?? false,
+      isInconclusive: json['is_inconclusive'] ?? false,
       createdAt: DateTime.parse(json['created_at']),
       location: json['location_data'] != null 
           ? Location.fromJson(json['location_data']) 
@@ -52,6 +58,24 @@ class Diagnosis {
           : null,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'user_email': userEmail,
+        'crop_type': cropType,
+        'image': imageUrl, // already resolved absolute URL; fromJson keeps it
+        'symptoms': symptoms,
+        'confidence': confidence,
+        'disease_name': diseaseName,
+        'severity': severity,
+        'causes': causes,
+        'prevention': prevention,
+        'is_healthy': isHealthy,
+        'is_inconclusive': isInconclusive,
+        'created_at': createdAt.toIso8601String(),
+        'location_data': location?.toJson(),
+        'treatment_plan': treatmentPlan?.toJson(),
+      };
 }
 
 class Location {
@@ -78,6 +102,14 @@ class Location {
       climateZone: json['climate_zone'],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'longitude': longitude,
+        'latitude': latitude,
+        'address': address,
+        'climate_zone': climateZone,
+      };
 }
 
 class TreatmentPlan {
@@ -110,4 +142,14 @@ class TreatmentPlan {
       status: json['status'],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'treatment_type': treatmentType,
+        'medication': medication,
+        'instructions': instructions,
+        'duration': duration,
+        'follow_up_date': followUpDate.toIso8601String(),
+        'status': status,
+      };
 }

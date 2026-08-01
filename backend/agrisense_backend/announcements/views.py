@@ -27,7 +27,16 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if self.request.user.role != 'admin':
             raise PermissionDenied('Only admins can create announcements')
-        serializer.save(created_by=self.request.user)
+        instance = serializer.save(created_by=self.request.user)
+        # An announcement created as active is broadcast immediately.
+        if instance.is_active:
+            from .tasks import fan_out_announcement_task
+            fan_out_announcement_task.delay(instance.id)
+        from auditlog.services import log_action
+        log_action(self.request.user, 'create_announcement', category='content',
+                   target_type='announcement', target_id=instance.id,
+                   description=f'Created broadcast "{instance.title}" → {instance.target_audience}',
+                   request=self.request)
 
     def perform_update(self, serializer):
         if self.request.user.role != 'admin':
@@ -48,12 +57,18 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def toggle_active(self, request, pk=None):
-        """Admin toggles announcement visibility (enable/disable broadcast)."""
+        """Admin toggles announcement visibility (enable/disable broadcast).
+
+        Activating an announcement broadcasts it to the target audience.
+        """
         if request.user.role != 'admin':
             return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
         announcement = self.get_object()
         announcement.is_active = not announcement.is_active
         announcement.save(update_fields=['is_active'])
+        if announcement.is_active:
+            from .tasks import fan_out_announcement_task
+            fan_out_announcement_task.delay(announcement.id)
         return Response({'is_active': announcement.is_active})
 
 

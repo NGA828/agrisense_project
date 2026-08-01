@@ -16,6 +16,8 @@ import 'content_management_screen.dart';
 import 'dealer_verification_screen.dart';
 import 'notifications_screen.dart';
 import 'system_health_screen.dart';
+import 'audit_log_screen.dart';
+import 'outbreaks_screen.dart';
 
 /// AgriSense admin console.
 ///
@@ -54,6 +56,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       102 => const ContentManagementScreen(),
       103 => const NotificationsScreen(),
       104 => const SystemHealthScreen(),
+      105 => const AuditLogScreen(),
       _ => const AnalyticsScreen(),
     };
     Navigator.of(context).push(
@@ -1713,6 +1716,20 @@ class _AdminSettings extends StatelessWidget {
                     'Broadcast Center',
                     'Compose and manage announcements',
                     const NotificationsScreen(),
+                  ),
+                  _navTile(
+                    context,
+                    Icons.receipt_long_rounded,
+                    'Audit Log',
+                    'Immutable record of admin actions',
+                    const AuditLogScreen(),
+                  ),
+                  _navTile(
+                    context,
+                    Icons.warning_amber_rounded,
+                    'Outbreak Alerts',
+                    'Growing disease clusters detected',
+                    const OutbreaksScreen(),
                   ),
                   const SizedBox(height: 20),
                   Text('Security', style: AdminTheme.sectionTitle()),
