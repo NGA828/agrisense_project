@@ -20,17 +20,7 @@ import 'farmer_widgets.dart';
 import 'order_history_screen.dart';
 
 /// Farmer home — the command center of the app.
-///
-/// Information hierarchy (top → bottom):
-///   1. Header          brand, notification bell, avatar → profile
-///   2. Greeting        time-aware greeting + today's date
-///   3. Weather card    live conditions → full weather screen
-///   4. Farm snapshot   key metrics at a glance (scans / orders / chats)
-///   5. Quick scan hero primary CTA → AI plant doctor
-///   6. Quick access    2×2 grid: Weather · Market · Chat · History
-///   7. Announcement    latest broadcast
-///   8. Recent scans    latest diagnoses with thumbnails
-///   9. Daily tip       rotating farming advice
+/// Redesigned with premium UI/UX following reference screen patterns.
 class FarmerHomeScreen extends StatefulWidget {
   /// Called when the header avatar is tapped (switches to the Profile tab).
   final VoidCallback? onOpenProfile;
@@ -41,15 +31,35 @@ class FarmerHomeScreen extends StatefulWidget {
   State<FarmerHomeScreen> createState() => _FarmerHomeScreenState();
 }
 
-class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
+class _FarmerHomeScreenState extends State<FarmerHomeScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeSlideAnimation;
+
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeSlideAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    );
+    _animationController.forward();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<WeatherProvider>().loadWeather();
       context.read<DiagnosisProvider>().loadHistory();
       context.read<AnnouncementProvider>().loadAnnouncements();
     });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -72,117 +82,160 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
             context.read<DiagnosisProvider>().loadHistory();
             context.read<AnnouncementProvider>().loadAnnouncements();
           },
-          child: ListView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.zero,
-            children: [
-              _buildHeader(user),
-              _buildGreeting(user),
-              const SizedBox(height: 16),
-              _buildWeatherMiniCard(weather),
-              const SizedBox(height: 20),
-              _buildFarmSnapshot(),
-              const SizedBox(height: 20),
-              _buildQuickScanHero(),
-              const SizedBox(height: 24),
-              _buildQuickAccessSection(),
-              if (announcementProvider.announcements.isNotEmpty) ...[
+          child: AnimatedBuilder(
+            animation: _fadeSlideAnimation,
+            builder: (context, child) {
+              return Opacity(
+                opacity: _fadeSlideAnimation.value,
+                child: Transform.translate(
+                  offset: Offset(0, 20 * (1 - _fadeSlideAnimation.value)),
+                  child: child,
+                ),
+              );
+            },
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.zero,
+              children: [
+                _buildHeader(user),
+                _buildGreeting(user),
+                const SizedBox(height: 20),
+                _buildWeatherMiniCard(weather),
                 const SizedBox(height: 24),
-                _buildAnnouncementBanner(
-                    announcementProvider.announcements.first),
-              ],
-              if (diagnosisProvider.history.isNotEmpty) ...[
+                _buildFarmSnapshot(),
                 const SizedBox(height: 24),
-                _buildRecentDiagnosis(diagnosisProvider),
+                _buildQuickScanHero(),
+                const SizedBox(height: 28),
+                _buildQuickAccessSection(),
+                if (announcementProvider.announcements.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  _buildAnnouncementBanner(
+                      announcementProvider.announcements.first),
+                ],
+                if (diagnosisProvider.history.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  _buildRecentDiagnosis(diagnosisProvider),
+                ],
+                const SizedBox(height: 24),
+                _buildDailyTip(),
+                const SizedBox(height: 100),
               ],
-              const SizedBox(height: 24),
-              _buildDailyTip(),
-              const SizedBox(height: 32),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // ── Header ──────────────────────────────────────────────────────────
+  // ── Premium Header ─────────────────────────────────────────────────────
   Widget _buildHeader(user) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
         children: [
+          // Menu button
           Builder(
             builder: (context) => GestureDetector(
               onTap: () => Scaffold.of(context).openDrawer(),
               child: Container(
-                width: 42,
-                height: 42,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [AppTheme.primary, AppTheme.primaryLight],
                   ),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.25),
+                      color: AppTheme.primary.withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: const Icon(Icons.menu_rounded,
-                    color: Colors.white, size: 22),
+                child: const Icon(Icons.menu_rounded, color: Colors.white, size: 24),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Brand logo
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.primary, AppTheme.primaryLight],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.eco_rounded, color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'AgriSense AI',
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primaryDark,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      Text(
+                        'Smart Farming',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: AppTheme.textMuted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AgriSense AI',
-                  style: GoogleFonts.poppins(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.primaryDark,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                Text(
-                  'Smart Farming Assistant',
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    color: AppTheme.textMuted,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.3,
-                  ),
+          // Notification bell
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
-          ),
-          // Notification bell (live unread badge)
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
             child: const Center(
-              child: NotificationBell(color: AppTheme.primary, size: 20),
+              child: NotificationBell(color: AppTheme.primary, size: 22),
             ),
           ),
           const SizedBox(width: 8),
-          // Avatar → profile tab
+          // Avatar
           GestureDetector(
             onTap: widget.onOpenProfile,
             child: FarmerAvatar(
               photoUrl: user?.profilePhoto,
               name: user?.fullName,
-              radius: 20,
+              radius: 22,
             ),
           ),
         ],
@@ -190,51 +243,89 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     );
   }
 
-  // ── Greeting ────────────────────────────────────────────────────────
+  // ── Time-aware Greeting ──────────────────────────────────────────────
   Widget _buildGreeting(user) {
     final hour = DateTime.now().hour;
     final String greeting;
+    final String emoji;
     if (hour < 12) {
       greeting = 'Good morning';
+      emoji = '🌅';
     } else if (hour < 17) {
       greeting = 'Good afternoon';
+      emoji = '☀️';
     } else {
       greeting = 'Good evening';
+      emoji = '🌙';
     }
     final name = (user?.firstName?.isNotEmpty ?? false)
         ? user!.firstName
         : (user?.username ?? 'Farmer');
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            '$greeting, $name 👋',
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.textPrimary,
-              letterSpacing: -0.3,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$greeting,',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: AppTheme.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  name,
+                  style: GoogleFonts.poppins(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_today_rounded,
+                          size: 12, color: AppTheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        DateFormat('EEEE, MMMM d').format(DateTime.now()),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            DateFormat('EEEE, MMMM d').format(DateTime.now()),
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: AppTheme.textMuted,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text(emoji, style: const TextStyle(fontSize: 36)),
         ],
       ),
     );
   }
 
-  // ── Weather mini-card ───────────────────────────────────────────────
+  // ── Premium Weather Card ───────────────────────────────────────────────
   Widget _buildWeatherMiniCard(weather) {
+    final isGood = weather?.condition?.toLowerCase().contains('sun') ?? true;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: GestureDetector(
@@ -244,98 +335,122 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         ),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB), Color(0xFFE1F5FE)],
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isGood
+                  ? [const Color(0xFFE3F2FD), const Color(0xFFBBDEFB)]
+                  : [const Color(0xFFE8EAF6), const Color(0xFFC5CAE9)],
             ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: const Color(0xFF90CAF9).withValues(alpha: 0.4),
-            ),
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: (isGood ? Colors.blue : Colors.indigo).withValues(alpha: 0.2),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              // Weather icon
+              // Weather icon with glow
               Container(
-                width: 46,
-                height: 46,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(14),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isGood ? Colors.orange : Colors.indigo).withValues(alpha: 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: const Icon(
-                  Icons.wb_sunny_rounded,
-                  color: Color(0xFFFF9800),
-                  size: 26,
+                child: Icon(
+                  isGood ? Icons.wb_sunny_rounded : Icons.cloud_rounded,
+                  color: isGood ? const Color(0xFFFF9800) : const Color(0xFF5C6BC0),
+                  size: 34,
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      weather != null ? '${weather.temperature}°C' : '28°C',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1565C0),
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          weather != null ? '${weather.temperature}°C' : '28°C',
+                          style: GoogleFonts.poppins(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: isGood ? const Color(0xFF1565C0) : const Color(0xFF303F9F),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: (isGood ? Colors.green : Colors.orange).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isGood ? Icons.thumb_up_rounded : Icons.warning_rounded,
+                                size: 12,
+                                color: isGood ? Colors.green : Colors.orange,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isGood ? 'Good' : 'Fair',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: isGood ? Colors.green : Colors.orange,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       weather != null ? weather.condition : 'Partly Cloudy',
                       style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: const Color(0xFF42A5F5),
+                        fontSize: 13,
+                        color: isGood ? const Color(0xFF42A5F5) : const Color(0xFF5C6BC0),
                         fontWeight: FontWeight.w500,
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        _weatherChip(Icons.water_drop_rounded,
+                            weather != null ? '${weather.humidity}%' : '65%'),
+                        const SizedBox(width: 8),
+                        _weatherChip(Icons.air_rounded,
+                            weather != null ? '${weather.windSpeed} km/h' : '12 km/h'),
+                      ],
                     ),
                   ],
                 ),
               ),
-              // Mini stats
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.water_drop_rounded,
-                          size: 14, color: Color(0xFF42A5F5)),
-                      const SizedBox(width: 4),
-                      Text(
-                        weather != null ? '${weather.humidity}%' : '65%',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1565C0),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.air_rounded,
-                          size: 14, color: Color(0xFF42A5F5)),
-                      const SizedBox(width: 4),
-                      Text(
-                        weather != null ? '${weather.windSpeed} km/h' : '12 km/h',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1565C0),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.chevron_right_rounded,
+                    color: Color(0xFF42A5F5), size: 24),
               ),
-              const SizedBox(width: 6),
-              const Icon(Icons.chevron_right_rounded,
-                  color: Color(0xFF42A5F5), size: 22),
             ],
           ),
         ),
@@ -343,22 +458,81 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     );
   }
 
-  // ── Farm snapshot: key metrics at a glance ──────────────────────────
+  Widget _weatherChip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFF42A5F5)),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF1565C0),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Farm snapshot: key metrics ──────────────────────────────────────
   Widget _buildFarmSnapshot() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Your farm at a glance', style: FarmerTheme.sectionTitle()),
-          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Your farm at a glance', style: FarmerTheme.sectionTitle()),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.success,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Live',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.success,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           const _FarmSnapshot(),
         ],
       ),
     );
   }
 
-  // ── Quick scan hero ─────────────────────────────────────────────────
+  // ── Premium Quick Scan Hero ───────────────────────────────────────────
   Widget _buildQuickScanHero() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -369,35 +543,37 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         ),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
+                Color(0xFF0D3B0F),
                 Color(0xFF1B5E20),
                 Color(0xFF2E7D32),
                 Color(0xFF43A047),
-                Color(0xFF66BB6A),
               ],
+              stops: [0.0, 0.3, 0.6, 1.0],
             ),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF2E7D32).withValues(alpha: 0.35),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+                color: const Color(0xFF2E7D32).withValues(alpha: 0.4),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
               ),
             ],
           ),
           child: Stack(
             children: [
+              // Decorative elements
               Positioned(
-                top: -20,
-                right: -20,
+                top: -30,
+                right: -30,
                 child: Container(
-                  width: 100,
-                  height: 100,
+                  width: 120,
+                  height: 120,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white.withValues(alpha: 0.06),
@@ -405,85 +581,88 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                 ),
               ),
               Positioned(
-                bottom: -30,
-                left: -10,
+                bottom: -40,
+                left: -20,
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white.withValues(alpha: 0.04),
                   ),
                 ),
               ),
+              // Content
               Row(
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // AI badge
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(999),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                width: 6,
-                                height: 6,
+                                width: 8,
+                                height: 8,
                                 decoration: const BoxDecoration(
                                   color: Color(0xFF76FF03),
                                   shape: BoxShape.circle,
                                 ),
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 8),
                               Text(
-                                'AI Powered',
+                                'AI Powered Detection',
                                 style: GoogleFonts.poppins(
-                                  color: Colors.white.withValues(alpha: 0.9),
+                                  color: Colors.white.withValues(alpha: 0.95),
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 16),
                         Text(
                           'Scan Your Crop',
                           style: GoogleFonts.poppins(
                             color: Colors.white,
-                            fontSize: 22,
+                            fontSize: 26,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.5,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         Text(
                           'Detect diseases instantly and get\nAI-powered treatment plans',
                           style: GoogleFonts.poppins(
                             color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 12,
+                            fontSize: 13,
                             height: 1.5,
                             fontWeight: FontWeight.w400,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
+                        // CTA Button
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 10),
+                              horizontal: 20, vertical: 12),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),
@@ -491,26 +670,30 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.camera_alt_rounded,
-                                  color: AppTheme.primary, size: 18),
-                              const SizedBox(width: 8),
+                                  color: AppTheme.primary, size: 20),
+                              const SizedBox(width: 10),
                               Text(
                                 'Start Scanning',
                                 style: GoogleFonts.poppins(
                                   color: AppTheme.primary,
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward_rounded,
+                                  color: AppTheme.primary, size: 18),
                             ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 16),
+                  // Camera icon
                   Container(
-                    width: 72,
-                    height: 72,
+                    width: 90,
+                    height: 90,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
@@ -520,23 +703,23 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                       ),
                     ),
                     child: Container(
-                      width: 56,
-                      height: 56,
-                      margin: const EdgeInsets.all(8),
+                      width: 70,
+                      height: 70,
+                      margin: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 12,
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 16,
                           ),
                         ],
                       ),
                       child: Icon(
                         Icons.camera_alt_rounded,
                         color: AppTheme.primary,
-                        size: 28,
+                        size: 34,
                       ),
                     ),
                   ),
@@ -549,7 +732,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     );
   }
 
-  // ── Quick access 2×2 grid ───────────────────────────────────────────
+  // ── Quick Access Grid ────────────────────────────────────────────────
   Widget _buildQuickAccessSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -557,59 +740,69 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Quick Access', style: FarmerTheme.sectionTitle()),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          // First row
           Row(
             children: [
-              _quickTile(
-                title: 'Weather',
-                subtitle: 'Forecast & farm advice',
-                icon: Icons.wb_cloudy_rounded,
-                color: FarmerTheme.sky,
-                bg: const Color(0xFFE3F2FD),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const WeatherScreen()),
+              Expanded(
+                child: _quickTile(
+                  title: 'Weather',
+                  subtitle: 'Forecast & advice',
+                  icon: Icons.wb_cloudy_rounded,
+                  color: const Color(0xFF0288D1),
+                  bg: const Color(0xFFE3F2FD),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const WeatherScreen()),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              _quickTile(
-                title: 'Marketplace',
-                subtitle: 'Shop inputs',
-                icon: Icons.shopping_bag_rounded,
-                color: FarmerTheme.sun,
-                bg: const Color(0xFFFFF3E0),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MarketplaceScreen()),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _quickTile(
+                  title: 'Marketplace',
+                  subtitle: 'Shop inputs',
+                  icon: Icons.shopping_bag_rounded,
+                  color: const Color(0xFFFF8F00),
+                  bg: const Color(0xFFFFF3E0),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const MarketplaceScreen()),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          // Second row
           Row(
             children: [
-              _quickTile(
-                title: 'Chat',
-                subtitle: 'Talk to dealers',
-                icon: Icons.chat_rounded,
-                color: FarmerTheme.grape,
-                bg: const Color(0xFFF3E5F5),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ChatListScreen()),
+              Expanded(
+                child: _quickTile(
+                  title: 'Chat',
+                  subtitle: 'Talk to dealers',
+                  icon: Icons.chat_rounded,
+                  color: const Color(0xFF7B1FA2),
+                  bg: const Color(0xFFF3E5F5),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ChatListScreen()),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              _quickTile(
-                title: 'History',
-                subtitle: 'Past diagnoses',
-                icon: Icons.history_rounded,
-                color: AppTheme.primary,
-                bg: const Color(0xFFE8F5E9),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const DiagnosisHistoryScreen()),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _quickTile(
+                  title: 'History',
+                  subtitle: 'Past diagnoses',
+                  icon: Icons.history_rounded,
+                  color: AppTheme.primary,
+                  bg: const Color(0xFFE8F5E9),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DiagnosisHistoryScreen()),
+                  ),
                 ),
               ),
             ],
@@ -627,69 +820,72 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     required Color bg,
     required VoidCallback onTap,
   }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withValues(alpha: 0.2)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(13),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.15),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: color, size: 22),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.15)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13.5,
-                        color: AppTheme.textPrimary,
-                      ),
+              child: Icon(icon, color: color, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppTheme.textPrimary,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 10.5,
-                        color: color,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 11.5,
+                      color: color,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ── Announcement banner ─────────────────────────────────────────────
+  // ── Announcement Banner ────────────────────────────────────────────────
   Widget _buildAnnouncementBanner(announcement) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -702,24 +898,31 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
             end: Alignment.centerRight,
             colors: [Color(0xFFFFF8E1), Color(0xFFFFECB3)],
           ),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: const Color(0xFFFFB300).withValues(alpha: 0.3),
           ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFFB300).withValues(alpha: 0.15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
                 color: const Color(0xFFFFB300).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(
                 Icons.campaign_rounded,
                 color: Color(0xFFFF8F00),
-                size: 24,
+                size: 26,
               ),
             ),
             const SizedBox(width: 14),
@@ -727,20 +930,32 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Announcement',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: const Color(0xFFE65100),
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE65100).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Announcement',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                            color: const Color(0xFFE65100),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 6),
                   Text(
                     announcement.title ?? 'New update available!',
                     style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
                       color: const Color(0xFF795548),
                       height: 1.3,
                     ),
@@ -751,15 +966,23 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.chevron_right_rounded,
-                color: Color(0xFFFF8F00), size: 22),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.chevron_right_rounded,
+                  color: Color(0xFFFF8F00), size: 22),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ── Recent diagnoses ────────────────────────────────────────────────
+  // ── Recent Diagnoses ─────────────────────────────────────────────────
   Widget _buildRecentDiagnosis(DiagnosisProvider provider) {
     final history = provider.history;
     return Padding(
@@ -780,16 +1003,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('View All',
-                      style: TextStyle(
+                      style: GoogleFonts.poppins(
                           color: AppTheme.primary,
                           fontWeight: FontWeight.w600,
                           fontSize: 13)),
-                  SizedBox(width: 2),
-                  Icon(Icons.arrow_forward_rounded,
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_rounded,
                       color: AppTheme.primary, size: 16),
                 ],
               ),
@@ -810,17 +1033,27 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         MaterialPageRoute(builder: (_) => DiagnosisResultScreen(diagnosis: d)),
       ),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: FarmerTheme.cardDecoration,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
         child: Row(
           children: [
             // Crop photo thumbnail
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               child: Container(
-                width: 56,
-                height: 56,
+                width: 60,
+                height: 60,
                 color: AppTheme.primary.withValues(alpha: 0.08),
                 child: d.imageUrl.isNotEmpty
                     ? Image.network(
@@ -829,10 +1062,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                         errorBuilder: (_, __, ___) => const Icon(
                             Icons.eco_rounded,
                             color: AppTheme.primary,
-                            size: 26),
+                            size: 28),
                       )
                     : const Icon(Icons.eco_rounded,
-                        color: AppTheme.primary, size: 26),
+                        color: AppTheme.primary, size: 28),
               ),
             ),
             const SizedBox(width: 14),
@@ -843,34 +1076,51 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                   Text(
                     d.diseaseName,
                     style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                         color: AppTheme.textPrimary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${d.cropType} · ${_timeAgo(d.createdAt)}',
-                    style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 11.5),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        d.cropType,
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 12),
+                      ),
+                      Container(
+                        width: 4,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(horizontal: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.textMuted,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Text(
+                        _timeAgo(d.createdAt),
+                        style: const TextStyle(
+                            color: AppTheme.textMuted, fontSize: 12),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '${d.confidence.toInt()}%',
                 style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
                   color: color,
                 ),
               ),
@@ -881,7 +1131,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     );
   }
 
-  // ── Daily farming tip ───────────────────────────────────────────────
+  // ── Daily Farming Tip ────────────────────────────────────────────────
   Widget _buildDailyTip() {
     final tips = [
       {
@@ -910,36 +1160,43 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
       },
     ];
 
-    final tip = tips[DateTime.now().millisecond % tips.length];
+    final tip = tips[DateTime.now().day % tips.length];
     final accent = tip['accentColor'] as Color;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: tip['bgColor'] as Color,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: accent.withValues(alpha: 0.15)),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: (tip['iconColor'] as Color).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
               ),
               child: Icon(
                 tip['icon'] as IconData,
                 color: tip['iconColor'] as Color,
-                size: 24,
+                size: 28,
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -949,22 +1206,37 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                       Text(
                         tip['title'] as String,
                         style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
                           color: accent,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      FarmerPill(label: 'Daily', color: accent),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Daily',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: accent,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Text(
                     tip['tip'] as String,
                     style: GoogleFonts.poppins(
                       color: AppTheme.textSecondary,
-                      fontSize: 12,
-                      height: 1.5,
+                      fontSize: 13,
+                      height: 1.6,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -1044,23 +1316,23 @@ class _FarmSnapshotState extends State<_FarmSnapshot> {
             footnote: 'Diagnoses done',
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 14),
         Expanded(
           child: FarmerStatCard(
             value: '$_orders',
             label: 'Orders',
             icon: Icons.shopping_bag_rounded,
-            color: FarmerTheme.sun,
+            color: const Color(0xFFFF8F00),
             footnote: 'Purchases made',
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 14),
         Expanded(
           child: FarmerStatCard(
             value: '$_chats',
             label: 'Chats',
             icon: Icons.chat_rounded,
-            color: FarmerTheme.grape,
+            color: const Color(0xFF7B1FA2),
             footnote: 'Dealer talks',
           ),
         ),

@@ -74,7 +74,7 @@ class StartupGate extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
 
     if (auth.isRestoring) {
-      return const _SplashScreen();
+      return const AgriSenseSplashScreen();
     }
 
     final user = auth.currentUser;
@@ -92,65 +92,271 @@ class StartupGate extends StatelessWidget {
   }
 }
 
-class _SplashScreen extends StatefulWidget {
-  const _SplashScreen();
+/// Premium Splash Screen with animated logo and gradient background
+class AgriSenseSplashScreen extends StatefulWidget {
+  const AgriSenseSplashScreen({super.key});
 
   @override
-  State<_SplashScreen> createState() => _SplashScreenState();
+  State<AgriSenseSplashScreen> createState() => _AgriSenseSplashScreenState();
 }
 
-class _SplashScreenState extends State<_SplashScreen> {
+class _AgriSenseSplashScreenState extends State<AgriSenseSplashScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _pulseAnimation;
+
   @override
   void initState() {
     super.initState();
-    // Restore the persisted session exactly once.
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
+      ),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.3, 0.8, curve: Curves.easeIn),
+      ),
+    );
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.6, 1.0, curve: Curves.easeInOut),
+      ),
+    );
+
+    _controller.forward();
+
+    // Restore session after animation starts
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AuthProvider>().restoreSession();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          context.read<AuthProvider>().restoreSession();
+        }
+      });
     });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.primaryDark,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF0D3B0F),
+              Color(0xFF1B5E20),
+              Color(0xFF2E7D32),
+              Color(0xFF43A047),
+            ],
+            stops: [0.0, 0.3, 0.6, 1.0],
+          ),
+        ),
+        child: Stack(
           children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(28),
-              ),
-              child: const Icon(Icons.eco_rounded, color: Colors.white, size: 52),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'AgriSense AI',
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Smart Farming · Better Tomorrow',
-              style: GoogleFonts.poppins(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 13,
+            // Background ambient glow effects
+            Positioned(
+              top: -100,
+              left: -100,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.15),
+                      Colors.white.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 40),
-            const SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 3,
+            Positioned(
+              bottom: -150,
+              right: -100,
+              child: Container(
+                width: 400,
+                height: 400,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.1),
+                      Colors.white.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Main content
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Animated logo container
+                  AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: _scaleAnimation.value,
+                        child: Container(
+                          width: 140,
+                          height: 140,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(36),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 30,
+                                offset: const Offset(0, 15),
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
+                                blurRadius: 50,
+                                offset: const Offset(0, 25),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(36),
+                            child: Image.asset(
+                              'assets/app_icon/agrisense_icon.png',
+                              width: 140,
+                              height: 140,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Icon(
+                                    Icons.eco_rounded,
+                                    size: 72,
+                                    color: AppTheme.primary,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  // App name with animation
+                  AnimatedBuilder(
+                    animation: _fadeAnimation,
+                    builder: (context, child) {
+                      return Opacity(
+                        opacity: _fadeAnimation.value,
+                        child: Column(
+                          children: [
+                            Text(
+                              'AgriSense AI',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.5,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: Text(
+                                'Smart Farming · Better Tomorrow',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 60),
+                  // Loading indicator
+                  AnimatedBuilder(
+                    animation: _fadeAnimation,
+                    builder: (context, child) {
+                      return Opacity(
+                        opacity: _fadeAnimation.value,
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: CircularProgressIndicator(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                strokeWidth: 3,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Loading your farm...',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            // Version info at bottom
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  'Version 1.0.0',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 11,
+                  ),
+                ),
               ),
             ),
           ],
