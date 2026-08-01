@@ -47,10 +47,17 @@ class ApiService {
   }
 
   /// Absolute URL for media paths returned by the API (which may be relative).
+  ///
+  /// The backend returns relative media paths (e.g. `profile_photos/abc.png`),
+  /// so we prefix them with the client's own configured base URL. This keeps
+  /// images working on emulators, physical devices and behind reverse proxies
+  /// regardless of the Host header the server saw. Absolute URLs are returned
+  /// unchanged.
   static String resolveMedia(String? path) {
     if (path == null || path.isEmpty) return '';
     if (path.startsWith('http')) return path;
-    return '$mediaUrl$path';
+    final normalized = path.startsWith('/') ? path : '/$path';
+    return '$mediaUrl$normalized';
   }
 
   /// WebSocket URL for a chat room (wss in production, ws otherwise).
@@ -284,6 +291,7 @@ class ApiService {
     required double price,
     required int stockQuantity,
     File? imageFile,
+    bool isAvailable = true,
   }) async {
     if (imageFile != null) {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/products/'));
@@ -294,6 +302,7 @@ class ApiService {
       request.fields['category'] = category;
       request.fields['price'] = price.toString();
       request.fields['stock_quantity'] = stockQuantity.toString();
+      request.fields['is_available'] = isAvailable.toString();
       request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
       final streamed = await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
@@ -309,6 +318,7 @@ class ApiService {
               'category': category,
               'price': price,
               'stock_quantity': stockQuantity,
+              'is_available': isAvailable,
             }),
           ));
       if (response.statusCode == 201) return jsonDecode(response.body);
@@ -324,6 +334,7 @@ class ApiService {
     required double price,
     required int stockQuantity,
     File? imageFile,
+    bool? isAvailable,
   }) async {
     if (imageFile != null) {
       var request = http.MultipartRequest('PUT', Uri.parse('$baseUrl/products/$productId/'));
@@ -334,6 +345,7 @@ class ApiService {
       request.fields['category'] = category;
       request.fields['price'] = price.toString();
       request.fields['stock_quantity'] = stockQuantity.toString();
+      if (isAvailable != null) request.fields['is_available'] = isAvailable.toString();
       request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
       final streamed = await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
@@ -349,6 +361,7 @@ class ApiService {
               'category': category,
               'price': price,
               'stock_quantity': stockQuantity,
+              if (isAvailable != null) 'is_available': isAvailable,
             }),
           ));
       if (response.statusCode == 200) return jsonDecode(response.body);
@@ -384,12 +397,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getOrders() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/orders/'), headers: h));
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data is List ? data : (data['results'] ?? []);
-    }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load orders'));
+    return _fetchAllPages('/orders/');
   }
 
   Future<Map<String, dynamic>> updateOrderStatus(int orderId, String status) async {
@@ -528,13 +536,32 @@ class ApiService {
     throw ApiException(_messageFrom(response, fallback: 'Service unhealthy'));
   }
 
-  Future<List<dynamic>> getUsers() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/users/'), headers: h));
-    if (response.statusCode == 200) {
+  /// Fetch a paginated endpoint page by page until every record is collected.
+  /// The admin console needs the full dataset (users, orders, ...), not just
+  /// the first PAGE_SIZE=20 results.
+  Future<List<dynamic>> _fetchAllPages(String path) async {
+    final results = <dynamic>[];
+    var page = 1;
+    while (true) {
+      final sep = path.contains('?') ? '&' : '?';
+      final response = await _send(
+          (h) => http.get(Uri.parse('$baseUrl$path${sep}page=$page'), headers: h));
+      if (response.statusCode != 200) {
+        throw ApiException(
+            _messageFrom(response, fallback: 'Failed to load data'));
+      }
       final data = jsonDecode(response.body);
-      return data is List ? data : (data['results'] ?? []);
+      if (data is List) return data;
+      results.addAll(data['results'] ?? []);
+      final next = data['next'];
+      if (next == null || next is! String || next.isEmpty) break;
+      page++;
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load users'));
+    return results;
+  }
+
+  Future<List<dynamic>> getUsers() async {
+    return _fetchAllPages('/users/');
   }
 
   Future<void> suspendUser(int userId) async {
@@ -700,13 +727,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getAllAnnouncements() async {
-    final response = await _send((h) =>
-        http.get(Uri.parse('$baseUrl/announcements/'), headers: h));
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data is List ? data : (data['results'] ?? []);
-    }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load announcements'));
+    return _fetchAllPages('/announcements/');
   }
 
   Future<void> createAnnouncement({

@@ -196,11 +196,12 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 ```bash
 cd backend/agrisense_backend
 DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3 python manage.py test
-# 77 tests: auth/RBAC, JWT rotation, orders/stock, payments, chat permissions,
-# disease-DB authorization, AI determinism, analytics aggregation, health checks
+# 88 tests: auth/RBAC, JWT rotation, orders/stock, payments, chat permissions,
+# disease-DB authorization, AI determinism, analytics aggregation, health checks,
+# profile-photo uploads (PATCH /users/me/), multipart product booleans, media URLs
 ```
 
-See `docs/ARCHITECTURE_ANALYSIS.md` for the full architecture & gap analysis and `docs/DEPLOYMENT.md` for production deployment (Docker, daphne, Redis channel layer, payment/weather keys).
+See `docs/ARCHITECTURE_ANALYSIS.md` for the full architecture & gap analysis, `docs/DEPLOYMENT.md` for production deployment (Docker, daphne, Redis channel layer, payment/weather keys), `docs/ADMIN_DASHBOARD_REDESIGN.md` for the admin-console UI/UX overhaul plus the image-upload debugging guide & fixes, `docs/FARMER_DASHBOARD_REDESIGN.md` for the farmer experience redesign, and `docs/DEALER_DASHBOARD_REDESIGN.md` for the dealer-console redesign strategy (workflows, data visualization and usability).
 
 ## Project structure
 

@@ -9,6 +9,19 @@ class ProductSerializer(serializers.ModelSerializer):
     dealer_is_verified = serializers.BooleanField(source='dealer.is_verified', read_only=True)
     dealer_is_premium = serializers.BooleanField(source='dealer.is_premium', read_only=True)
 
+    # Explicit boolean fields with the model's defaults.
+    #
+    # DRF treats multipart/form-data as "HTML input": for every boolean field
+    # that is NOT present in the request, BooleanField.get_value() returns its
+    # `default_empty_html` (False) instead of skipping the field. That silently
+    # saved is_available=False for products created/updated through the mobile
+    # app (which always uploads photos via multipart), making brand-new
+    # products invisible in the marketplace. Passing `default` here rewires
+    # `default_empty_html` to the model defaults so missing booleans keep their
+    # intended values.
+    is_available = serializers.BooleanField(required=False, default=True)
+    is_featured = serializers.BooleanField(required=False, default=False)
+
     class Meta:
         model = Product
         fields = '__all__'

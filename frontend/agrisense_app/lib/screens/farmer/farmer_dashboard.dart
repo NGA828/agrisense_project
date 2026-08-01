@@ -1,21 +1,37 @@
 import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../theme/app_theme.dart';
+import 'package:provider/provider.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../providers/diagnosis_provider.dart';
 import '../../services/api/api_service.dart';
-import 'farmer_home_screen.dart';
+import '../../theme/app_theme.dart';
 import '../ai_scan/camera_screen.dart';
-import '../weather/weather_screen.dart';
-import '../marketplace/marketplace_screen.dart';
-import '../diagnosis/diagnosis_history_screen.dart';
 import '../chat/chat_list_screen.dart';
+import '../diagnosis/diagnosis_history_screen.dart';
+import '../marketplace/marketplace_screen.dart';
+import '../notifications/notifications_screen.dart';
+import '../weather/weather_screen.dart';
+import 'farmer_home_screen.dart';
+import 'farmer_widgets.dart';
 import 'order_history_screen.dart';
 
+/// AgriSense farmer app shell.
+///
+/// Information architecture (redesigned around the farmer's daily workflow):
+///
+///   Bottom tabs   Home · Scan · Market · Chat · Profile
+///   Drawer        My Farm (Home / Scan / Weather / Market)
+///                 Activity (Diagnosis History / Orders / Notifications /
+///                            Messages)
+///                 Account (Profile)
+///
+/// Weather moved from a dedicated tab into the drawer + Home weather card,
+/// because chat (buying inputs) is a higher-frequency workflow.
 class FarmerDashboard extends StatefulWidget {
   const FarmerDashboard({super.key});
 
@@ -23,54 +39,54 @@ class FarmerDashboard extends StatefulWidget {
   State<FarmerDashboard> createState() => _FarmerDashboardState();
 }
 
-class _FarmerDashboardState extends State<FarmerDashboard>
-    with TickerProviderStateMixin {
+class _FarmerDashboardState extends State<FarmerDashboard> {
   int _selectedIndex = 0;
-  late final AnimationController _navController;
-  late final List<Animation<double>> _navAnimations;
 
   final List<Widget> _screens = [
-    const FarmerHomeScreen(),
+    FarmerHomeScreen(onOpenProfile: () => _onItemTapped(4)),
     const CameraScreen(),
-    const WeatherScreen(),
     const MarketplaceScreen(),
+    const ChatListScreen(),
     const _ProfileScreen(),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _navController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _navAnimations = List.generate(5, (index) {
-      return Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _navController,
-          curve: Curves.easeOutBack,
-        ),
-      );
-    });
-    _navController.forward();
-  }
-
-  @override
-  void dispose() {
-    _navController.dispose();
-    super.dispose();
-  }
-
   void _onItemTapped(int index) {
     if (index == _selectedIndex) return;
-    _navController.reset();
     setState(() => _selectedIndex = index);
-    _navController.forward();
+  }
+
+  void _openPage(int id) {
+    final Widget page = switch (id) {
+      100 => const WeatherScreen(),
+      101 => const DiagnosisHistoryScreen(),
+      102 => const OrderHistoryScreen(),
+      103 => const NotificationsListScreen(),
+      _ => const WeatherScreen(),
+    };
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _logout() async {
+    await context.read<AuthProvider>().logout();
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().currentUser;
     return Scaffold(
+      backgroundColor: FarmerTheme.canvas,
+      drawer: FarmerDrawer(
+        selectedTab: _selectedIndex,
+        onTabSelected: _onItemTapped,
+        onPageSelected: _openPage,
+        onLogout: _logout,
+        name: user?.fullName,
+        email: user?.email,
+        photo: user?.profilePhoto,
+      ),
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens,
@@ -83,43 +99,27 @@ class _FarmerDashboardState extends State<FarmerDashboard>
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 24,
               offset: const Offset(0, 8),
-            ),
-            BoxShadow(
-              color: AppTheme.primary.withOpacity(0.06),
-              blurRadius: 0,
-              offset: const Offset(0, -1),
             ),
           ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ColorFilter.mode(
-              Colors.white.withOpacity(0.9),
-              BlendMode.srcOver,
-            ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildNavItem(0, Icons.home_rounded, Icons.home, 'Home'),
-                    _buildNavItem(
-                        1, Icons.camera_alt_rounded, Icons.camera_alt, 'Scan'),
-                    _buildNavItem(2, Icons.wb_cloudy_rounded, Icons.wb_cloudy,
-                        'Weather'),
-                    _buildNavItem(3, Icons.shopping_bag_rounded,
-                        Icons.shopping_bag_outlined, 'Market'),
-                    _buildNavItem(
-                        4, Icons.person_rounded, Icons.person_outline, 'Profile'),
-                  ],
-                ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildNavItem(0, Icons.home_rounded, 'Home'),
+                  _buildNavItem(1, Icons.camera_alt_rounded, 'Scan'),
+                  _buildNavItem(2, Icons.shopping_bag_rounded, 'Market'),
+                  _buildNavItem(3, Icons.chat_rounded, 'Chat'),
+                  _buildNavItem(4, Icons.person_rounded, 'Profile'),
+                ],
               ),
             ),
           ),
@@ -128,49 +128,40 @@ class _FarmerDashboardState extends State<FarmerDashboard>
     );
   }
 
-  Widget _buildNavItem(
-      int index, IconData activeIcon, IconData inactiveIcon, String label) {
+  Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = index == _selectedIndex;
-
     return GestureDetector(
       onTap: () => _onItemTapped(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOutCubic,
         padding: EdgeInsets.symmetric(
-          horizontal: isSelected ? 16 : 8,
-          vertical: 8,
+          horizontal: isSelected ? 14 : 6,
+          vertical: 6,
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppTheme.primary.withOpacity(0.1)
+              ? AppTheme.primary.withValues(alpha: 0.12)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: Icon(
-                isSelected ? activeIcon : inactiveIcon,
-                key: ValueKey(isSelected),
-                size: isSelected ? 24 : 22,
-                color: isSelected ? AppTheme.primary : AppTheme.textMuted,
-              ),
+            Icon(
+              icon,
+              size: isSelected ? 24 : 22,
+              color: isSelected ? AppTheme.primary : AppTheme.textMuted,
             ),
-            const SizedBox(height: 3),
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
+            const SizedBox(height: 2),
+            Text(
+              label,
               style: GoogleFonts.poppins(
-                fontSize: isSelected ? 11 : 10,
+                fontSize: isSelected ? 10.5 : 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? AppTheme.primary : AppTheme.textMuted,
-                letterSpacing: isSelected ? 0.2 : 0,
               ),
-              child: Text(label),
             ),
           ],
         ),
@@ -195,6 +186,7 @@ class _ProfileStatsState extends State<_ProfileStats> {
   int _scans = 0;
   int _orders = 0;
   int _chats = 0;
+  bool _loaded = false;
 
   @override
   void initState() {
@@ -203,6 +195,7 @@ class _ProfileStatsState extends State<_ProfileStats> {
   }
 
   Future<void> _load() async {
+    if (_loaded) return;
     final diagnosisProvider = context.read<DiagnosisProvider>();
     _scans = diagnosisProvider.history.length;
     if (_scans == 0) {
@@ -217,9 +210,12 @@ class _ProfileStatsState extends State<_ProfileStats> {
         setState(() {
           _orders = orders is List ? orders.length : 0;
           _chats = chats is List ? chats.length : 0;
+          _loaded = true;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
     if (mounted) setState(() {});
   }
 
@@ -227,32 +223,45 @@ class _ProfileStatsState extends State<_ProfileStats> {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _buildItem(context, '$_scans', 'Scans', Icons.search),
+        _buildItem('$_scans', 'Scans', Icons.eco_rounded, AppTheme.primary),
         _buildDivider(),
-        _buildItem(context, '$_orders', 'Orders', Icons.shopping_bag_outlined),
+        _buildItem('$_orders', 'Orders', Icons.shopping_bag_rounded,
+            FarmerTheme.sun),
         _buildDivider(),
-        _buildItem(context, '$_chats', 'Chats', Icons.chat_bubble_outline),
+        _buildItem('$_chats', 'Chats', Icons.chat_rounded, FarmerTheme.grape),
       ],
     );
   }
 
-  Widget _buildItem(BuildContext context, String value, String label, IconData icon) {
+  Widget _buildItem(
+      String value, String label, IconData icon, Color color) {
     return Expanded(
       child: Column(
         children: [
-          Icon(icon, size: 18, color: AppTheme.primary),
-          const SizedBox(height: 4),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 17, color: color),
+          ),
+          const SizedBox(height: 6),
           Text(value,
               style: GoogleFonts.poppins(
-                  fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary)),
           Text(label,
-              style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+              style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
         ],
       ),
     );
   }
 
-  Widget _buildDivider() => Container(width: 1, height: 34, color: Colors.grey.shade200);
+  Widget _buildDivider() =>
+      Container(width: 1, height: 40, color: Colors.grey.shade200);
 }
 
 class _ProfileScreen extends StatelessWidget {
@@ -347,7 +356,8 @@ class _ProfileScreen extends StatelessWidget {
                 GestureDetector(
                   onTap: () async {
                     final picker = ImagePicker();
-                    final picked = await picker.pickImage(source: ImageSource.gallery);
+                    final picked =
+                        await picker.pickImage(source: ImageSource.gallery);
                     if (picked != null) {
                       setStateDialog(() => profilePhoto = File(picked.path));
                     }
@@ -356,40 +366,68 @@ class _ProfileScreen extends StatelessWidget {
                     alignment: Alignment.center,
                     children: [
                       CircleAvatar(
-                        radius: 40,
-                        backgroundColor: AppTheme.primary.withOpacity(0.1),
+                        radius: 42,
+                        backgroundColor:
+                            AppTheme.primary.withValues(alpha: 0.1),
                         backgroundImage: profilePhoto != null
                             ? FileImage(profilePhoto!) as ImageProvider
-                            : (user.profilePhoto != null && user.profilePhoto!.isNotEmpty
-                                ? CachedNetworkImageProvider(ApiService.resolveMedia(user.profilePhoto))
+                            : (user.profilePhoto != null &&
+                                    user.profilePhoto!.isNotEmpty
+                                ? CachedNetworkImageProvider(
+                                    ApiService.resolveMedia(
+                                        user.profilePhoto))
                                 : null),
-                        child: (profilePhoto == null && (user.profilePhoto == null || user.profilePhoto!.isEmpty))
-                            ? const Icon(Icons.person, size: 40, color: AppTheme.primary)
+                        child: (profilePhoto == null &&
+                                (user.profilePhoto == null ||
+                                    user.profilePhoto!.isEmpty))
+                            ? const Icon(Icons.person,
+                                size: 42, color: AppTheme.primary)
                             : null,
                       ),
                       Container(
-                        width: 80, height: 80,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withOpacity(0.3)),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 24),
+                        width: 84,
+                        height: 84,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.3),
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(Icons.camera_alt,
+                            color: Colors.white, size: 26),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text('Tap to change profile photo',
+                    style: FarmerTheme.smallMuted()),
                 const SizedBox(height: 16),
                 TextField(
                   controller: firstName,
-                  decoration: const InputDecoration(labelText: 'First name'),
+                  decoration: const InputDecoration(
+                    labelText: 'First name',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(12))),
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 TextField(
                   controller: lastName,
-                  decoration: const InputDecoration(labelText: 'Last name'),
+                  decoration: const InputDecoration(
+                    labelText: 'Last name',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(12))),
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 TextField(
                   controller: phone,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Phone number'),
+                  decoration: const InputDecoration(
+                    labelText: 'Phone number',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(12))),
+                  ),
                 ),
               ],
             ),
@@ -399,9 +437,15 @@ class _ProfileScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel'),
             ),
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save'),
+              icon: const Icon(Icons.save_rounded, size: 18),
+              label: const Text('Save'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ],
         ),
@@ -418,13 +462,23 @@ class _ProfileScreen extends StatelessWidget {
         );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile updated successfully'), backgroundColor: AppTheme.success),
+            SnackBar(
+              content: const Text('Profile updated successfully'),
+              backgroundColor: AppTheme.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
           );
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Update failed: $e'), backgroundColor: AppTheme.error),
+            SnackBar(
+              content: Text('Update failed: $e'),
+              backgroundColor: AppTheme.error,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
       }
@@ -434,119 +488,83 @@ class _ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
-    final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F3),
+      backgroundColor: FarmerTheme.canvas,
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Column(
             children: [
-              // ── Profile Header ──
+              // ── Profile header ──
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.primary,
-                      AppTheme.primary.withOpacity(0.85),
-                      const Color(0xFF2E7D32),
-                    ],
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(32),
-                    bottomRight: Radius.circular(32),
-                  ),
-                ),
+                decoration: FarmerTheme.headerGradient,
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
                 child: Column(
                   children: [
-                    // Top row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           'My Profile',
                           style: GoogleFonts.poppins(
-                            fontSize: 22,
+                            fontSize: 21,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                           ),
                         ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.edit_rounded,
-                                color: Colors.white, size: 20),
-                            onPressed: () => _showEditProfileDialog(context),
+                        GestureDetector(
+                          onTap: () => _showEditProfileDialog(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.edit_rounded,
+                                color: Colors.white, size: 18),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-                    // Avatar
-                    Container(
-                      width: 90,
-                      height: 90,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.2),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.5),
-                          width: 3,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${(user?.firstName ?? 'F')[0].toUpperCase()}${(user?.lastName?.isNotEmpty == true ? user!.lastName[0].toUpperCase() : '')}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
+                    const SizedBox(height: 18),
+                    GestureDetector(
+                      onTap: () => _showEditProfileDialog(context),
+                      child: FarmerAvatar(
+                        photoUrl: user?.profilePhoto,
+                        name: user?.fullName,
+                        radius: 44,
+                        tint: const Color(0xFF8BC34A),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     Text(
-                      '${user?.firstName ?? 'Farmer'} ${user?.lastName ?? ''}',
+                      user?.fullName ?? 'Farmer',
                       style: GoogleFonts.poppins(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
                       user?.email ?? '',
                       style: GoogleFonts.poppins(
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Role badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -570,42 +588,31 @@ class _ProfileScreen extends StatelessWidget {
                 ),
               ),
 
-              // ── Stats Row ──
+              // ── Stats ──
               Transform.translate(
-                offset: const Offset(0, -20),
+                offset: const Offset(0, -22),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 18, horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
+                  decoration: FarmerTheme.cardDecoration,
                   child: const _ProfileStats(),
                 ),
               ),
 
               const SizedBox(height: 4),
 
-              // ── Menu Section ──
+              // ── Menu ──
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    _buildSectionTitle('Activity'),
-                    const SizedBox(height: 8),
+                    Text('Activity', style: FarmerTheme.sectionTitle()),
+                    const SizedBox(height: 10),
                     _buildMenuItem(
                       context,
                       icon: Icons.history_rounded,
-                      iconColor: const Color(0xFF6C63FF),
-                      iconBg: const Color(0xFFEEEDFF),
+                      iconColor: AppTheme.primary,
+                      iconBg: const Color(0xFFE8F5E9),
                       title: 'Diagnosis History',
                       subtitle: 'View your past crop scans',
                       onTap: () => Navigator.push(
@@ -617,7 +624,7 @@ class _ProfileScreen extends StatelessWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.receipt_long_rounded,
-                      iconColor: const Color(0xFFFF9800),
+                      iconColor: FarmerTheme.sun,
                       iconBg: const Color(0xFFFFF3E0),
                       title: 'My Orders',
                       subtitle: 'Track purchases & deliveries',
@@ -630,19 +637,33 @@ class _ProfileScreen extends StatelessWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.chat_bubble_outline_rounded,
-                      iconColor: const Color(0xFF00BFA5),
-                      iconBg: const Color(0xFFE0F2F1),
+                      iconColor: FarmerTheme.grape,
+                      iconBg: const Color(0xFFF3E5F5),
                       title: 'Chat History',
                       subtitle: 'Dealer conversations',
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const ChatListScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const ChatListScreen()),
+                      ),
+                    ),
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.notifications_rounded,
+                      iconColor: FarmerTheme.sky,
+                      iconBg: const Color(0xFFE3F2FD),
+                      title: 'Notifications',
+                      subtitle: 'Orders, payments & broadcasts',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const NotificationsListScreen()),
                       ),
                     ),
 
                     const SizedBox(height: 20),
-                    _buildSectionTitle('Support'),
-                    const SizedBox(height: 8),
+                    Text('Support', style: FarmerTheme.sectionTitle()),
+                    const SizedBox(height: 10),
                     _buildMenuItem(
                       context,
                       icon: Icons.settings_rounded,
@@ -672,20 +693,8 @@ class _ProfileScreen extends StatelessWidget {
                     ),
 
                     const SizedBox(height: 24),
-
-                    // ── Logout Button ──
-                    Container(
+                    SizedBox(
                       width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.error.withOpacity(0.15),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
                       child: ElevatedButton.icon(
                         onPressed: () async {
                           final confirm = await showDialog<bool>(
@@ -708,8 +717,7 @@ class _ProfileScreen extends StatelessWidget {
                                           color: AppTheme.textMuted)),
                                 ),
                                 ElevatedButton(
-                                  onPressed: () =>
-                                      Navigator.pop(ctx, true),
+                                  onPressed: () => Navigator.pop(ctx, true),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.error,
                                     shape: RoundedRectangleBorder(
@@ -748,7 +756,6 @@ class _ProfileScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -760,23 +767,6 @@ class _ProfileScreen extends StatelessWidget {
     );
   }
 
-  // ── Helper: Section Title ──
-  Widget _buildSectionTitle(String title) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        title,
-        style: GoogleFonts.poppins(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textMuted,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  // ── Helper: Menu Item ──
   Widget _buildMenuItem(
     BuildContext context, {
     required IconData icon,
@@ -795,15 +785,15 @@ class _ProfileScreen extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
-          splashColor: iconColor.withOpacity(0.06),
-          highlightColor: iconColor.withOpacity(0.03),
+          splashColor: iconColor.withValues(alpha: 0.06),
+          highlightColor: iconColor.withValues(alpha: 0.03),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withValues(alpha: 0.03),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -811,7 +801,6 @@ class _ProfileScreen extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Icon with colored background
                 Container(
                   width: 44,
                   height: 44,
@@ -831,7 +820,7 @@ class _ProfileScreen extends StatelessWidget {
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
-                          color: const Color(0xFF1A1A2E),
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 2),

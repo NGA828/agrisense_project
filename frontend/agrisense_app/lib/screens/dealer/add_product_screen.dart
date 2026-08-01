@@ -1,9 +1,12 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../theme/app_theme.dart';
+
 import '../../services/api/api_service.dart';
+import '../../theme/app_theme.dart';
+import 'dealer_widgets.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -33,26 +36,28 @@ class _AddProductScreenState extends State<AddProductScreen> {
   ];
 
   @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    _stockController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F3),
+      backgroundColor: DealerTheme.canvas,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            // Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2D5016), Color(0xFF4A7C28)]),
-              ),
-              child: Row(
-                children: [
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 20)),
-                  const SizedBox(width: 8),
-                  Text('Add New Product', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
-                ],
-              ),
+            DealerHeader(
+              title: 'Add New Product',
+              subtitle: 'List a product for farmers to buy',
+              showBack: true,
+              leading: const Icon(Icons.add_box_rounded,
+                  color: Colors.white, size: 22),
             ),
             Expanded(
               child: SingleChildScrollView(
@@ -62,123 +67,322 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Image Upload
+                      // ── Image upload ──
+                      Text('Product Photo', style: DealerTheme.sectionTitle()),
+                      const SizedBox(height: 10),
                       GestureDetector(
                         onTap: _pickImage,
                         child: Container(
-                          width: double.infinity, height: 200,
+                          width: double.infinity,
+                          height: 190,
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.grey.shade300, width: 2, style: BorderStyle.solid),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+                            border: Border.all(
+                              color: _imageFile != null
+                                  ? AppTheme.primary
+                                  : Colors.grey.shade300,
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 8,
+                              ),
+                            ],
                           ),
                           child: _imageFile != null
-                              ? ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.file(_imageFile!, fit: BoxFit.cover))
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(18),
+                                      child: Image.file(
+                                        _imageFile!,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      right: 10,
+                                      top: 10,
+                                      child: GestureDetector(
+                                        onTap: () =>
+                                            setState(() => _imageFile = null),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                              Icons.close_rounded,
+                                              color: Colors.white,
+                                              size: 16),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
                               : Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Container(
-                                      width: 64, height: 64,
-                                      decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), shape: BoxShape.circle),
-                                      child: Icon(Icons.add_a_photo_rounded, size: 32, color: AppTheme.primary),
+                                      width: 64,
+                                      height: 64,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primary
+                                            .withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                          Icons.add_a_photo_rounded,
+                                          size: 32,
+                                          color: AppTheme.primary),
                                     ),
                                     const SizedBox(height: 12),
-                                    Text('Tap to add product photo', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 14)),
+                                    Text(
+                                      'Tap to add product photo',
+                                      style: GoogleFonts.poppins(
+                                        color: AppTheme.textSecondary,
+                                        fontSize: 14,
+                                      ),
+                                    ),
                                     const SizedBox(height: 4),
-                                    Text('Supports JPG, PNG', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                                    const Text(
+                                      'Supports JPG, PNG — good photos sell faster',
+                                      style: TextStyle(
+                                          color: AppTheme.textMuted,
+                                          fontSize: 11.5),
+                                    ),
                                   ],
                                 ),
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Product Name
-                      Text('Product Name', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.textPrimary)),
+                      // ── Product name ──
+                      Text('Product Name', style: DealerTheme.sectionTitle()),
                       const SizedBox(height: 8),
-                      _buildTextField(_nameController, 'Product Name', 'e.g., Organic NPK Fertilizer', Icons.label_rounded),
+                      _buildTextField(
+                        _nameController,
+                        'Product Name',
+                        'e.g., Organic NPK Fertilizer',
+                        Icons.label_rounded,
+                        validator: (v) =>
+                            v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
                       const SizedBox(height: 20),
-                      // Category
-                      Text('Category', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.textPrimary)),
-                      const SizedBox(height: 12),
+                      // ── Category ──
+                      Text('Category', style: DealerTheme.sectionTitle()),
+                      const SizedBox(height: 10),
                       Wrap(
-                        spacing: 10, runSpacing: 10,
+                        spacing: 10,
+                        runSpacing: 10,
                         children: _categories.map((cat) {
-                          final isSelected = cat['value'] == _selectedCategory;
+                          final isSelected =
+                              cat['value'] == _selectedCategory;
                           return GestureDetector(
-                            onTap: () => setState(() => _selectedCategory = cat['value']),
+                            onTap: () =>
+                                setState(() => _selectedCategory = cat['value']),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
                               decoration: BoxDecoration(
-                                color: isSelected ? AppTheme.primary : Colors.white,
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: isSelected ? AppTheme.primary : Colors.grey.shade300, width: 1.5),
-                                boxShadow: isSelected ? [BoxShadow(color: AppTheme.primary.withOpacity(0.3), blurRadius: 8)] : null,
+                                color: isSelected
+                                    ? AppTheme.primary
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppTheme.primary
+                                      : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
                               ),
-                              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                Icon(cat['icon'], size: 18, color: isSelected ? Colors.white : AppTheme.textPrimary),
-                                const SizedBox(width: 8),
-                                Text(cat['label'], style: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-                              ]),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(cat['icon'],
+                                      size: 17,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : AppTheme.textPrimary),
+                                  const SizedBox(width: 7),
+                                  Text(
+                                    cat['label'],
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.white
+                                          : AppTheme.textPrimary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         }).toList(),
                       ),
                       const SizedBox(height: 20),
-                      // Price and Stock
+                      // ── Price + stock ──
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Price (FCFA)', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.textPrimary)),
-                            const SizedBox(height: 8),
-                            _buildTextField(_priceController, 'Price (FCFA)', '15000', Icons.attach_money_rounded, keyboardType: TextInputType.number),
-                          ])),
-                          const SizedBox(width: 16),
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Stock Quantity', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.textPrimary)),
-                            const SizedBox(height: 8),
-                            _buildTextField(_stockController, 'Stock Quantity', '50', Icons.inventory_2_rounded, keyboardType: TextInputType.number),
-                          ])),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Price (FCFA)',
+                                    style: DealerTheme.sectionTitle()),
+                                const SizedBox(height: 8),
+                                _buildTextField(
+                                  _priceController,
+                                  'Price (FCFA)',
+                                  '15000',
+                                  Icons.attach_money_rounded,
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+                                    if (double.tryParse(v) == null) {
+                                      return 'Invalid number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Stock Quantity',
+                                    style: DealerTheme.sectionTitle()),
+                                const SizedBox(height: 8),
+                                _buildTextField(
+                                  _stockController,
+                                  'Stock Quantity',
+                                  '50',
+                                  Icons.inventory_2_rounded,
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+                                    if (int.tryParse(v) == null) {
+                                      return 'Invalid number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Description
-                      Text('Description', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.textPrimary)),
+                      // ── Description ──
+                      Text('Description', style: DealerTheme.sectionTitle()),
                       const SizedBox(height: 8),
-                      _buildTextField(_descriptionController, 'Description', 'Describe your product features...', Icons.description_rounded, maxLines: 4),
-                      const SizedBox(height: 20),
-                      // Availability Toggle
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)]),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                          Row(children: [
-                            Container(width: 40, height: 40, decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.check_circle_rounded, size: 20, color: AppTheme.primary)),
-                            const SizedBox(width: 12),
-                            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text('Available for sale', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.textPrimary)),
-                              Text('Product will be visible in marketplace', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            ]),
-                          ]),
-                          Switch(value: _isAvailable, onChanged: (v) => setState(() => _isAvailable = v), activeColor: AppTheme.primary),
-                        ]),
+                      _buildTextField(
+                        _descriptionController,
+                        'Description',
+                        'Describe your product features...',
+                        Icons.description_rounded,
+                        maxLines: 4,
+                        validator: (v) =>
+                            v == null || v.trim().isEmpty ? 'Required' : null,
                       ),
-                      const SizedBox(height: 28),
-                      // Submit Button
+                      const SizedBox(height: 20),
+                      // ── Availability toggle ──
+                      DealerCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary
+                                        .withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                      Icons.visibility_rounded,
+                                      size: 20,
+                                      color: AppTheme.primary),
+                                ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Available for sale',
+                                      style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13.5),
+                                    ),
+                                    const Text(
+                                      'Visible in the farmer marketplace',
+                                      style: TextStyle(
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 11.5),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: _isAvailable,
+                              onChanged: (v) =>
+                                  setState(() => _isAvailable = v),
+                              activeTrackColor: AppTheme.primary
+                                  .withValues(alpha: 0.5),
+                              thumbColor:
+                                  WidgetStateProperty.all(AppTheme.primary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 26),
+                      // ── Submit ──
                       SizedBox(
                         width: double.infinity,
-                        height: 56,
+                        height: 54,
                         child: ElevatedButton.icon(
                           onPressed: _isLoading ? null : _submitProduct,
-                          icon: _isLoading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-                          label: Text('Add Product', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16)),
+                          icon: _isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.add_rounded,
+                                  color: Colors.white, size: 22),
+                          label: Text(
+                            _isLoading ? 'Adding...' : 'Add Product',
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontSize: 15),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
                             elevation: 0,
                           ),
                         ),
                       ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -190,23 +394,38 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, String hint, IconData icon, {int maxLines = 1, TextInputType? keyboardType}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [Icon(icon, size: 16, color: AppTheme.primary), const SizedBox(width: 6), Text(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13))]),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller, maxLines: maxLines, keyboardType: keyboardType,
-          validator: (v) => v!.isEmpty ? 'Required' : null,
-          decoration: InputDecoration(hintText: hint, filled: true, fillColor: Colors.white,
-            prefixIcon: Icon(icon, color: Colors.grey.shade400, size: 20),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primary, width: 2)),
-          ),
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label,
+    String hint,
+    IconData icon, {
+    int maxLines = 1,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      validator: validator,
+      decoration: InputDecoration(
+        hintText: hint,
+        filled: true,
+        fillColor: Colors.white,
+        prefixIcon: Icon(icon, color: Colors.grey.shade400, size: 20),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
         ),
-      ],
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+        ),
+      ),
     );
   }
 
@@ -228,23 +447,36 @@ class _AddProductScreenState extends State<AddProductScreen> {
         price: double.parse(_priceController.text),
         stockQuantity: int.parse(_stockController.text),
         imageFile: _imageFile,
+        isAvailable: _isAvailable,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(children: [Icon(Icons.check_circle, color: Colors.white, size: 16), SizedBox(width: 8), Text('Product added successfully!')]),
-            backgroundColor: AppTheme.success
-          )
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 16),
+                SizedBox(width: 8),
+                Text('Product added successfully!'),
+              ],
+            ),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.error));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
-  @override
-  void dispose() { _nameController.dispose(); _descriptionController.dispose(); _priceController.dispose(); _stockController.dispose(); super.dispose(); }
 }

@@ -1,3 +1,7 @@
+import struct
+import zlib
+
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -55,6 +59,68 @@ class ProductTests(APITestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data['dealer'], self.dealer.id)
+
+    @staticmethod
+    def _png(name='photo.png'):
+        """Minimal valid 1x1 PNG that Pillow can verify."""
+        def chunk(tag, data):
+            body = tag + data
+            return (struct.pack('>I', len(data)) + body
+                    + struct.pack('>I', zlib.crc32(body)))
+        ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+        idat = zlib.compress(b'\x00\x2e\x7d\x32')
+        png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr)
+               + chunk(b'IDAT', idat) + chunk(b'IEND', b''))
+        return SimpleUploadedFile(name, png, content_type='image/png')
+
+    def test_multipart_create_preserves_is_available_default(self):
+        """Multipart create (the mobile app's upload path) must NOT flip
+        is_available to False when the client omits the boolean fields."""
+        self.auth(self.dealer)
+        resp = self.client.post(reverse('product-list'), {
+            'name': 'Photo Seed', 'description': 'x', 'category': 'seed',
+            'price': 100, 'stock_quantity': 5,
+            'image': self._png(),
+        }, format='multipart')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(resp.data['is_available'])
+        # Image is stored and returned as a relative media path.
+        self.assertTrue(resp.data['image'].startswith('product_images/'))
+        product = Product.objects.get(id_product=resp.data['id_product'])
+        self.assertTrue(product.is_available)
+        self.assertTrue(product.image.name.startswith('product_images/'))
+
+    def test_multipart_update_preserves_is_available(self):
+        self.auth(self.dealer)
+        resp = self.client.put(
+            reverse('product-detail', args=[self.product.id_product]),
+            {'name': 'Renamed', 'description': 'x', 'category': 'seed',
+             'price': 100, 'stock_quantity': 5, 'image': self._png()},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data['is_available'])
+        self.product.refresh_from_db()
+        self.assertTrue(self.product.is_available)
+        self.assertTrue(self.product.image.name.startswith('product_images/'))
+
+    def test_explicit_is_available_false_respected(self):
+        self.auth(self.dealer)
+        resp = self.client.post(reverse('product-list'), {
+            'name': 'Hidden Seed', 'description': 'x', 'category': 'seed',
+            'price': 100, 'stock_quantity': 5, 'is_available': 'false',
+        }, format='multipart')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(resp.data['is_available'])
+
+    def test_product_image_serialized_as_relative_path(self):
+        self.product.image = self._png('product.png')
+        self.product.save()
+        self.auth(self.dealer)
+        resp = self.client.get(reverse('product-detail', args=[self.product.id_product]))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data['image'].startswith('product_images/'))
+        self.assertNotIn('http', resp.data['image'])
 
     def test_dealer_cannot_edit_others_product(self):
         self.auth(self.dealer)

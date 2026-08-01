@@ -7,6 +7,7 @@ import '../../models/product.dart';
 import '../../providers/marketplace_provider.dart';
 import '../../services/api/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../farmer/farmer_widgets.dart';
 import '../marketplace/marketplace_screen.dart';
 import '../marketplace/product_detail_screen.dart';
 
@@ -55,109 +56,109 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
 
   Color get _severityColor {
     switch (d.severity) {
-      case 'high': return AppTheme.error;
-      case 'medium': return AppTheme.warning;
-      default: return AppTheme.success;
+      case 'high':
+        return AppTheme.error;
+      case 'medium':
+        return AppTheme.warning;
+      default:
+        return AppTheme.success;
     }
   }
 
   String get _severityLabel {
     switch (d.severity) {
-      case 'high': return 'High';
-      case 'medium': return 'Moderate';
-      default: return 'Low';
+      case 'high':
+        return 'High';
+      case 'medium':
+        return 'Moderate';
+      default:
+        return 'Low';
+    }
+  }
+
+  double get _severityProgress {
+    switch (d.severity) {
+      case 'high':
+        return 0.85;
+      case 'medium':
+        return 0.55;
+      default:
+        return 0.25;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F3),
+      backgroundColor: FarmerTheme.canvas,
       body: Column(
         children: [
-          _header(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _imageCard(),
-                  const SizedBox(height: 16),
-                  _diagnosisCard(),
-                  const SizedBox(height: 16),
-                  _sectionCard(
-                    icon: Icons.info_outline_rounded,
-                    title: 'What caused it',
-                    body: d.causes,
-                  ),
-                  const SizedBox(height: 16),
-                  _sectionCard(
-                    icon: Icons.health_and_safety_rounded,
-                    title: 'How to prevent it',
-                    body: d.prevention,
-                  ),
-                  const SizedBox(height: 16),
-                  _treatmentCard(),
-                  const SizedBox(height: 16),
-                  _recommendedCard(),
-                  const SizedBox(height: 24),
-                ],
+          FarmerHeader(
+            title: 'Diagnosis Result',
+            subtitle: '${d.cropType} · ${_timeAgo(d.createdAt)}',
+            showBack: true,
+            leading:
+                const Icon(Icons.eco_rounded, color: Colors.white, size: 22),
+            trailing: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${d.confidence.toInt()}% match',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _header() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, left: 8, right: 8, bottom: 12),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF2D5016), Color(0xFF4A7C28)],
-        ),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 20),
-          ),
-          const Icon(Icons.eco_rounded, color: Colors.white, size: 22),
-          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
-                Text('AgriSense AI', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-                Text('Disease Diagnosis', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11)),
+                _imageCard(),
+                const SizedBox(height: 14),
+                _diagnosisCard(),
+                const SizedBox(height: 14),
+                _sectionCard(
+                  icon: Icons.info_outline_rounded,
+                  title: 'What caused it',
+                  body: d.causes,
+                ),
+                const SizedBox(height: 14),
+                _sectionCard(
+                  icon: Icons.health_and_safety_rounded,
+                  title: 'How to prevent it',
+                  body: d.prevention,
+                ),
+                const SizedBox(height: 14),
+                _treatmentCard(),
+                const SizedBox(height: 14),
+                _recommendedCard(),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-            child: Text('${d.confidence.toInt()}% match', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-          ),
         ],
       ),
     );
   }
 
+  // ── Image card ──────────────────────────────────────────────────────
   Widget _imageCard() {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
         height: 200,
         width: double.infinity,
-        color: AppTheme.primary.withOpacity(0.08),
+        color: AppTheme.primary.withValues(alpha: 0.08),
         child: d.imageUrl.isNotEmpty
-            ? Image.network(d.imageUrl, fit: BoxFit.cover,
+            ? Image.network(d.imageUrl,
+                fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => _imagePlaceholder())
             : _imagePlaceholder(),
       ),
@@ -169,34 +170,46 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.eco_rounded, size: 56, color: AppTheme.primary.withOpacity(0.4)),
+          Icon(Icons.eco_rounded,
+              size: 56, color: AppTheme.primary.withValues(alpha: 0.4)),
           const SizedBox(height: 8),
-          Text('Leaf sample — ${d.cropType}', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+          Text('Leaf sample — ${d.cropType}',
+              style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
         ],
       ),
     );
   }
 
+  // ── Diagnosis card ──────────────────────────────────────────────────
   Widget _diagnosisCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration,
+    return FarmerCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Disease Name', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-          const SizedBox(height: 6),
+          Text('Disease Name',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          const SizedBox(height: 8),
           Row(
             children: [
               Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), shape: BoxShape.circle),
-                child: Icon(Icons.bug_report_rounded, color: _severityColor, size: 20),
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _severityColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(Icons.bug_report_rounded,
+                    color: _severityColor, size: 22),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(d.diseaseName, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18, color: AppTheme.textPrimary)),
+                child: Text(
+                  d.diseaseName,
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 17,
+                      color: AppTheme.textPrimary),
+                ),
               ),
             ],
           ),
@@ -207,33 +220,56 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Severity', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                    Text('Severity',
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 12)),
                     const SizedBox(height: 4),
-                    Text(_severityLabel, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16, color: _severityColor)),
-                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(_severityLabel,
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: _severityColor)),
+                        const SizedBox(width: 8),
+                        FarmerPill(
+                            label: d.severity, color: _severityColor),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: _severityProgress,
                         minHeight: 6,
                         backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(_severityColor),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(_severityColor),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: 20),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Confidence', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  Text('Confidence',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 12)),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Text('${d.confidence.toInt()}%',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 20, color: AppTheme.primary)),
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                            color: AppTheme.primary)),
                   ),
                 ],
               ),
@@ -244,57 +280,81 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
     );
   }
 
-  double get _severityProgress {
-    switch (d.severity) {
-      case 'high': return 0.85;
-      case 'medium': return 0.55;
-      default: return 0.25;
-    }
-  }
-
-  Widget _sectionCard({required IconData icon, required String title, required String body}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration,
+  // ── Section card ────────────────────────────────────────────────────
+  Widget _sectionCard({
+    required IconData icon,
+    required String title,
+    required String body,
+  }) {
+    return FarmerCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
             Icon(icon, color: AppTheme.primary, size: 20),
             const SizedBox(width: 8),
-            Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text(title,
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700, fontSize: 15)),
           ]),
           const SizedBox(height: 10),
-          Text(body.isEmpty ? 'Information coming from your agricultural advisor.' : body,
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.6)),
+          Text(
+            body.isEmpty ? 'Information coming from your agricultural advisor.' : body,
+            style: const TextStyle(
+                color: AppTheme.textSecondary, fontSize: 13, height: 1.6),
+          ),
         ],
       ),
     );
   }
 
+  // ── Treatment card ──────────────────────────────────────────────────
   Widget _treatmentCard() {
     final plan = d.treatmentPlan;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration,
+    return FarmerCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Icon(Icons.medical_services_rounded, color: AppTheme.primary, size: 20),
+            Icon(Icons.medical_services_rounded,
+                color: AppTheme.primary, size: 20),
             const SizedBox(width: 8),
-            Expanded(child: Text('Treatment Plan', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15))),
+            Expanded(
+              child: Text('Treatment Plan',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700, fontSize: 15)),
+            ),
+            if (plan != null)
+              FarmerPill(
+                label: plan.status,
+                color: plan.status == 'active'
+                    ? AppTheme.success
+                    : AppTheme.info,
+              ),
           ]),
           const SizedBox(height: 12),
           if (plan != null) ...[
-            _treatmentRow(Icons.science_rounded, 'Recommended product', plan.medication),
-            _treatmentRow(Icons.construction_rounded, 'How to apply', plan.instructions),
-            _treatmentRow(Icons.calendar_today_rounded, 'Duration', '${plan.duration} days'),
-            _treatmentRow(Icons.event_available_rounded, 'Follow-up', _formatDate(plan.followUpDate)),
+            _treatmentRow(Icons.science_rounded, 'Recommended product',
+                plan.medication),
+            _treatmentRow(Icons.construction_rounded, 'How to apply',
+                plan.instructions),
+            Row(
+              children: [
+                Expanded(
+                  child: _treatmentRow(Icons.calendar_today_rounded,
+                      'Duration', '${plan.duration} days'),
+                ),
+                Expanded(
+                  child: _treatmentRow(Icons.event_available_rounded,
+                      'Follow-up', _formatDate(plan.followUpDate)),
+                ),
+              ],
+            ),
           ] else ...[
-            Text('Your treatment plan is being prepared.', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+            const Text(
+              'Your treatment plan is being prepared.',
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+            ),
           ],
         ],
       ),
@@ -308,8 +368,12 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 34, height: 34,
-            decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(10)),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(icon, color: AppTheme.primary, size: 16),
           ),
           const SizedBox(width: 12),
@@ -317,9 +381,15 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                Text(label,
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 11)),
                 const SizedBox(height: 2),
-                Text(value.isEmpty ? '—' : value, style: TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w500)),
+                Text(
+                  value.isEmpty ? '—' : value,
+                  style: const TextStyle(
+                      fontSize: 13, height: 1.5, fontWeight: FontWeight.w500),
+                ),
               ],
             ),
           ),
@@ -328,11 +398,9 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
     );
   }
 
+  // ── Recommended products ────────────────────────────────────────────
   Widget _recommendedCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration,
+    return FarmerCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -340,33 +408,49 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(children: [
-                Icon(Icons.shopping_bag_rounded, color: AppTheme.primary, size: 20),
+                Icon(Icons.shopping_bag_rounded,
+                    color: AppTheme.primary, size: 20),
                 const SizedBox(width: 8),
-                Text('Recommended Products', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+                Text('Recommended Products',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
               ]),
               GestureDetector(
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const MarketplaceScreen()),
                 ),
-                child: Text('View All >', style: TextStyle(color: AppTheme.primary, fontSize: 13, fontWeight: FontWeight.w600)),
+                child: Text('View All >',
+                    style: TextStyle(
+                        color: AppTheme.primary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           if (_loadingProducts)
-            const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2)))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(
+                    color: AppTheme.primary, strokeWidth: 2),
+              ),
+            )
           else if (_recommended.isEmpty)
-            Text('No treatment products available right now — check the marketplace.',
-                style: TextStyle(color: AppTheme.textMuted, fontSize: 12))
+            const Text(
+              'No treatment products available right now — check the marketplace.',
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+            )
           else
             SizedBox(
-              height: 170,
+              height: 180,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _recommended.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) => _productCard(_recommended[index]),
+                itemBuilder: (context, index) =>
+                    _productCard(_recommended[index]),
               ),
             ),
         ],
@@ -393,32 +477,43 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.grey.shade200),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 60,
-              width: double.infinity,
-              decoration: BoxDecoration(
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                height: 60,
+                width: double.infinity,
                 color: const Color(0xFFE8F5E9),
-                borderRadius: BorderRadius.circular(8),
+                child: product.image.isNotEmpty
+                    ? Image.network(
+                        product.image,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(
+                            Icons.eco_rounded,
+                            color: AppTheme.primary,
+                            size: 26),
+                      )
+                    : const Icon(Icons.eco_rounded,
+                        color: AppTheme.primary, size: 26),
               ),
-              child: product.image.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(product.image, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.eco_rounded, color: AppTheme.primary, size: 26)),
-                    )
-                  : const Icon(Icons.eco_rounded, color: AppTheme.primary, size: 26),
             ),
             const SizedBox(height: 8),
-            Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 11)),
+            Text(product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600, fontSize: 11)),
             const SizedBox(height: 4),
-            Text('${product.price.toInt()} FCFA', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12, color: AppTheme.primary)),
+            Text('${product.price.toInt()} FCFA',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: AppTheme.primary)),
           ],
         ),
       ),
@@ -430,9 +525,11 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  BoxDecoration get _cardDecoration => BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
-      );
+  String _timeAgo(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} h ago';
+    return '${diff.inDays} d ago';
+  }
 }

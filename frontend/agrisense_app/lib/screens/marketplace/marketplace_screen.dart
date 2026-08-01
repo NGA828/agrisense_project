@@ -721,6 +721,24 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   // ─────────────────────────────────────────────
   //  PRODUCT CARD
   // ─────────────────────────────────────────────
+  Widget _imageFallback(Map<String, dynamic> catData, {String category = ''}) {
+    return Center(
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Icon(
+          _categoryIcon(category),
+          color: catData['icon'] as Color,
+          size: 32,
+        ),
+      ),
+    );
+  }
+
   Widget _buildProductCard(dynamic product, int index) {
     final categoryColors = {
       'seed': {
@@ -790,7 +808,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               flex: 5,
               child: Stack(
                 children: [
-                  // Background with gradient
+                  // Background: real product photo when available, otherwise
+                  // a category gradient with an icon placeholder.
                   Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
@@ -806,21 +825,24 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                         top: Radius.circular(20),
                       ),
                     ),
-                    child: Center(
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Icon(
-                          _categoryIcon(product.category),
-                          color: catData['icon'] as Color,
-                          size: 32,
-                        ),
-                      ),
-                    ),
+                    child: product.image.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20)),
+                            child: Image.network(
+                              product.image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _imageFallback(
+                                  catData,
+                                  category: product.category),
+                              loadingBuilder: (context, child, progress) =>
+                                  progress == null
+                                      ? child
+                                      : _imageFallback(catData,
+                                          category: product.category),
+                            ),
+                          )
+                        : _imageFallback(catData, category: product.category),
                   ),
 
                   // Decorative circle
