@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_theme.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../services/api/api_service.dart';
+import '../../theme/app_theme.dart';
+import 'dealer_widgets.dart';
 
 class PremiumScreen extends StatefulWidget {
   const PremiumScreen({super.key});
@@ -36,6 +38,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
         const SnackBar(
           content: Text('Enter your mobile money number to pay for premium'),
           backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -63,11 +66,16 @@ class _PremiumScreenState extends State<PremiumScreen> {
       final payment = await api.processPayment(paymentId);
       if (payment['status'] == 'completed') {
         await context.read<AuthProvider>().loadCurrentUser();
-        if (mounted) _showResult('Premium activated! Your products now rank higher.', isSuccess: true);
+        if (mounted) {
+          _showResult(
+              'Premium activated! Your products now rank higher.',
+              isSuccess: true);
+        }
       } else {
         if (mounted) {
           _showResult(
-            'Payment ${payment['status'] ?? 'failed'}. Check your mobile money number and try again.',
+            'Payment ${payment['status'] ?? 'failed'}. Check your mobile '
+            'money number and try again.',
             isSuccess: false,
           );
         }
@@ -75,7 +83,11 @@ class _PremiumScreenState extends State<PremiumScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upgrade failed: $e'), backgroundColor: AppTheme.error),
+          SnackBar(
+            content: Text('Upgrade failed: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -88,6 +100,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: isSuccess ? AppTheme.success : AppTheme.error,
+        behavior: SnackBarBehavior.floating,
       ),
     );
     if (isSuccess) Navigator.pop(context);
@@ -95,140 +108,245 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = Provider.of<AuthProvider>(context).currentUser;
+    final isPremium = user?.isPremiumActive == true;
+    final total = (premiumPricePerMonth * _selectedMonths).toInt();
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DealerTheme.canvas,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
-              child: Row(children: [
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios, size: 20)),
-                const Icon(Icons.star_rounded, color: AppTheme.accent, size: 20),
-                const SizedBox(width: 8),
-                Text('Premium Analytics', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15)),
-              ]),
+            DealerHeader(
+              title: 'Premium',
+              subtitle: isPremium
+                  ? 'Your products rank higher in the marketplace'
+                  : 'Grow faster with premium visibility',
+              showBack: true,
+              leading: const Icon(Icons.star_rounded,
+                  color: Colors.white, size: 22),
             ),
             Expanded(
-              child: SingleChildScrollView(
+              child: ListView(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppTheme.primary, AppTheme.primaryDark]),
-                        borderRadius: BorderRadius.circular(20),
+                children: [
+                  // ── Hero card ──
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFFFFA726),
+                          Color(0xFFFF6F00),
+                        ],
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(color: AppTheme.accentSoft, borderRadius: BorderRadius.circular(12)),
-                            child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.star, size: 12, color: Colors.black87), SizedBox(width: 4), Text('PREMIUM DEALER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.black87))]),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: DealerTheme.sun.withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(999),
                           ),
-                          const SizedBox(height: 12),
-                          Text('Grow Faster with Premium', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
-                          Text('3x more visibility', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13)),
-                          const SizedBox(height: 16),
-                          Row(children: [
-                            _buildStat(Icons.visibility_rounded, '2.4k', 'Views'),
-                            const SizedBox(width: 12),
-                            _buildStat(Icons.touch_app_rounded, '186', 'Clicks'),
-                            const SizedBox(width: 12),
-                            _buildStat(Icons.thumb_up_rounded, '94%', 'Positive'),
-                          ]),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: AppTheme.cardDecoration,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Premium Benefits', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                          const SizedBox(height: 12),
-                          _buildBenefit(Icons.push_pin_rounded, 'Featured Top'),
-                          _buildBenefit(Icons.chat_rounded, 'Chat Priority'),
-                          _buildBenefit(Icons.analytics_rounded, 'Analytics'),
-                          _buildBenefit(Icons.verified_rounded, 'Verified Badge'),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: AppTheme.cardDecoration,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Select Duration', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                          const SizedBox(height: 12),
-                          Row(
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildDurationChip(1, '1 Month', '${(premiumPricePerMonth * 1).toInt()}'),
-                              const SizedBox(width: 8),
-                              _buildDurationChip(3, '3 Months', '${(premiumPricePerMonth * 3).toInt()}'),
-                              const SizedBox(width: 8),
-                              _buildDurationChip(6, '6 Months', '${(premiumPricePerMonth * 6).toInt()}'),
+                              Icon(Icons.star_rounded,
+                                  size: 13, color: DealerTheme.sun),
+                              SizedBox(width: 4),
+                              Text(
+                                'PREMIUM DEALER',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFE65100)),
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            decoration: InputDecoration(
-                              labelText: 'Mobile money number',
-                              hintText: 'e.g. +237 6XX XX XX XX',
-                              prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
-                              filled: true,
-                              fillColor: const Color(0xFFFAFAFA),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Grow Faster with Premium',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '3x more visibility in the marketplace',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          _heroStat(Icons.visibility_rounded, '2.4k', 'Views'),
+                          const SizedBox(width: 10),
+                          _heroStat(Icons.touch_app_rounded, '186', 'Clicks'),
+                          const SizedBox(width: 10),
+                          _heroStat(
+                              Icons.thumb_up_rounded, '94%', 'Positive'),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // ── Benefits ──
+                  DealerCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Premium Benefits',
+                            style: DealerTheme.sectionTitle()),
+                        const SizedBox(height: 12),
+                        _benefit(Icons.push_pin_rounded, 'Featured at the top '
+                            'of search results'),
+                        _benefit(Icons.analytics_rounded,
+                            'Analytics on views & clicks'),
+                        _benefit(Icons.verified_rounded,
+                            'Verified badge on your store'),
+                        _benefit(Icons.support_agent_rounded,
+                            'Priority customer support'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // ── Duration selection ──
+                  DealerCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Select Duration',
+                            style: DealerTheme.sectionTitle()),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _durationChip(
+                                1, '1 Month', '${(premiumPricePerMonth * 1).toInt()}'),
+                            const SizedBox(width: 8),
+                            _durationChip(
+                                3, '3 Months', '${(premiumPricePerMonth * 3).toInt()}'),
+                            const SizedBox(width: 8),
+                            _durationChip(
+                                6, '6 Months', '${(premiumPricePerMonth * 6).toInt()}'),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: 'Mobile money number',
+                            hintText: 'e.g. +237 6XX XX XX XX',
+                            prefixIcon:
+                                const Icon(Icons.phone_android_rounded, size: 18),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Premium activates instantly after payment is confirmed.',
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
-                          ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Premium activates instantly after payment is confirmed.',
+                          style: TextStyle(
+                              color: AppTheme.textMuted, fontSize: 11),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: const Color(0xFFFFFDE7), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.accentSoft)),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Row(children: [Text('${(premiumPricePerMonth * _selectedMonths).toInt()} Fcfa', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18)), Text('/${_selectedMonths == 1 ? 'mo' : '${_selectedMonths} months'}', style: AppTheme.bodySmall)]),
-                            Text('${premiumPricePerMonth.toInt()} Fcfa per month', style: AppTheme.bodySmall),
-                          ]),
-                          ElevatedButton.icon(
-                            onPressed: _isUpgrading ? null : _handleUpgrade,
-                            icon: _isUpgrading 
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                : const Icon(Icons.star_rounded, color: Colors.white),
-                            label: Text(_isUpgrading ? 'Processing...' : 'Upgrade Now', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white)),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-                          ),
-                        ],
-                      ),
+                  ),
+                  const SizedBox(height: 18),
+                  // ── Summary + CTA ──
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8E1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFFE082)),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Text(
+                                '$total FCFA',
+                                style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w800, fontSize: 19),
+                              ),
+                              Text(
+                                _selectedMonths == 1
+                                    ? '/month'
+                                    : '/${_selectedMonths} months',
+                                style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 12),
+                              ),
+                            ]),
+                            Text('${premiumPricePerMonth.toInt()} FCFA per month',
+                                style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 11.5)),
+                          ],
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _isUpgrading ? null : _handleUpgrade,
+                          icon: _isUpgrading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.star_rounded,
+                                  color: Colors.white, size: 18),
+                          label: Text(
+                            _isUpgrading ? 'Processing...' : 'Upgrade Now',
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontSize: 12.5),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E241E),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
             ),
           ],
@@ -237,29 +355,58 @@ class _PremiumScreenState extends State<PremiumScreen> {
     );
   }
 
-  Widget _buildStat(IconData icon, String value, String label) {
+  Widget _heroStat(IconData icon, String value, String label) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: Column(children: [
           Icon(icon, color: Colors.white, size: 18),
           const SizedBox(height: 4),
-          Text(value, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
-          Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 11)),
+          Text(value,
+              style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17)),
+          Text(label,
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85), fontSize: 10.5)),
         ]),
       ),
     );
   }
 
-  Widget _buildBenefit(IconData icon, String text) {
+  Widget _benefit(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [Icon(icon, size: 16, color: AppTheme.success), const SizedBox(width: 8), Text(text, style: AppTheme.bodyMedium.copyWith(fontSize: 13))]),
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppTheme.success.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, size: 16, color: AppTheme.success),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildDurationChip(int months, String label, String price) {
+  Widget _durationChip(int months, String label, String price) {
     final isSelected = _selectedMonths == months;
     return Expanded(
       child: GestureDetector(
@@ -269,13 +416,25 @@ class _PremiumScreenState extends State<PremiumScreen> {
           decoration: BoxDecoration(
             color: isSelected ? AppTheme.primary : Colors.grey.shade100,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isSelected ? AppTheme.primary : Colors.grey.shade300),
+            border: Border.all(
+              color: isSelected ? AppTheme.primary : Colors.grey.shade300,
+            ),
           ),
           child: Column(
             children: [
-              Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? Colors.white : Colors.grey.shade700)),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          isSelected ? Colors.white : Colors.grey.shade700)),
               const SizedBox(height: 4),
-              Text('$price Fcfa', style: TextStyle(fontSize: 11, color: isSelected ? Colors.white.withValues(alpha: 0.9) : Colors.grey.shade600)),
+              Text('$price FCFA',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: isSelected
+                          ? Colors.white.withValues(alpha: 0.9)
+                          : Colors.grey.shade600)),
             ],
           ),
         ),

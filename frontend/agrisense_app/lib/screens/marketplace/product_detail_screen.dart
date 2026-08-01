@@ -38,6 +38,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   bool isFavorite = false;
   int? _dealerId;
   String _dealerName = '';
+  String _productImage = '';
   late final AnimationController _pulseController;
 
   @override
@@ -59,6 +60,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         setState(() {
           _dealerId = product.dealerId;
           _dealerName = product.dealerName;
+          _productImage = product.image;
         });
       }
     } catch (_) {
@@ -445,13 +447,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                         )
                       ],
                     ),
-                    child: Center(
-                      child: Icon(
-                        _categoryIcon(widget.category),
-                        size: 70,
-                        color: categoryColor,
-                      ),
-                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _productImage.isNotEmpty
+                        ? Image.network(
+                            _productImage,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Icon(
+                                _categoryIcon(widget.category),
+                                size: 70,
+                                color: categoryColor,
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Icon(
+                              _categoryIcon(widget.category),
+                              size: 70,
+                              color: categoryColor,
+                            ),
+                          ),
                   ),
                 ],
               ),

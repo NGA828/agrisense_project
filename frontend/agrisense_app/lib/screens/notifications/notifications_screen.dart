@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/notification.dart';
 import '../../providers/notification_provider.dart';
 import '../../theme/app_theme.dart';
+import '../farmer/farmer_widgets.dart';
 
 /// User-facing in-app notifications: order updates, payment confirmations,
 /// premium subscription events and system broadcasts.
@@ -12,7 +13,8 @@ class NotificationsListScreen extends StatefulWidget {
   const NotificationsListScreen({super.key});
 
   @override
-  State<NotificationsListScreen> createState() => _NotificationsListScreenState();
+  State<NotificationsListScreen> createState() =>
+      _NotificationsListScreenState();
 }
 
 class _NotificationsListScreenState extends State<NotificationsListScreen> {
@@ -29,67 +31,47 @@ class _NotificationsListScreenState extends State<NotificationsListScreen> {
     final provider = context.watch<NotificationProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F3),
+      backgroundColor: FarmerTheme.canvas,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            // Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(8, 20, 20, 20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1B5E20), Color(0xFF388E3C)]),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 20),
+            FarmerHeader(
+              title: 'Notifications',
+              subtitle: provider.unreadCount > 0
+                  ? '${provider.unreadCount} unread update(s)'
+                  : 'You are all caught up',
+              showBack: true,
+              leading: const Icon(Icons.notifications_rounded,
+                  color: Colors.white, size: 22),
+              trailing: [
+                if (provider.unreadCount > 0)
+                  TextButton(
+                    onPressed: () => provider.markAllRead(),
+                    child: const Text('Mark all read',
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                   ),
-                  const Icon(Icons.notifications_rounded, color: Colors.white, size: 22),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text('Notifications',
-                        style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
-                  ),
-                  if (provider.unreadCount > 0)
-                    TextButton(
-                      onPressed: () => provider.markAllRead(),
-                      child: const Text('Mark all read',
-                          style: TextStyle(color: Colors.white, fontSize: 12)),
-                    ),
-                ],
-              ),
+              ],
             ),
             Expanded(
               child: provider.isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppTheme.primary))
                   : provider.notifications.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.notifications_none_rounded, size: 64, color: Colors.grey.shade300),
-                              const SizedBox(height: 12),
-                              Text('No notifications yet', style: AppTheme.titleMedium),
-                              const SizedBox(height: 4),
-                              Text('Order and payment updates will appear here',
-                                  style: TextStyle(color: AppTheme.textMuted)),
-                            ],
-                          ),
+                      ? FarmerEmptyState(
+                          icon: Icons.notifications_none_rounded,
+                          title: 'No notifications yet',
+                          subtitle: 'Order and payment updates will appear here',
                         )
                       : RefreshIndicator(
                           onRefresh: provider.loadNotifications,
                           color: AppTheme.primary,
                           child: ListView.builder(
-                            padding: const EdgeInsets.all(16),
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 12, 16, 24),
                             itemCount: provider.notifications.length,
-                            itemBuilder: (context, index) =>
-                                _notificationCard(provider, provider.notifications[index]),
+                            itemBuilder: (context, index) => _notificationCard(
+                                provider, provider.notifications[index]),
                           ),
                         ),
             ),
@@ -131,18 +113,24 @@ class _NotificationsListScreenState extends State<NotificationsListScreen> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: n.isRead ? Colors.white : const Color(0xFFE8F5E9),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: n.isRead ? Colors.grey.shade200 : AppTheme.primary.withOpacity(0.25),
+            color: n.isRead
+                ? Colors.grey.shade200
+                : AppTheme.primary.withValues(alpha: 0.25),
           ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 42, height: 42,
-              decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: color, size: 20),
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(icon, color: color, size: 21),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -152,22 +140,36 @@ class _NotificationsListScreenState extends State<NotificationsListScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(n.title,
-                            style: GoogleFonts.poppins(
-                                fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700,
-                                fontSize: 13)),
+                        child: Text(
+                          n.title,
+                          style: GoogleFonts.poppins(
+                            fontWeight:
+                                n.isRead ? FontWeight.w500 : FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
                       if (!n.isRead)
                         Container(
-                          width: 8, height: 8,
-                          decoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
+                          width: 9,
+                          height: 9,
+                          decoration: const BoxDecoration(
+                              color: AppTheme.primary, shape: BoxShape.circle),
                         ),
                     ],
                   ),
-                      const SizedBox(height: 3),
-                  Text(n.message, style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, height: 1.4)),
+                  const SizedBox(height: 3),
+                  Text(
+                    n.message,
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        height: 1.4),
+                  ),
                   const SizedBox(height: 5),
-                  Text(n.timeAgo, style: TextStyle(color: AppTheme.textMuted, fontSize: 10)),
+                  Text(n.timeAgo,
+                      style: const TextStyle(
+                          color: AppTheme.textMuted, fontSize: 10.5)),
                 ],
               ),
             ),
@@ -216,7 +218,10 @@ class NotificationBell extends StatelessWidget {
                 child: Text(
                   '${provider.unreadCount > 99 ? '99+' : provider.unreadCount}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 9,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700),
                 ),
               ),
             ),
