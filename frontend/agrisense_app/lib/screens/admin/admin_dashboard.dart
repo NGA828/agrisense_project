@@ -1410,7 +1410,8 @@ class _AdminSettings extends StatelessWidget {
                 GestureDetector(
                   onTap: () async {
                     final picker = ImagePicker();
-                    final picked = await picker.pickImage(source: ImageSource.gallery);
+                    final picked =
+                        await picker.pickImage(source: ImageSource.gallery);
                     if (picked != null) {
                       setStateDialog(() => profilePhoto = File(picked.path));
                     }
@@ -1423,11 +1424,16 @@ class _AdminSettings extends StatelessWidget {
                         backgroundColor: AppTheme.primary.withOpacity(0.1),
                         backgroundImage: profilePhoto != null
                             ? FileImage(profilePhoto!) as ImageProvider
-                            : (user.profilePhoto != null && user.profilePhoto!.isNotEmpty
-                                ? CachedNetworkImageProvider(ApiService.resolveMedia(user.profilePhoto))
+                            : (user.profilePhoto != null &&
+                                    user.profilePhoto!.isNotEmpty
+                                ? CachedNetworkImageProvider(
+                                    ApiService.resolveMedia(user.profilePhoto))
                                 : null),
-                        child: (profilePhoto == null && (user.profilePhoto == null || user.profilePhoto!.isEmpty))
-                            ? const Icon(Icons.person, size: 40, color: AppTheme.primary)
+                        child: (profilePhoto == null &&
+                                (user.profilePhoto == null ||
+                                    user.profilePhoto!.isEmpty))
+                            ? const Icon(Icons.person,
+                                size: 40, color: AppTheme.primary)
                             : null,
                       ),
                       Container(
@@ -1437,7 +1443,8 @@ class _AdminSettings extends StatelessWidget {
                           shape: BoxShape.circle,
                           color: Colors.black.withOpacity(0.3),
                         ),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 24),
+                        child: const Icon(Icons.camera_alt,
+                            color: Colors.white, size: 24),
                       ),
                     ],
                   ),
@@ -1555,11 +1562,15 @@ class _AdminSettings extends StatelessWidget {
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                    backgroundImage: user?.profilePhoto != null && user!.profilePhoto!.isNotEmpty
-                        ? CachedNetworkImageProvider(ApiService.resolveMedia(user.profilePhoto))
+                    backgroundImage: user?.profilePhoto != null &&
+                            user!.profilePhoto!.isNotEmpty
+                        ? CachedNetworkImageProvider(
+                            ApiService.resolveMedia(user.profilePhoto))
                         : null,
-                    child: (user?.profilePhoto == null || user!.profilePhoto!.isEmpty)
-                        ? const Icon(Icons.person_rounded, color: AppTheme.primary, size: 24)
+                    child: (user?.profilePhoto == null ||
+                            user!.profilePhoto!.isEmpty)
+                        ? const Icon(Icons.person_rounded,
+                            color: AppTheme.primary, size: 24)
                         : null,
                   ),
                   const SizedBox(width: 12),
