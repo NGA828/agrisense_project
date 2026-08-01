@@ -190,19 +190,35 @@ class ApiService {
     String? firstName,
     String? lastName,
     String? phoneNumber,
+    File? profilePhoto,
   }) async {
-    final body = <String, dynamic>{
-      if (firstName != null) 'first_name': firstName,
-      if (lastName != null) 'last_name': lastName,
-      if (phoneNumber != null) 'phone_number': phoneNumber,
-    };
-    final response = await _send((h) => http.patch(
-          Uri.parse('$baseUrl/users/me/'),
-          headers: h,
-          body: jsonEncode(body),
-        ));
-    if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to update profile'));
+    if (profilePhoto != null) {
+      var request = http.MultipartRequest('PATCH', Uri.parse('$baseUrl/users/me/'));
+      final token = await _storage.read(key: 'access_token');
+      if (token != null) request.headers['Authorization'] = 'Bearer $token';
+      if (firstName != null) request.fields['first_name'] = firstName;
+      if (lastName != null) request.fields['last_name'] = lastName;
+      if (phoneNumber != null) request.fields['phone_number'] = phoneNumber;
+      request.files.add(await http.MultipartFile.fromPath('profile_photo', profilePhoto.path));
+      final streamed = await request.send().timeout(const Duration(seconds: 45));
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode != 200) {
+        throw ApiException(_messageFrom(response, fallback: 'Failed to update profile'));
+      }
+    } else {
+      final body = <String, dynamic>{
+        if (firstName != null) 'first_name': firstName,
+        if (lastName != null) 'last_name': lastName,
+        if (phoneNumber != null) 'phone_number': phoneNumber,
+      };
+      final response = await _send((h) => http.patch(
+            Uri.parse('$baseUrl/users/me/'),
+            headers: h,
+            body: jsonEncode(body),
+          ));
+      if (response.statusCode != 200) {
+        throw ApiException(_messageFrom(response, fallback: 'Failed to update profile'));
+      }
     }
   }
 
@@ -307,20 +323,37 @@ class ApiService {
     required String category,
     required double price,
     required int stockQuantity,
+    File? imageFile,
   }) async {
-    final response = await _send((h) => http.put(
-          Uri.parse('$baseUrl/products/$productId/'),
-          headers: h,
-          body: jsonEncode({
-            'name': name,
-            'description': description,
-            'category': category,
-            'price': price,
-            'stock_quantity': stockQuantity,
-          }),
-        ));
-    if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to update product'));
+    if (imageFile != null) {
+      var request = http.MultipartRequest('PUT', Uri.parse('$baseUrl/products/$productId/'));
+      final token = await _storage.read(key: 'access_token');
+      if (token != null) request.headers['Authorization'] = 'Bearer $token';
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['category'] = category;
+      request.fields['price'] = price.toString();
+      request.fields['stock_quantity'] = stockQuantity.toString();
+      request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+      final streamed = await request.send().timeout(const Duration(seconds: 45));
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw ApiException(_messageFrom(response, fallback: 'Failed to update product'));
+    } else {
+      final response = await _send((h) => http.put(
+            Uri.parse('$baseUrl/products/$productId/'),
+            headers: h,
+            body: jsonEncode({
+              'name': name,
+              'description': description,
+              'category': category,
+              'price': price,
+              'stock_quantity': stockQuantity,
+            }),
+          ));
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      throw ApiException(_messageFrom(response, fallback: 'Failed to update product'));
+    }
   }
 
   Future<void> deleteProduct(int productId) async {

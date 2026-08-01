@@ -75,7 +75,35 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
             message=content,
             image=image,
         )
-        serializer = MessageSerializer(message)
+
+        recipient = room.dealer if room.farmer_id == request.user.id else room.farmer
+        from announcements.models import notify_user
+        notify_user(
+            recipient,
+            'New message 💬',
+            f'{request.user.first_name or request.user.username}: {content[:40] or "[Image]"}',
+            type='chat',
+            reference_id=room.id,
+        )
+
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f'chat_{room.id}',
+                {
+                    'type': 'chat_message',
+                    'id': message.id,
+                    'message': message.message,
+                    'sender_id': message.sender_id,
+                    'sender_name': message.sender.get_full_name() or message.sender.username,
+                    'image_url': message.image.url if message.image else None,
+                    'created_at': message.created_at.isoformat(),
+                }
+            )
+
+        serializer = MessageSerializer(message, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
