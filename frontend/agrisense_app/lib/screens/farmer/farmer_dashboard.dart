@@ -42,7 +42,7 @@ class FarmerDashboard extends StatefulWidget {
 class _FarmerDashboardState extends State<FarmerDashboard> {
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = [
+  late final List<Widget> _screens = [
     FarmerHomeScreen(onOpenProfile: () => _onItemTapped(4)),
     const CameraScreen(),
     const MarketplaceScreen(),

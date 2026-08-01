@@ -717,21 +717,23 @@ class AdminDrawer extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 children: [
                   _group('MAIN'),
-                  _item(0, Icons.space_dashboard_rounded,
+                  _item(context, 0, Icons.space_dashboard_rounded,
                       Icons.space_dashboard_rounded, 'Overview'),
-                  _item(1, Icons.people_alt_rounded, Icons.people_alt_rounded,
+                  _item(context, 1, Icons.people_alt_rounded, Icons.people_alt_rounded,
                       'User Management'),
-                  _item(2, Icons.receipt_long_rounded,
+                  _item(context, 2, Icons.receipt_long_rounded,
                       Icons.receipt_long_rounded, 'Orders'),
                   if (pages.isNotEmpty) _group('MANAGEMENT'),
                   ...pages.map(
                     (p) => _pageItem(p.icon, p.label, () {
-                      Navigator.pop(context);
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      }
                       onPageSelected(p.id);
                     }),
                   ),
                   _group('PLATFORM'),
-                  _item(3, Icons.settings_rounded, Icons.settings_rounded,
+                  _item(context, 3, Icons.settings_rounded, Icons.settings_rounded,
                       'Settings'),
                 ],
               ),
@@ -806,7 +808,7 @@ class AdminDrawer extends StatelessWidget {
         ),
       );
 
-  Widget _item(int id, IconData icon, IconData activeIcon, String label) {
+  Widget _item(BuildContext context, int id, IconData icon, IconData activeIcon, String label) {
     final selected = selectedIndex == id;
     return ListTile(
       dense: true,
@@ -834,7 +836,9 @@ class AdminDrawer extends StatelessWidget {
             )
           : null,
       onTap: () {
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
         onSelect(id);
       },
     );

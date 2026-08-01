@@ -563,16 +563,16 @@ class DealerDrawer extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 children: [
                   _group('MY STORE'),
-                  _item(0, Icons.space_dashboard_rounded, 'Dashboard', tab: true),
-                  _item(1, Icons.inventory_2_rounded, 'Products', tab: true),
-                  _item(2, Icons.receipt_long_rounded, 'Orders', tab: true),
-                  _page(Icons.star_rounded, 'Premium Upgrade', 100),
+                  _item(context, 0, Icons.space_dashboard_rounded, 'Dashboard', tab: true),
+                  _item(context, 1, Icons.inventory_2_rounded, 'Products', tab: true),
+                  _item(context, 2, Icons.receipt_long_rounded, 'Orders', tab: true),
+                  _page(context, Icons.star_rounded, 'Premium Upgrade', 100),
                   _group('CUSTOMERS'),
-                  _item(3, Icons.chat_rounded, 'Chats', tab: true),
-                  _page(Icons.notifications_rounded, 'Notifications', 101),
+                  _item(context, 3, Icons.chat_rounded, 'Chats', tab: true),
+                  _page(context, Icons.notifications_rounded, 'Notifications', 101),
                   _group('ACCOUNT'),
-                  _item(4, Icons.person_rounded, 'My Profile', tab: true),
-                  _page(Icons.help_outline_rounded, 'Help & Support', 102),
+                  _item(context, 4, Icons.person_rounded, 'My Profile', tab: true),
+                  _page(context, Icons.help_outline_rounded, 'Help & Support', 102),
                 ],
               ),
             ),
@@ -645,7 +645,7 @@ class DealerDrawer extends StatelessWidget {
         ),
       );
 
-  Widget _item(int id, IconData icon, String label, {bool tab = false}) {
+  Widget _item(BuildContext context, int id, IconData icon, String label, {bool tab = false}) {
     final selected = tab && selectedTab == id;
     return ListTile(
       dense: true,
@@ -670,13 +670,15 @@ class DealerDrawer extends StatelessWidget {
             )
           : null,
       onTap: () {
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
         onTabSelected(id);
       },
     );
   }
 
-  Widget _page(IconData icon, String label, int id) {
+  Widget _page(BuildContext context, IconData icon, String label, int id) {
     return ListTile(
       dense: true,
       leading: Icon(icon, color: Colors.white70, size: 20),
@@ -691,7 +693,9 @@ class DealerDrawer extends StatelessWidget {
       trailing: const Icon(Icons.chevron_right_rounded,
           color: Colors.white38, size: 18),
       onTap: () {
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
         onPageSelected(id);
       },
     );
