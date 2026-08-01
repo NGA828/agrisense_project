@@ -68,6 +68,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'message': message,
                 'sender_id': saved['sender_id'],
                 'sender_name': saved['sender_name'],
+                'image_url': saved.get('image_url'),
                 'created_at': saved['created_at'],
             }
         )
@@ -79,6 +80,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'message': event['message'],
             'sender_id': event['sender_id'],
             'sender_name': event['sender_name'],
+            'image_url': event.get('image_url'),
             'created_at': event['created_at'],
         }))
 
@@ -103,12 +105,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def save_message(self, room_id, sender_id, message):
         try:
             room = ChatRoom.objects.get(id=room_id)
-            msg = Message.objects.create(chat_room=room, sender_id=sender_id, message=message)
+            from users.models import User
+            sender = User.objects.get(id=sender_id)
+            msg = Message.objects.create(chat_room=room, sender=sender, message=message)
+
+            recipient = room.dealer if room.farmer_id == sender_id else room.farmer
+            from announcements.models import notify_user
+            notify_user(
+                recipient,
+                'New message 💬',
+                f'{sender.first_name or sender.username}: {message[:40]}',
+                type='chat',
+                reference_id=room.id,
+            )
+
             return {
                 'id': msg.id,
                 'sender_id': msg.sender_id,
                 'sender_name': msg.sender.get_full_name() or msg.sender.username,
+                'image_url': msg.image.url if msg.image else None,
                 'created_at': msg.created_at.isoformat(),
             }
-        except ChatRoom.DoesNotExist:
+        except Exception:
             return None

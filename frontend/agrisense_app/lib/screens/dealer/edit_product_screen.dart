@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api/api_service.dart';
@@ -21,6 +24,8 @@ class _EditProductScreenState extends State<EditProductScreen> {
   final _stockController = TextEditingController();
   String _selectedCategory = 'fertilizer';
   bool _isLoading = false;
+  File? _imageFile;
+  String? _existingImageUrl;
 
   final List<String> _categories = [
     'fertilizer', 'seed', 'herbicide', 'pesticide', 'fungicide', 'equipment'
@@ -34,6 +39,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _priceController.text = widget.product['price']?.toString() ?? '';
     _stockController.text = widget.product['stock_quantity']?.toString() ?? '';
     _selectedCategory = widget.product['category'] ?? 'fertilizer';
+    _existingImageUrl = widget.product['image'];
   }
 
   @override
@@ -43,6 +49,14 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _priceController.dispose();
     _stockController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() => _imageFile = File(picked.path));
+    }
   }
 
   Future<void> _saveProduct() async {
@@ -58,6 +72,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
         category: _selectedCategory,
         price: double.parse(_priceController.text),
         stockQuantity: int.parse(_stockController.text),
+        imageFile: _imageFile,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -72,7 +87,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -93,6 +108,38 @@ class _EditProductScreenState extends State<EditProductScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Product Information', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  width: double.infinity, height: 180,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: _imageFile != null
+                      ? ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.file(_imageFile!, fit: BoxFit.cover))
+                      : _existingImageUrl != null && _existingImageUrl!.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: CachedNetworkImage(
+                                imageUrl: ApiService.resolveMedia(_existingImageUrl),
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => const Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+                                errorWidget: (_, __, ___) => const Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                              ),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.add_a_photo_rounded, size: 36, color: AppTheme.primary),
+                                const SizedBox(height: 8),
+                                Text('Tap to add or change product photo', style: GoogleFonts.poppins(color: AppTheme.textSecondary, fontSize: 13)),
+                              ],
+                            ),
+                ),
+              ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _nameController,

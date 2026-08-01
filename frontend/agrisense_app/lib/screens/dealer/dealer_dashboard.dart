@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
@@ -798,6 +801,112 @@ class _DealerChatListState extends State<_DealerChatList> {
 class _DealerProfile extends StatelessWidget {
   const _DealerProfile();
 
+  Future<void> _showEditProfileDialog(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final firstName = TextEditingController(text: user.firstName);
+    final lastName = TextEditingController(text: user.lastName);
+    final phone = TextEditingController(text: user.phoneNumber);
+    File? profilePhoto;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Edit Profile'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final picked = await picker.pickImage(source: ImageSource.gallery);
+                    if (picked != null) {
+                      setStateDialog(() => profilePhoto = File(picked.path));
+                    }
+                  },
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: AppTheme.primary.withOpacity(0.1),
+                        backgroundImage: profilePhoto != null
+                            ? FileImage(profilePhoto!) as ImageProvider
+                            : (user.profilePhoto != null && user.profilePhoto!.isNotEmpty
+                                ? CachedNetworkImageProvider(ApiService.resolveMedia(user.profilePhoto))
+                                : null),
+                        child: (profilePhoto == null && (user.profilePhoto == null || user.profilePhoto!.isEmpty))
+                            ? const Icon(Icons.store_rounded, size: 40, color: AppTheme.primary)
+                            : null,
+                      ),
+                      Container(
+                        width: 80, height: 80,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withOpacity(0.3)),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 24),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: firstName,
+                  decoration: const InputDecoration(labelText: 'First name'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: lastName,
+                  decoration: const InputDecoration(labelText: 'Last name'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone number'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await auth.updateProfile(
+          firstName: firstName.text.trim(),
+          lastName: lastName.text.trim(),
+          phoneNumber: phone.text.trim(),
+          profilePhoto: profilePhoto,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated successfully'), backgroundColor: AppTheme.success),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Update failed: $e'), backgroundColor: AppTheme.error),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).currentUser;
@@ -810,7 +919,16 @@ class _DealerProfile extends StatelessWidget {
               width: double.infinity, padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)]),
               child: Column(children: [
-                Container(width: 80, height: 80, decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), shape: BoxShape.circle, border: Border.all(color: AppTheme.primary.withOpacity(0.2), width: 3)), child: Icon(Icons.store_rounded, color: AppTheme.primary, size: 40)),
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: AppTheme.primary.withOpacity(0.1),
+                  backgroundImage: user?.profilePhoto != null && user!.profilePhoto!.isNotEmpty
+                      ? CachedNetworkImageProvider(ApiService.resolveMedia(user.profilePhoto))
+                      : null,
+                  child: (user?.profilePhoto == null || user!.profilePhoto!.isEmpty)
+                      ? const Icon(Icons.store_rounded, color: AppTheme.primary, size: 40)
+                      : null,
+                ),
                 const SizedBox(height: 12),
                 Text('${user?.firstName ?? 'Store'} ${user?.lastName ?? ''}', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
                 Text(user?.email ?? '', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
@@ -819,6 +937,7 @@ class _DealerProfile extends StatelessWidget {
               ]),
             ),
             const SizedBox(height: 16),
+            _buildMenuItem(context, Icons.person_rounded, 'Edit Profile', () => _showEditProfileDialog(context)),
             _buildMenuItem(context, Icons.inventory_2_rounded, 'My Products', () {}),
             _buildMenuItem(context, Icons.receipt_long_rounded, 'Order History', () {}),
             _buildMenuItem(context, Icons.chat_rounded, 'Customer Chats', () {}),
