@@ -376,10 +376,30 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # ── Plant-pathology inference ────────────────────────────────────────────
-# `rules` is a transparent, deterministic demo fallback. Production diagnosis
-# should use `tensorflow` with a trained Keras artifact and the exact class map
-# exported during training (see ai_engine/README.md).
-AI_ENGINE = os.getenv('AI_ENGINE', 'rules').strip().lower()
+# OpenRouter vision is primary. The remote model may only select diseases from
+# the admin-reviewed Disease rows supplied in its strict response schema;
+# treatments are always resolved locally. TensorFlow remains an offline option.
+AI_ENGINE = os.getenv('AI_ENGINE', 'openrouter').strip().lower()
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '').strip()
+OPENROUTER_MODEL = os.getenv(
+    'OPENROUTER_MODEL', 'nex-agi/nex-n2-pro:free').strip()
+OPENROUTER_BASE_URL = os.getenv(
+    'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1').strip()
+OPENROUTER_TIMEOUT_SECONDS = float(
+    os.getenv('OPENROUTER_TIMEOUT_SECONDS', '60'))
+OPENROUTER_IMAGE_MAX_DIMENSION = int(
+    os.getenv('OPENROUTER_IMAGE_MAX_DIMENSION', '1280'))
+OPENROUTER_IMAGE_QUALITY = int(os.getenv('OPENROUTER_IMAGE_QUALITY', '88'))
+OPENROUTER_CONFIDENCE_THRESHOLD = float(
+    os.getenv('OPENROUTER_CONFIDENCE_THRESHOLD', '70'))
+# A general vision model's self-reported certainty is not calibrated pathology
+# confidence, so never display more than this cap.
+OPENROUTER_MAX_CONFIDENCE = float(
+    os.getenv('OPENROUTER_MAX_CONFIDENCE', '95'))
+OPENROUTER_APP_URL = os.getenv('OPENROUTER_APP_URL', '').strip()
+OPENROUTER_APP_TITLE = os.getenv('OPENROUTER_APP_TITLE', 'AgriSense AI').strip()
+
+# Optional local TensorFlow engine settings.
 AI_MODEL_PATH = os.getenv('AI_MODEL_PATH', '').strip()
 AI_CLASS_MAP_PATH = os.getenv('AI_CLASS_MAP_PATH', '').strip()
 AI_MODEL_VERSION = os.getenv('AI_MODEL_VERSION', '').strip()
@@ -391,9 +411,9 @@ AI_MODEL_CONFIDENCE_THRESHOLD = float(
     os.getenv('AI_MODEL_CONFIDENCE_THRESHOLD', '65.0'))
 AI_MODEL_TEMPERATURE = float(os.getenv('AI_MODEL_TEMPERATURE', '1.0'))
 AI_STRICT_CLASS_COUNT = _env_bool('AI_STRICT_CLASS_COUNT', True)
-# Production can make a trained model a hard readiness requirement. Development
-# leaves this false so the explicitly-labelled heuristic remains usable.
-AI_REQUIRE_TRAINED_MODEL = _env_bool('AI_REQUIRE_TRAINED_MODEL', False)
+# Require a real model by default. A developer who intentionally wants the
+# labelled heuristic must set AI_ENGINE=rules and AI_REQUIRE_TRAINED_MODEL=false.
+AI_REQUIRE_TRAINED_MODEL = _env_bool('AI_REQUIRE_TRAINED_MODEL', True)
 # Never silently disguise a missing/broken model as trained AI. Enable this
 # only for demos that intentionally accept the heuristic fallback.
 AI_ALLOW_RULE_FALLBACK = _env_bool('AI_ALLOW_RULE_FALLBACK', False)

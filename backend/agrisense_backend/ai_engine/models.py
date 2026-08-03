@@ -4,9 +4,9 @@ from django.db import models
 class AIModel(models.Model):
     """Audit metadata for validated model releases.
 
-    Runtime artifact paths remain deployment configuration (environment/
-    mounted secrets), rather than admin-editable filesystem paths. Diagnosis
-    rows persist the version actually used for each inference.
+    Provider/model identifiers, credentials and optional local artifact paths
+    remain deployment configuration rather than admin-editable secrets.
+    Diagnosis rows persist the provider model actually used for each inference.
     """
     name = models.CharField(max_length=100)
     version = models.CharField(max_length=20)

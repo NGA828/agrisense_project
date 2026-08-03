@@ -1,14 +1,17 @@
 import io
+import json
 from decimal import Decimal
 
 from django.test import TestCase, override_settings
 from PIL import Image
 
 from ai_engine.class_mapping import ClassMapError, infer_class_fields, parse_class_map
+from ai_engine.openrouter_client import OpenRouterVisionClient
 from ai_engine.services import (AIEngineUnavailable, AIInferenceError,
-                                RuleBasedEngine, TensorFlowEngine,
-                                analyze_disease, get_available_crops,
-                                get_disease_info, get_engine_info)
+                                OpenRouterEngine, RuleBasedEngine,
+                                TensorFlowEngine, analyze_disease,
+                                get_available_crops, get_disease_info,
+                                get_engine_info)
 
 
 def png_bytes(color=(100, 130, 90), size=(64, 64)):
@@ -78,6 +81,7 @@ class RuleBasedEngineV2Tests(TestCase):
         self.assertEqual(result['model_version'], 'v2.0-rules')
 
 
+@override_settings(AI_ENGINE='rules', AI_REQUIRE_TRAINED_MODEL=False)
 class KnowledgeBaseTests(TestCase):
     def test_available_crops(self):
         crops = get_available_crops()
@@ -141,6 +145,159 @@ class ClassMapTests(TestCase):
     def test_rejects_unmappable_label(self):
         with self.assertRaises(ClassMapError):
             parse_class_map(['mystery'])
+
+
+class _FakeOpenRouterResponse:
+    def __init__(self, result=None, status_code=200, model='nex-agi/test:free',
+                 error=None):
+        self.status_code = status_code
+        self._data = ({
+            'model': model,
+            'choices': [{
+                'message': {'content': json.dumps(result or {})},
+            }],
+        } if error is None else {'error': {'message': error}})
+
+    def json(self):
+        return self._data
+
+
+@override_settings(
+    AI_ENGINE='openrouter',
+    OPENROUTER_API_KEY='test-openrouter-key',
+    OPENROUTER_MODEL='nex-agi/nex-n2-pro:free',
+    OPENROUTER_CONFIDENCE_THRESHOLD=70,
+    OPENROUTER_MAX_CONFIDENCE=95,
+    AI_ALLOW_RULE_FALLBACK=False,
+)
+class OpenRouterEngineTests(TestCase):
+    def setUp(self):
+        from diagnosis.models import Disease
+
+        Disease.objects.create(
+            disease_name='Reviewed Tomato Blight', crop_name='Tomato',
+            pathogen='Reviewed fungus', symptoms='Reviewed dark leaf spots',
+            causes='Local reviewed cause', severity='medium',
+            prevention='Local reviewed prevention',
+            treatment_type='Local reviewed treatment',
+            medication='Local reviewed medication',
+            instructions='Local reviewed instructions', duration=12,
+        )
+        Disease.objects.create(
+            disease_name='Reviewed Maize Rust', crop_name='Maize',
+            symptoms='Orange pustules', severity='medium',
+        )
+        self.requests = []
+        self.result = {
+            'outcome': 'disease',
+            'disease_name': 'Reviewed Tomato Blight',
+            'confidence': 88,
+            'evidence': ['dark spots visible on the leaf'],
+        }
+        self.status_code = 200
+        self.error = None
+
+    def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        return _FakeOpenRouterResponse(
+            result=self.result,
+            status_code=self.status_code,
+            error=self.error,
+        )
+
+    def engine(self):
+        return OpenRouterEngine(OpenRouterVisionClient(post=self.post))
+
+    def test_supported_crops_come_only_from_reviewed_database_rows(self):
+        crops = get_available_crops()
+        self.assertEqual(crops, ['Maize', 'Tomato'])
+        self.assertNotIn('Cocoa', crops)  # bundled fallback is not exposed
+
+    def test_uses_only_reviewed_diseases_for_selected_crop(self):
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+
+        self.assertEqual(result['disease_name'], 'Reviewed Tomato Blight')
+        self.assertEqual(result['medication'], 'Local reviewed medication')
+        self.assertEqual(result['engine'], 'openrouter-vision')
+        self.assertTrue(result['trained_model'])
+        self.assertTrue(result['knowledge_base_match'])
+
+        _url, request = self.requests[0]
+        payload = request['json']
+        serialized = json.dumps(payload)
+        self.assertIn('Reviewed Tomato Blight', serialized)
+        self.assertNotIn('Reviewed Maize Rust', serialized)
+        # Treatments are deliberately never sent to or accepted from the model.
+        self.assertNotIn('Local reviewed medication', serialized)
+        allowed = payload['response_format']['json_schema']['schema'] \
+            ['properties']['disease_name']['enum']
+        self.assertEqual(
+            allowed,
+            ['Healthy', 'Inconclusive', 'Reviewed Tomato Blight'],
+        )
+        self.assertTrue(request['headers']['Authorization'].startswith('Bearer '))
+        image_url = payload['messages'][1]['content'][1]['image_url']['url']
+        self.assertTrue(image_url.startswith('data:image/jpeg;base64,'))
+
+    def test_healthy_result_uses_no_disease_treatment(self):
+        self.result = {
+            'outcome': 'healthy', 'disease_name': 'Healthy',
+            'confidence': 86, 'evidence': ['uniform green tissue'],
+        }
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertTrue(result['is_healthy'])
+        self.assertEqual(result['disease_name'], 'Healthy')
+        self.assertEqual(result['treatment_type'], 'No treatment required')
+
+    def test_low_confidence_becomes_inconclusive(self):
+        self.result['confidence'] = 55
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Inconclusive')
+        self.assertTrue(result['is_inconclusive'])
+        self.assertTrue(result['trained_model'])
+
+    def test_explicit_inconclusive_does_not_show_high_match_confidence(self):
+        self.result = {
+            'outcome': 'inconclusive', 'disease_name': 'Inconclusive',
+            'confidence': 99, 'evidence': ['image is blurry'],
+        }
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Inconclusive')
+        self.assertLess(float(result['confidence']), 70)
+
+    def test_model_cannot_select_unreviewed_disease(self):
+        self.result['disease_name'] = 'Invented Leaf Disease'
+        with self.assertRaises(AIInferenceError):
+            self.engine().analyze(png_bytes(), 'Tomato')
+
+    def test_model_treatment_fields_are_rejected(self):
+        self.result['treatment'] = 'Buy an invented pesticide'
+        with self.assertRaises(AIInferenceError):
+            self.engine().analyze(png_bytes(), 'Tomato')
+
+    def test_crop_without_reviewed_rows_is_rejected_before_api_call(self):
+        with self.assertRaises(AIInferenceError):
+            self.engine().analyze(png_bytes(), 'Cassava')
+        self.assertEqual(self.requests, [])
+
+    def test_duplicate_reviewed_names_are_rejected_before_api_call(self):
+        from diagnosis.models import Disease
+        Disease.objects.create(
+            disease_name='reviewed tomato blight', crop_name='Tomato')
+        with self.assertRaises(AIInferenceError):
+            self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(self.requests, [])
+
+    def test_provider_failure_fails_closed(self):
+        self.status_code = 429
+        self.error = 'rate limited'
+        with self.assertRaises(AIEngineUnavailable):
+            self.engine().analyze(png_bytes(), 'Tomato')
+
+    @override_settings(OPENROUTER_API_KEY='')
+    def test_missing_api_key_fails_closed(self):
+        with self.assertRaises(AIEngineUnavailable):
+            self.engine().analyze(png_bytes(), 'Tomato')
 
 
 class _FakeModel:

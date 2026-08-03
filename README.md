@@ -16,7 +16,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 | **Database** | MySQL 8 (utf8mb4) — SQLite supported for local dev | Users, products, orders, payments, chats, diagnoses |
 | **Cache / Queue** | Redis (django-redis cache + Celery broker); locmem/eager in dev | Caching, async workers, background scheduling |
 | **Async** | Celery + django-celery-beat schedules (reservations, premiums, reconciliation, weather cleanup) | Background jobs that never block requests |
-| **AI Engine** | Pluggable: trained TensorFlow/Keras CNN + explicit class manifest; labelled rule heuristic for demos | Image-based plant pathology with auditable confidence/model provenance |
+| **AI Engine** | OpenRouter vision (`nex-agi/nex-n2-pro:free`) restricted to reviewed DB diseases; optional local TensorFlow; labelled demo rules | Image-based crop screening with auditable model provenance |
 | **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + push-bus (live notifications & stock) |
 | **External** | OpenWeatherMap, MTN MoMo / Orange Money gateway adapters | Weather forecasts & mobile-money payments |
 | **Observability** | JSON structured logging, request-id tracing, `/api/health/`, optional Sentry | Trace + monitor production |
@@ -143,33 +143,30 @@ DB_NAME=agrisense_db DB_USER=root DB_PASSWORD=yourpass DB_HOST=localhost DB_PORT
   `export DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3` (or the
   equivalent `set` on Windows) before `migrate` — no other changes needed.
 
-### Trained AI model (required for real pathology inference)
+### OpenRouter AI setup
 
-The app works end-to-end in default development mode, but `AI_ENGINE=rules` is
-only a clearly labelled image-colour heuristic—not a trained disease model. To
-enable actual CNN inference:
+OpenRouter vision is the primary engine, using the free Nex-N2-Pro endpoint.
+Create an OpenRouter key and place it only in
+`backend/agrisense_backend/.env` (never in Flutter or source control):
 
-```bash
-cd backend/agrisense_backend
-pip install -r requirements-ai.txt
-# Put a validated .keras/.h5 model and its exact output class-map outside Git,
-# then set these in .env:
-AI_ENGINE=tensorflow
-AI_MODEL_PATH=/path/to/plant_disease.keras
-AI_CLASS_MAP_PATH=/path/to/plant_disease.classes.json
-AI_MODEL_VERSION=plant-disease-v1
+```dotenv
+AI_ENGINE=openrouter
+OPENROUTER_API_KEY=your-private-key
+OPENROUTER_MODEL=nex-agi/nex-n2-pro:free
 AI_REQUIRE_TRAINED_MODEL=true
 AI_ALLOW_RULE_FALLBACK=false
 ```
 
-`/api/health/` reports the heuristic as `degraded`, a ready CNN as `ok`, and a
-configured-but-missing model as `error`. See
-[`ai_engine/README.md`](backend/agrisense_backend/ai_engine/README.md) for the
-model/manifest contract, preprocessing options and validation requirements.
+The remote model can return only `Healthy`, `Inconclusive`, or an exact disease
+already present in the admin-reviewed `Disease` table for the selected crop.
+The backend rejects every other label and all model-generated treatment fields;
+causes, prevention, medication and instructions always come from the database.
+Only crops with reviewed database rows are exposed by the API.
 
-For Docker, build with `INSTALL_AI=true` and mount artifacts under
-`backend/agrisense_backend/ai_models/` (for example, set
-`AI_MODEL_PATH=/app/ai_models/plant_disease.keras`).
+`/api/health/` reports missing OpenRouter configuration as an error. See
+[`ai_engine/README.md`](backend/agrisense_backend/ai_engine/README.md) for the
+restriction, privacy behavior, confidence controls and optional local
+TensorFlow setup.
 
 ### Frontend (Flutter)
 
@@ -203,7 +200,7 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 
 ### Diagnosis & AI
 - `POST /api/diagnosis/analyze/` (multipart image + crop_type — crop is required) · `GET /api/diagnosis/history/`
-- Returns `healthy` / `inconclusive` outcomes, calibrated confidence, and auditable `engine`, `trained_model`, `model_version`, `model_label`, and top alternatives
+- Returns `healthy` / `inconclusive` outcomes, conservative confidence thresholds/caps, and auditable `engine`, `trained_model`, `model_version`, `model_label`, and alternatives
 - `GET /api/diseases/supported_crops/` · Admin: `GET /api/diseases/list_diseases/`, `POST /api/diseases/add_disease/`, full CRUD
 
 ### Regional Analytics
@@ -324,7 +321,7 @@ agrisense_project/
 │   ├── agrisense_backend/     # settings, urls, asgi, celery, logging, checks
 │   ├── users/                 # custom user, registration, admin management
 │   ├── diagnosis/             # diagnoses, treatment plans, disease knowledge base
-│   ├── ai_engine/             # trained CNN inference, class manifests + demo heuristic
+│   ├── ai_engine/             # restricted OpenRouter vision + local CNN/demo adapters
 │   ├── products/              # catalog, orders, stock management
 │   ├── payments/              # payment model + mobile-money gateway adapters
 │   ├── chat/                  # chat rooms, messages, JWT WebSocket consumer
