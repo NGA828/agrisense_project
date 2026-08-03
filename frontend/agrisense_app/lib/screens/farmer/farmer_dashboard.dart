@@ -42,8 +42,17 @@ class FarmerDashboard extends StatefulWidget {
 class _FarmerDashboardState extends State<FarmerDashboard> {
   int _selectedIndex = 0;
 
+  /// Key of the outer [Scaffold] that owns the [FarmerDrawer]. The home tab
+  /// renders its own nested Scaffold, so the hamburger button must open the
+  /// drawer through this key instead of `Scaffold.of(context)` (which would
+  /// resolve to the nested, drawer-less Scaffold).
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   late final List<Widget> _screens = [
-    FarmerHomeScreen(onOpenProfile: () => _onItemTapped(4)),
+    FarmerHomeScreen(
+      onOpenProfile: () => _onItemTapped(4),
+      onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+    ),
     const CameraScreen(),
     const MarketplaceScreen(),
     const ChatListScreen(),
@@ -77,6 +86,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().currentUser;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: FarmerTheme.canvas,
       resizeToAvoidBottomInset: false,
       drawer: FarmerDrawer(
