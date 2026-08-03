@@ -35,6 +35,11 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
   }
 
   Future<void> _loadRecommended() async {
+    // Never market chemicals for a healthy or uncertain diagnosis.
+    if (!d.usesTrainedModel || d.isHealthy || d.isInconclusive) {
+      _loadingProducts = false;
+      return;
+    }
     try {
       final provider = context.read<MarketplaceProvider>();
       await provider.loadProducts(category: 'fungicide');
@@ -128,6 +133,10 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 _imageCard(),
+                if (d.lacksTrainedModelProvenance) ...[
+                  const SizedBox(height: 14),
+                  _fallbackNotice(),
+                ],
                 const SizedBox(height: 14),
                 _diagnosisCard(),
                 const SizedBox(height: 14),
@@ -144,8 +153,12 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
                 ),
                 const SizedBox(height: 14),
                 _treatmentCard(),
-                const SizedBox(height: 14),
-                _recommendedCard(),
+                if (d.usesTrainedModel &&
+                    !d.isHealthy &&
+                    !d.isInconclusive) ...[
+                  const SizedBox(height: 14),
+                  _recommendedCard(),
+                ],
               ],
             ),
           ),
@@ -186,14 +199,67 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
     );
   }
 
+  Widget _fallbackNotice() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppTheme.warning.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.science_outlined,
+              color: AppTheme.warning, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    d.usesRuleFallback
+                        ? 'Demo heuristic result'
+                        : 'Unverified inference source',
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                const Text(
+                  'No verified trained-model provenance is attached to this '
+                  'result. Confirm it with an agronomist before treatment.',
+                  style: TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Diagnosis card ──────────────────────────────────────────────────
   Widget _diagnosisCard() {
     return FarmerCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Disease Name',
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          Row(
+            children: [
+              const Text('Disease Name',
+                  style: TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12)),
+              const Spacer(),
+              if (d.usesTrainedModel)
+                FarmerPill(
+                  label: d.modelVersion.isEmpty ? 'Trained model' : d.modelVersion,
+                  color: AppTheme.info,
+                  icon: Icons.auto_awesome_rounded,
+                ),
+            ],
+          ),
           const SizedBox(height: 8),
           Row(
             children: [

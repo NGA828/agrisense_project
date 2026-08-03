@@ -89,4 +89,17 @@ def check_weather_config(app_configs, **kwargs):
             hint='Set a strong PAYMENT_WEBHOOK_SECRET in production.',
             id='agrisense.W007',
         ))
+    if getattr(settings, 'AI_ENGINE', 'rules') in ('rules', 'rule-based', 'heuristic'):
+        errors.append(Warning(
+            'AI_ENGINE uses the demo rule-based heuristic; no trained plant-pathology model is active.',
+            hint='Configure AI_ENGINE=tensorflow, AI_MODEL_PATH and AI_CLASS_MAP_PATH for real inference.',
+            id='agrisense.W008',
+        ))
+    elif (getattr(settings, 'AI_ENGINE', '') in ('tensorflow', 'keras', 'tf')
+          and not getattr(settings, 'AI_MODEL_PATH', '')):
+        errors.append(Warning(
+            'AI_ENGINE requests TensorFlow but AI_MODEL_PATH is empty.',
+            hint='Mount a trained model artifact and set AI_MODEL_PATH.',
+            id='agrisense.W009',
+        ))
     return errors

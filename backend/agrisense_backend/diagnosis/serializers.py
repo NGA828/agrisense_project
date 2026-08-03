@@ -29,11 +29,19 @@ class DiagnosisSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source='user.email', read_only=True)
     location_data = LocationSerializer(source='location', read_only=True)
     treatment_plan = TreatmentPlanSerializer(read_only=True)
+    engine = serializers.CharField(source='inference_engine', read_only=True)
+    trained_model = serializers.BooleanField(
+        source='used_trained_model', read_only=True)
 
     class Meta:
         model = Diagnosis
         fields = ['id', 'user', 'user_email', 'crop_type', 'image', 'symptoms',
                   'confidence', 'disease_name', 'severity', 'is_healthy',
-                  'is_inconclusive', 'causes', 'prevention',
+                  'is_inconclusive', 'causes', 'prevention', 'engine',
+                  'trained_model', 'model_version', 'model_label', 'alternatives',
                   'created_at', 'location', 'location_data', 'treatment_plan']
-        read_only_fields = ['user', 'confidence', 'disease_name', 'symptoms', 'severity']
+        read_only_fields = [
+            'user', 'confidence', 'disease_name', 'symptoms', 'severity',
+            'is_healthy', 'is_inconclusive', 'causes', 'prevention',
+            'model_version', 'model_label', 'alternatives',
+        ]

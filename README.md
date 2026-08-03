@@ -16,7 +16,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 | **Database** | MySQL 8 (utf8mb4) — SQLite supported for local dev | Users, products, orders, payments, chats, diagnoses |
 | **Cache / Queue** | Redis (django-redis cache + Celery broker); locmem/eager in dev | Caching, async workers, background scheduling |
 | **Async** | Celery + django-celery-beat schedules (reservations, premiums, reconciliation, weather cleanup) | Background jobs that never block requests |
-| **AI Engine** | Pluggable: rule-based scorer (default) / TensorFlow CNN (optional) | Image-based plant pathology with confidence scoring |
+| **AI Engine** | Pluggable: trained TensorFlow/Keras CNN + explicit class manifest; labelled rule heuristic for demos | Image-based plant pathology with auditable confidence/model provenance |
 | **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + push-bus (live notifications & stock) |
 | **External** | OpenWeatherMap, MTN MoMo / Orange Money gateway adapters | Weather forecasts & mobile-money payments |
 | **Observability** | JSON structured logging, request-id tracing, `/api/health/`, optional Sentry | Trace + monitor production |
@@ -143,6 +143,34 @@ DB_NAME=agrisense_db DB_USER=root DB_PASSWORD=yourpass DB_HOST=localhost DB_PORT
   `export DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3` (or the
   equivalent `set` on Windows) before `migrate` — no other changes needed.
 
+### Trained AI model (required for real pathology inference)
+
+The app works end-to-end in default development mode, but `AI_ENGINE=rules` is
+only a clearly labelled image-colour heuristic—not a trained disease model. To
+enable actual CNN inference:
+
+```bash
+cd backend/agrisense_backend
+pip install -r requirements-ai.txt
+# Put a validated .keras/.h5 model and its exact output class-map outside Git,
+# then set these in .env:
+AI_ENGINE=tensorflow
+AI_MODEL_PATH=/path/to/plant_disease.keras
+AI_CLASS_MAP_PATH=/path/to/plant_disease.classes.json
+AI_MODEL_VERSION=plant-disease-v1
+AI_REQUIRE_TRAINED_MODEL=true
+AI_ALLOW_RULE_FALLBACK=false
+```
+
+`/api/health/` reports the heuristic as `degraded`, a ready CNN as `ok`, and a
+configured-but-missing model as `error`. See
+[`ai_engine/README.md`](backend/agrisense_backend/ai_engine/README.md) for the
+model/manifest contract, preprocessing options and validation requirements.
+
+For Docker, build with `INSTALL_AI=true` and mount artifacts under
+`backend/agrisense_backend/ai_models/` (for example, set
+`AI_MODEL_PATH=/app/ai_models/plant_disease.keras`).
+
 ### Frontend (Flutter)
 
 ```bash
@@ -175,7 +203,7 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 
 ### Diagnosis & AI
 - `POST /api/diagnosis/analyze/` (multipart image + crop_type — crop is required) · `GET /api/diagnosis/history/`
-- AI v2: returns `healthy` / `inconclusive` outcomes, calibrated confidence, engine+model_version
+- Returns `healthy` / `inconclusive` outcomes, calibrated confidence, and auditable `engine`, `trained_model`, `model_version`, `model_label`, and top alternatives
 - `GET /api/diseases/supported_crops/` · Admin: `GET /api/diseases/list_diseases/`, `POST /api/diseases/add_disease/`, full CRUD
 
 ### Regional Analytics
@@ -296,7 +324,7 @@ agrisense_project/
 │   ├── agrisense_backend/     # settings, urls, asgi, celery, logging, checks
 │   ├── users/                 # custom user, registration, admin management
 │   ├── diagnosis/             # diagnoses, treatment plans, disease knowledge base
-│   ├── ai_engine/             # plant-pathology engine (rule-based + TF adapter)
+│   ├── ai_engine/             # trained CNN inference, class manifests + demo heuristic
 │   ├── products/              # catalog, orders, stock management
 │   ├── payments/              # payment model + mobile-money gateway adapters
 │   ├── chat/                  # chat rooms, messages, JWT WebSocket consumer

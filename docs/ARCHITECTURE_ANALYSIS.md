@@ -154,7 +154,7 @@ The repository contains a **structurally correct skeleton with a polished UI lay
 
 14. **Excessive JWT lifetimes** (1 day access / 7 days refresh). **Fix:** short access token (15–30 min) + sliding refresh; frontend auto-refresh.
 15. **Diagnosis & product image validation** — file type/size enforced only globally (10 MB); add allow-list (`jpeg/png/webp`) validation.
-16. **AI engine placeholder behavior** — random disease + random confidence: misleading in production. **Fix:** deterministic model-backed scoring when a model artifact exists, DB-driven knowledge base, explicit "model: rule-based fallback" metadata, and confidence calibration.
+16. **AI engine placeholder behavior** — random/heuristic disease confidence is misleading in production. **Implemented fix:** trained TensorFlow inference when a model artifact + exact class manifest exist, DB-driven treatment knowledge, persisted engine/model provenance, confidence gating, and an explicitly labelled rule fallback that reports degraded health.
 17. **No logging configuration** — add structured logging for auth failures, payments, admin actions.
 18. **WebSocket `Origin` not validated; in-memory channel layer not multi-worker safe.** **Fix:** Redis channel layer for prod (config switch), origin check.
 19. **`media`/`static` served by dev server only** — note deployment requirements (nginx/CDN) in docs.

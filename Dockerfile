@@ -17,8 +17,11 @@ RUN apt-get update \
 
 COPY backend/agrisense_backend/requirements.txt /app/requirements.txt
 COPY backend/agrisense_backend/requirements-prod.txt /app/requirements-prod.txt
+COPY backend/agrisense_backend/requirements-ai.txt /app/requirements-ai.txt
+ARG INSTALL_AI=false
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt -r requirements-prod.txt
+    && pip install -r requirements.txt -r requirements-prod.txt \
+    && if [ "$INSTALL_AI" = "true" ]; then pip install -r requirements-ai.txt; fi
 
 COPY backend/agrisense_backend /app
 

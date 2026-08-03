@@ -17,19 +17,26 @@ through an ordered pipeline:
      from the uploaded photo (Pillow) and scores the candidate diseases by
      feature distance. Fully deterministic, dependency-light and testable —
      the same photo always yields the same diagnosis and confidence.
-   * ``TensorFlowEngine`` (optional): when ``AI_MODEL_PATH`` points to a
-     trained artifact (Keras SavedModel/`.h5`), the image is preprocessed to
-     224x224 and predicted with the model; the knowledge base supplies the
+   * ``TensorFlowEngine``: when ``AI_MODEL_PATH`` points to a trained Keras
+     `.keras`/`.h5` artifact and ``AI_CLASS_MAP_PATH`` provides its exact output
+     mapping, the image is preprocessed and predicted; the knowledge base supplies the
      treatment plan for the predicted class. Enable by setting
      ``AI_ENGINE=tensorflow``.
 """
 
 import hashlib
-import os
+import logging
+import math
+import threading
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
+
+from .class_mapping import (ClassMapError, ModelClass, find_class_map,
+                            load_class_map, parse_class_map)
+
+logger = logging.getLogger('agrisense.ai')
 
 # Bundled fallback knowledge base (mirrors the seeded Disease rows).
 # The authoritative source at runtime is the `diagnosis.Disease` table.
@@ -167,11 +174,32 @@ DISEASE_SIGNATURES = {
 }
 
 
-class PlantPathologyEngine:
-    """Pluggable inference engine (rule-based default, TF optional)."""
+class AIEngineError(RuntimeError):
+    """Base exception for safe, user-facing AI engine failures."""
 
-    engine_name = 'rule-based'
-    model_version = 'fallback-1.0'
+
+class AIEngineUnavailable(AIEngineError):
+    """The configured trained model cannot currently serve inference."""
+
+
+class AIInferenceError(AIEngineError):
+    """A configured model failed while processing an image."""
+
+
+class PlantPathologyEngine:
+    """Interface shared by the demo heuristic and trained model adapters."""
+
+    engine_name = 'unknown'
+    model_version = 'unknown'
+    is_trained_model = False
+
+    @property
+    def available(self):
+        return True
+
+    @property
+    def supported_crops(self):
+        return []
 
     def analyze(self, image, crop_type):
         raise NotImplementedError
@@ -284,6 +312,7 @@ class RuleBasedEngine(PlantPathologyEngine):
             'duration': 0,
             'follow_up_date': None,
             'engine': 'rule-based',
+            'trained_model': False,
             'model_version': 'v2.0-rules',
             'image_parsed': ok,
         }
@@ -306,6 +335,7 @@ class RuleBasedEngine(PlantPathologyEngine):
             'duration': 0,
             'follow_up_date': None,
             'engine': 'rule-based',
+            'trained_model': False,
             'model_version': 'v2.0-rules',
             'image_parsed': ok,
             'low_confidence': True,
@@ -348,93 +378,457 @@ class RuleBasedEngine(PlantPathologyEngine):
             'duration': duration,
             'follow_up_date': (datetime.now() + timedelta(days=duration)).date(),
             'engine': 'rule-based',
+            'trained_model': False,
             'model_version': 'v2.0-rules',
             'image_parsed': ok,
         }
 
 
 class TensorFlowEngine(PlantPathologyEngine):
-    """Optional CNN inference backend.
+    """Keras/TensorFlow image-classification backend.
 
-    Activated when ``AI_ENGINE=tensorflow`` and ``AI_MODEL_PATH`` points to a
-    Keras SavedModel. The model must output a class index per trained crop
-    dataset; the knowledge base maps that index/class to a treatment plan.
+    Unlike the previous placeholder, this adapter performs the complete
+    inference path: model loading, EXIF-safe image preprocessing, prediction,
+    probability calibration, crop-aware class selection, class-manifest lookup,
+    and treatment-plan resolution from the knowledge base.
+
+    A class manifest is mandatory.  Model output order is a training artifact
+    and must never be guessed from database row order.
     """
 
     engine_name = 'tensorflow-cnn'
-    model_version = 'unloaded'
+    is_trained_model = True
+    _UNSET = object()
 
-    def __init__(self):
+    def __init__(self, model=_UNSET, class_map=None, preprocessor=None):
         self._model = None
-        path = os.getenv('AI_MODEL_PATH', '')
-        if path:
-            try:
-                import tensorflow as tf  # noqa: F401  (optional heavy dep)
-                self._model = tf.keras.models.load_model(path)
-                self.model_version = os.getenv('AI_MODEL_VERSION', 'cnn-1.0')
-            except Exception:
-                self._model = None
+        self._classes = []
+        self._preprocessor = preprocessor
+        self._predict_lock = threading.Lock()
+        self._load_error = ''
+        self._model_path = str(getattr(settings, 'AI_MODEL_PATH', '') or '').strip()
+        self.model_version = str(
+            getattr(settings, 'AI_MODEL_VERSION', '') or 'unversioned-model')
+
+        try:
+            if class_map is not None:
+                if all(isinstance(item, ModelClass) for item in class_map):
+                    self._classes = sorted(class_map, key=lambda item: item.index)
+                else:
+                    self._classes = parse_class_map(class_map)
+            elif self._model_path:
+                map_path = find_class_map(
+                    self._model_path,
+                    str(getattr(settings, 'AI_CLASS_MAP_PATH', '') or '').strip(),
+                )
+                if map_path is None:
+                    raise ClassMapError(
+                        'No class manifest found. Set AI_CLASS_MAP_PATH or place '
+                        'class_map.json beside the model.')
+                self._classes = load_class_map(map_path)
+            else:
+                raise ClassMapError('AI_MODEL_PATH is not configured.')
+        except ClassMapError as exc:
+            self._load_error = str(exc)
+
+        # Dependency injection keeps inference logic unit-testable without the
+        # optional, heavyweight TensorFlow package in normal backend installs.
+        if model is not self._UNSET:
+            self._model = model
+            if self._model is None and not self._load_error:
+                self._load_error = 'No model instance was supplied.'
+            return
+
+        if self._load_error:
+            return
+        try:
+            import tensorflow as tf
+            self._model = tf.keras.models.load_model(self._model_path, compile=False)
+        except Exception as exc:  # optional dependency/artifact is environment-specific
+            self._load_error = (
+                f'Could not load TensorFlow model at {self._model_path!r}: '
+                f'{type(exc).__name__}: {exc}')
+            logger.warning('AI model unavailable: %s', self._load_error)
+            self._model = None
 
     @property
     def available(self):
-        return self._model is not None
+        return self._model is not None and bool(self._classes)
+
+    @property
+    def load_error(self):
+        return self._load_error
+
+    @property
+    def supported_crops(self):
+        return list(dict.fromkeys(item.crop_type for item in self._classes))
+
+    def _input_size(self):
+        configured = getattr(settings, 'AI_MODEL_INPUT_SIZE', '224x224')
+        if isinstance(configured, (tuple, list)) and len(configured) == 2:
+            return int(configured[0]), int(configured[1])
+        value = str(configured).lower().replace(',', 'x').replace(' ', '')
+        try:
+            width, height = value.split('x', 1)
+            width, height = int(width), int(height)
+            if width > 0 and height > 0:
+                return width, height
+        except (TypeError, ValueError):
+            pass
+        raise AIEngineUnavailable(
+            'AI_MODEL_INPUT_SIZE must look like 224x224 (width x height).')
+
+    def _prepare_image(self, image_file):
+        if self._preprocessor is not None:
+            return self._preprocessor(image_file)
+
+        try:
+            import numpy as np
+            from PIL import Image, ImageOps
+
+            image_file.seek(0)
+            image = ImageOps.exif_transpose(Image.open(image_file)).convert('RGB')
+            width, height = self._input_size()
+            image = ImageOps.fit(
+                image,
+                (width, height),
+                method=Image.Resampling.BILINEAR,
+                centering=(0.5, 0.5),
+            )
+            array = np.asarray(image, dtype='float32')
+            normalization = str(getattr(
+                settings, 'AI_MODEL_NORMALIZATION', 'zero_one')).strip().lower()
+            if normalization in ('zero_one', '0_1', 'rescale'):
+                array /= 255.0
+            elif normalization in ('minus_one_one', '-1_1', 'mobilenet'):
+                array = array / 127.5 - 1.0
+            elif normalization == 'imagenet':
+                array /= 255.0
+                array = (array - np.asarray([0.485, 0.456, 0.406], dtype='float32'))
+                array /= np.asarray([0.229, 0.224, 0.225], dtype='float32')
+            elif normalization not in ('none', 'raw'):
+                raise AIEngineUnavailable(
+                    'AI_MODEL_NORMALIZATION must be zero_one, minus_one_one, '
+                    'imagenet, or none.')
+            return np.expand_dims(array, axis=0)
+        except AIEngineError:
+            raise
+        except Exception as exc:
+            raise AIInferenceError(
+                f'Could not preprocess the uploaded image: {exc}') from exc
+        finally:
+            try:
+                image_file.seek(0)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _prediction_vector(output):
+        """Convert a Keras/Tensor/NumPy output to a flat Python float list."""
+        if isinstance(output, dict):
+            output_name = str(getattr(settings, 'AI_MODEL_OUTPUT_NAME', '') or '')
+            if output_name:
+                if output_name not in output:
+                    raise AIInferenceError(
+                        f'Model output {output_name!r} was not returned.')
+                output = output[output_name]
+            elif len(output) == 1:
+                output = next(iter(output.values()))
+            else:
+                raise AIInferenceError(
+                    'Model returned multiple named outputs; set AI_MODEL_OUTPUT_NAME.')
+
+        if hasattr(output, 'numpy'):
+            output = output.numpy()
+        if hasattr(output, 'tolist'):
+            output = output.tolist()
+
+        # Remove batch/single-output wrappers while retaining the class axis.
+        while isinstance(output, (list, tuple)) and len(output) == 1 \
+                and isinstance(output[0], (list, tuple)):
+            output = output[0]
+        if not isinstance(output, (list, tuple)) or not output:
+            raise AIInferenceError('Model returned an empty or unsupported output.')
+        if any(isinstance(value, (list, tuple, dict)) for value in output):
+            raise AIInferenceError(
+                'Model output must have shape [batch, classes] with batch size 1.')
+        try:
+            vector = [float(value) for value in output]
+        except (TypeError, ValueError) as exc:
+            raise AIInferenceError('Model output contains non-numeric values.') from exc
+        if not all(math.isfinite(value) for value in vector):
+            raise AIInferenceError('Model output contains NaN or infinite values.')
+        return vector
+
+    @staticmethod
+    def _probabilities(vector):
+        """Accept logits or probabilities and apply optional temperature scaling."""
+        temperature = float(getattr(settings, 'AI_MODEL_TEMPERATURE', 1.0))
+        if temperature <= 0:
+            raise AIEngineUnavailable('AI_MODEL_TEMPERATURE must be greater than zero.')
+
+        looks_like_probabilities = (
+            all(0.0 <= value <= 1.0 for value in vector)
+            and abs(sum(vector) - 1.0) <= 0.02
+        )
+        if looks_like_probabilities:
+            # Temperature scaling in log-probability space.
+            logits = [math.log(max(value, 1e-12)) / temperature for value in vector]
+        else:
+            logits = [value / temperature for value in vector]
+        maximum = max(logits)
+        exponentials = [math.exp(value - maximum) for value in logits]
+        total = sum(exponentials)
+        if total <= 0:
+            raise AIInferenceError('Model probabilities could not be normalised.')
+        return [value / total for value in exponentials]
+
+    def _predict(self, batch):
+        try:
+            # A single model instance is shared by request threads. Serialising
+            # predict protects Keras backends/exported graphs that are not
+            # re-entrant while preprocessing remains concurrent.
+            with self._predict_lock:
+                try:
+                    output = self._model.predict(batch, verbose=0)
+                except TypeError:
+                    # Some exported/fake model signatures do not accept verbose.
+                    output = self._model.predict(batch)
+            vector = self._prediction_vector(output)
+            expected_count = max(item.index for item in self._classes) + 1
+            strict_count = bool(getattr(settings, 'AI_STRICT_CLASS_COUNT', True))
+            if len(vector) < expected_count or (strict_count and len(vector) != expected_count):
+                raise AIInferenceError(
+                    f'Model returned {len(vector)} classes but the manifest describes '
+                    f'{expected_count}. Use the exact class map exported during training.')
+            return self._probabilities(vector)
+        except AIEngineError:
+            raise
+        except Exception as exc:
+            raise AIInferenceError(f'TensorFlow inference failed: {exc}') from exc
+
+    def _fallback(self, image, crop_type, reason):
+        if not bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
+            raise AIEngineUnavailable(reason)
+        logger.warning('Using rule-based AI fallback: %s', reason)
+        result = RuleBasedEngine().analyze(image, crop_type)
+        result['fallback_reason'] = reason
+        result['trained_model'] = False
+        return result
 
     def analyze(self, image, crop_type):
         if not self.available:
-            # Graceful degradation to the deterministic engine.
-            return RuleBasedEngine().analyze(image, crop_type)
-        # NOTE: preprocessing & class-mapping depend on the trained dataset;
-        # implement together with the model export notebook.
-        raise NotImplementedError(
-            'TensorFlow inference requires the class mapping layer for the '
-            'trained artifact (see ai_engine/README).')
+            reason = self._load_error or 'The configured TensorFlow model is unavailable.'
+            return self._fallback(image, crop_type, reason)
+
+        try:
+            probabilities = self._predict(self._prepare_image(image))
+            crop_key = str(crop_type).strip().casefold()
+            eligible = [item for item in self._classes
+                        if item.crop_type.casefold() == crop_key]
+            if not eligible:
+                raise AIInferenceError(
+                    f'The trained model has no classes for {crop_type!r}.')
+
+            ranked = sorted(
+                ((probabilities[item.index], item) for item in eligible),
+                key=lambda pair: pair[0], reverse=True,
+            )
+            probability, predicted = ranked[0]
+            confidence = probability * 100.0
+            alternatives = [
+                {
+                    'label': item.label,
+                    'disease_name': 'Healthy' if item.is_healthy else item.disease_name,
+                    'confidence': round(score * 100.0, 2),
+                }
+                for score, item in ranked[:3]
+            ]
+
+            threshold = float(getattr(
+                settings, 'AI_MODEL_CONFIDENCE_THRESHOLD', 65.0))
+            if confidence < threshold:
+                result = RuleBasedEngine._build_inconclusive_result(
+                    crop_type, confidence, True)
+                result.update({
+                    'engine': self.engine_name,
+                    'model_version': self.model_version,
+                    'model_label': predicted.label,
+                    'alternatives': alternatives,
+                    'trained_model': True,
+                })
+                return result
+
+            if predicted.is_healthy:
+                result = RuleBasedEngine._build_healthy_result(True)
+                result.update({
+                    'confidence': Decimal(str(round(confidence, 2))),
+                    'engine': self.engine_name,
+                    'model_version': self.model_version,
+                    'model_label': predicted.label,
+                    'alternatives': alternatives,
+                    'trained_model': True,
+                })
+                return result
+
+            disease = get_disease_info(predicted.disease_name)
+            knowledge_base_match = disease is not None
+            if disease is None:
+                # The classifier can know more classes than the treatment
+                # knowledge base.  Preserve the classification but never invent
+                # pesticide instructions for an unmapped disease.
+                disease = {
+                    'disease_name': predicted.disease_name,
+                    'symptoms': f'The trained image model matched {predicted.label}.',
+                    'causes': 'A treatment record for this model class has not yet '
+                              'been reviewed in the AgriSense knowledge base.',
+                    'severity': 'unknown',
+                    'prevention': 'Isolate affected material where practical and '
+                                  'seek local agronomic confirmation.',
+                    'treatment_type': 'Consult an agronomist',
+                    'medication': 'Do not apply chemicals until the diagnosis is '
+                                  'confirmed by a qualified advisor.',
+                    'instructions': 'Ask an administrator to map this model class '
+                                    'to a reviewed disease record.',
+                    'duration': 0,
+                }
+
+            result = RuleBasedEngine._build_result(disease, confidence, True)
+            result.update({
+                'is_healthy': False,
+                'is_inconclusive': not knowledge_base_match,
+                'engine': self.engine_name,
+                'model_version': self.model_version,
+                'model_label': predicted.label,
+                'alternatives': alternatives,
+                'trained_model': True,
+                'knowledge_base_match': knowledge_base_match,
+            })
+            return result
+        except AIEngineError as exc:
+            if bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
+                return self._fallback(image, crop_type, str(exc))
+            raise
+        except Exception as exc:
+            reason = f'Unexpected TensorFlow inference failure: {exc}'
+            if bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
+                return self._fallback(image, crop_type, reason)
+            raise AIInferenceError(reason) from exc
 
 
 _ENGINE_CACHE = {}
 
 
+def _engine_cache_key():
+    return (
+        str(getattr(settings, 'AI_ENGINE', 'rules')).strip().lower(),
+        str(getattr(settings, 'AI_MODEL_PATH', '') or ''),
+        str(getattr(settings, 'AI_CLASS_MAP_PATH', '') or ''),
+        str(getattr(settings, 'AI_MODEL_VERSION', '') or ''),
+        str(getattr(settings, 'AI_MODEL_INPUT_SIZE', '224x224')),
+        str(getattr(settings, 'AI_MODEL_NORMALIZATION', 'zero_one')),
+        bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)),
+        bool(getattr(settings, 'AI_REQUIRE_TRAINED_MODEL', False)),
+    )
+
+
+def reset_engine_cache():
+    """Clear process-local model instances (primarily useful for tests/reloads)."""
+    _ENGINE_CACHE.clear()
+
+
 def get_engine():
-    """Return the configured engine (cached per process)."""
-    engine = os.getenv('AI_ENGINE', 'rules')
-    if engine not in _ENGINE_CACHE:
-        if engine == 'tensorflow':
-            _ENGINE_CACHE[engine] = TensorFlowEngine()
+    """Return the configured engine, loading a trained model once per process."""
+    key = _engine_cache_key()
+    if key not in _ENGINE_CACHE:
+        requested = key[0]
+        if requested in ('tensorflow', 'keras', 'tf'):
+            engine = TensorFlowEngine()
+        elif requested == 'auto':
+            # Auto opts into a trained model only when an artifact was supplied;
+            # otherwise it exposes the clearly-labelled demo fallback.
+            engine = TensorFlowEngine() if key[1] else RuleBasedEngine()
+        elif requested in ('rules', 'rule-based', 'heuristic'):
+            engine = RuleBasedEngine()
         else:
-            _ENGINE_CACHE[engine] = RuleBasedEngine()
-    return _ENGINE_CACHE[engine]
+            raise AIEngineUnavailable(
+                f'Unknown AI_ENGINE={requested!r}; use tensorflow, auto, or rules.')
+        _ENGINE_CACHE[key] = engine
+    return _ENGINE_CACHE[key]
 
 
 def analyze_disease(image, crop_type):
-    """Public entry point: analyze a plant photo and return a diagnosis dict.
-
-    ``image`` is a Django UploadedFile / file-like object; ``crop_type`` is the
-    crop selected by the farmer (e.g. 'Tomato'). Returns a dict with the
-    disease fields plus confidence, engine and model metadata.
-    """
+    """Analyze a plant image through the configured inference backend."""
+    if not str(crop_type or '').strip():
+        raise AIInferenceError('A crop type is required for model inference.')
     engine = get_engine()
-    result = engine.analyze(image, crop_type or 'Tomato')
-    return result
+    if (isinstance(engine, RuleBasedEngine)
+            and bool(getattr(settings, 'AI_REQUIRE_TRAINED_MODEL', False))):
+        raise AIEngineUnavailable(
+            'A trained model is required but only the demo heuristic is configured.')
+    return engine.analyze(image, str(crop_type).strip())
 
 
 def get_engine_info():
-    """Metadata for health checks and admin "System Health" screen."""
-    engine = get_engine()
+    """Truthful readiness metadata for health checks and the admin console."""
+    try:
+        engine = get_engine()
+    except AIEngineError as exc:
+        return {
+            'status': 'error',
+            'engine': 'unavailable',
+            'trained_model': False,
+            'detail': str(exc),
+        }
+
+    if isinstance(engine, RuleBasedEngine):
+        required = bool(getattr(settings, 'AI_REQUIRE_TRAINED_MODEL', False))
+        return {
+            'status': 'error' if required else 'degraded',
+            'engine': engine.engine_name,
+            'model_version': 'v2.0-rules',
+            'trained_model': False,
+            'detail': ('A trained model is required but only the demo heuristic is configured.'
+                       if required else
+                       'Demo heuristic only — no trained pathology model is configured.'),
+        }
     if isinstance(engine, TensorFlowEngine) and not engine.available:
-        return {'status': 'ok', 'engine': 'rule-based',
-                'detail': 'TensorFlow engine requested but model unavailable; '
-                          'using rule-based fallback'}
-    return {'status': 'ok', 'engine': engine.engine_name,
-            'detail': f'{engine.model_version} — deterministic feature scoring'
-                      if engine.engine_name == 'rule-based'
-                      else f'{engine.model_version} — CNN inference'}
+        fallback = bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False))
+        detail = (engine.load_error or 'TensorFlow model unavailable.') \
+            if settings.DEBUG else 'Configured model failed readiness checks.'
+        return {
+            'status': 'degraded' if fallback else 'error',
+            'engine': 'rule-based' if fallback else engine.engine_name,
+            'requested_engine': engine.engine_name,
+            'model_version': engine.model_version,
+            'trained_model': False,
+            'detail': detail,
+        }
+    return {
+        'status': 'ok',
+        'engine': engine.engine_name,
+        'model_version': engine.model_version,
+        'trained_model': True,
+        'classes': len(getattr(engine, '_classes', [])),
+        'supported_crops': engine.supported_crops,
+        'detail': f'{engine.model_version} — trained CNN inference ready',
+    }
 
 
 def get_available_crops():
-    """Supported crop types (DB knowledge base first, bundled fallback second)."""
+    """Crops supported by the active model, or by the heuristic knowledge base."""
+    try:
+        engine = get_engine()
+    except AIEngineError:
+        engine = None
+    if isinstance(engine, TensorFlowEngine) and engine.supported_crops:
+        return engine.supported_crops
+
     from diagnosis.models import Disease
-    db_crops = list(Disease.objects.values_list('crop_name', flat=True).distinct().order_by('crop_name'))
-    merged = list(dict.fromkeys([c for c in db_crops] + list(FALLBACK_DISEASE_DATABASE.keys())))
-    return merged
+    db_crops = list(Disease.objects.values_list(
+        'crop_name', flat=True).distinct().order_by('crop_name'))
+    return list(dict.fromkeys(
+        [crop for crop in db_crops] + list(FALLBACK_DISEASE_DATABASE.keys())))
 
 
 def get_disease_info(disease_name):
