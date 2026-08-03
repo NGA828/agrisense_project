@@ -26,7 +26,12 @@ class FarmerHomeScreen extends StatefulWidget {
   /// Called when the header avatar is tapped (switches to the Profile tab).
   final VoidCallback? onOpenProfile;
 
-  const FarmerHomeScreen({super.key, this.onOpenProfile});
+  /// Called when the hamburger menu button is tapped. Opens the navigation
+  /// drawer, which lives on the outer dashboard Scaffold (this screen has its
+  /// own nested Scaffold without a drawer).
+  final VoidCallback? onOpenDrawer;
+
+  const FarmerHomeScreen({super.key, this.onOpenProfile, this.onOpenDrawer});
 
   @override
   State<FarmerHomeScreen> createState() => _FarmerHomeScreenState();
@@ -135,29 +140,28 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       child: Row(
         children: [
           // Menu button
-          Builder(
-            builder: (context) => GestureDetector(
-              onTap: () => Scaffold.of(context).openDrawer(),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppTheme.primary, AppTheme.primaryLight],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+          GestureDetector(
+            onTap: widget.onOpenDrawer,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppTheme.primary, AppTheme.primaryLight],
                 ),
-                child: const Icon(Icons.menu_rounded, color: Colors.white, size: 24),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
+              child:
+                  const Icon(Icons.menu_rounded, color: Colors.white, size: 24),
             ),
           ),
           const SizedBox(width: 12),
