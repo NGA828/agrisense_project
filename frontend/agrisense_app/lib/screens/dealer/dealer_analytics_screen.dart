@@ -138,16 +138,18 @@ class _DealerAnalyticsScreenState extends State<DealerAnalyticsScreen> {
     final totalOrders = (data['total_orders'] ?? 0) as num;
     final totalRevenue = (data['total_revenue'] ?? 0).toDouble();
     final lowStock = (data['low_stock_products'] ?? 0) as num;
-    final topProducts = (data['top_products'] as List? ?? []).cast<Map<String, dynamic>>();
-    final recentOrders = (data['recent_orders'] as List? ?? []).cast<Map<String, dynamic>>();
+    final topProducts =
+        (data['top_products'] as List? ?? []).cast<Map<String, dynamic>>();
+    final recentOrders =
+        (data['recent_orders'] as List? ?? []).cast<Map<String, dynamic>>();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       children: [
         Row(
           children: [
-            _statCard('Orders', totalOrders.toString(),
-                Icons.receipt_rounded, AppTheme.primary),
+            _statCard('Orders', totalOrders.toString(), Icons.receipt_rounded,
+                AppTheme.primary),
             const SizedBox(width: 12),
             _statCard('Revenue (FCFA)', totalRevenue.toStringAsFixed(0),
                 Icons.payments_rounded, AppTheme.success),
@@ -156,18 +158,22 @@ class _DealerAnalyticsScreenState extends State<DealerAnalyticsScreen> {
         const SizedBox(height: 12),
         Row(
           children: [
-            _statCard('Low stock', lowStock.toString(),
-                Icons.inventory_rounded, AppTheme.warning),
+            _statCard('Low stock', lowStock.toString(), Icons.inventory_rounded,
+                AppTheme.warning),
             const SizedBox(width: 12),
-            _statCard('Top product', topProducts.isNotEmpty
-                ? topProducts.first['name']?.toString() ?? '—' : '—',
-                Icons.star_rounded, AppTheme.info),
+            _statCard(
+                'Top product',
+                topProducts.isNotEmpty
+                    ? topProducts.first['name']?.toString() ?? '—'
+                    : '—',
+                Icons.star_rounded,
+                AppTheme.info),
           ],
         ),
         const SizedBox(height: 24),
         Text('Top selling products',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w700, fontSize: 15)),
+            style:
+                GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
         const SizedBox(height: 8),
         if (topProducts.isEmpty)
           const _EmptyNote('No sales in this period yet.')
@@ -175,8 +181,8 @@ class _DealerAnalyticsScreenState extends State<DealerAnalyticsScreen> {
           ...topProducts.map(_productBar),
         const SizedBox(height: 24),
         Text('Recent orders',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w700, fontSize: 15)),
+            style:
+                GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
         const SizedBox(height: 8),
         if (recentOrders.isEmpty)
           const _EmptyNote('No orders yet.')
@@ -196,7 +202,8 @@ class _DealerAnalyticsScreenState extends State<DealerAnalyticsScreen> {
           boxShadow: [
             BoxShadow(
                 color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8, offset: const Offset(0, 2)),
+                blurRadius: 8,
+                offset: const Offset(0, 2)),
           ],
         ),
         child: Column(
@@ -223,11 +230,12 @@ class _DealerAnalyticsScreenState extends State<DealerAnalyticsScreen> {
     final name = product['name']?.toString() ?? '—';
     final revenue = (product['revenue'] ?? 0).toDouble();
     final units = product['units'] ?? 0;
-    final maxRev = ((_data?['top_products'] as List? ?? []).isEmpty)
+    final topProductsData = (_data?['top_products'] as List? ?? []);
+    final maxRev = topProductsData.isEmpty
         ? 1.0
-        : ((_data?['top_products'] as List)
-                .map((e) => (e['revenue'] ?? 0).toDouble())
-                .fold(1.0, (a, b) => a > b ? a : b) as double);
+        : topProductsData
+            .map((e) => (e['revenue'] ?? 0).toDouble())
+            .fold(1.0, (a, b) => a > b ? a : b);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -250,7 +258,7 @@ class _DealerAnalyticsScreenState extends State<DealerAnalyticsScreen> {
           LinearPercentIndicator(
             percent: maxRev > 0 ? (revenue / maxRev).clamp(0.0, 1.0) : 0,
             lineHeight: 8,
-            barColor: AppTheme.primary,
+            progressColor: AppTheme.primary,
             backgroundColor: Colors.grey.shade200,
             animateFromLastPercent: true,
           ),
@@ -296,8 +304,8 @@ class _DealerAnalyticsScreenState extends State<DealerAnalyticsScreen> {
                   style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w700, fontSize: 12)),
               Text(order['status']?.toString() ?? '',
-                  style: GoogleFonts.poppins(
-                      color: AppTheme.info, fontSize: 10)),
+                  style:
+                      GoogleFonts.poppins(color: AppTheme.info, fontSize: 10)),
             ],
           ),
         ],
@@ -315,7 +323,8 @@ class _EmptyNote extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Text(message,
-          style: GoogleFonts.poppins(color: Colors.grey.shade600, fontSize: 12)),
+          style:
+              GoogleFonts.poppins(color: Colors.grey.shade600, fontSize: 12)),
     );
   }
 }

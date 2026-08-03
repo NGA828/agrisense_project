@@ -1296,7 +1296,9 @@ class _FarmSnapshotState extends State<_FarmSnapshot> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+    });
   }
 
   Future<void> _load() async {
