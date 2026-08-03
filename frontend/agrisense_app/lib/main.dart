@@ -151,9 +151,9 @@ class _AgriSenseSplashScreenState extends State<AgriSenseSplashScreen>
 
     _controller.forward();
 
-    // Restore the persisted session. AuthProvider guarantees a minimum splash
-    // display time (>= the 2s logo animation) before clearing `isRestoring`, so
-    // the animation plays to completion even on a fresh (no-session) launch.
+    // Restore the persisted session. AuthProvider keeps `isRestoring` active
+    // for at least 50 seconds, so this splash remains visible for the requested
+    // loading period even when there is no saved session.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<AuthProvider>().restoreSession();
