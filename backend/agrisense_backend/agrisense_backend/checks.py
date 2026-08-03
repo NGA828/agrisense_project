@@ -89,4 +89,31 @@ def check_weather_config(app_configs, **kwargs):
             hint='Set a strong PAYMENT_WEBHOOK_SECRET in production.',
             id='agrisense.W007',
         ))
+    ai_engine = getattr(settings, 'AI_ENGINE', 'openrouter')
+    if ai_engine in ('rules', 'rule-based', 'heuristic'):
+        errors.append(Warning(
+            'AI_ENGINE uses the demo rule-based heuristic; no trained plant-pathology model is active.',
+            hint='Configure AI_ENGINE=openrouter and OPENROUTER_API_KEY for real vision inference.',
+            id='agrisense.W008',
+        ))
+    elif (ai_engine in ('tensorflow', 'keras', 'tf')
+          and not getattr(settings, 'AI_MODEL_PATH', '')):
+        errors.append(Warning(
+            'AI_ENGINE requests TensorFlow but AI_MODEL_PATH is empty.',
+            hint='Mount a trained model artifact and set AI_MODEL_PATH.',
+            id='agrisense.W009',
+        ))
+    elif ai_engine in ('openrouter', 'openrouter-vision', 'cloud'):
+        if not getattr(settings, 'OPENROUTER_API_KEY', ''):
+            errors.append(Warning(
+                'AI_ENGINE requests OpenRouter but OPENROUTER_API_KEY is empty.',
+                hint='Set the API key only in the backend environment.',
+                id='agrisense.W010',
+            ))
+        if not getattr(settings, 'OPENROUTER_MODEL', ''):
+            errors.append(Warning(
+                'OPENROUTER_MODEL is empty.',
+                hint='Set a vision model such as nex-agi/nex-n2-pro:free.',
+                id='agrisense.W011',
+            ))
     return errors

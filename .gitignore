@@ -7,6 +7,15 @@ venv/
 env/
 *.sqlite3
 
+# Trained model artifacts (store/version in the deployment artifact registry)
+backend/agrisense_backend/ai_models/
+*.keras
+*.h5
+*.tflite
+*.onnx
+*.pt
+*.pth
+
 # Environment & secrets
 .env
 .env.local

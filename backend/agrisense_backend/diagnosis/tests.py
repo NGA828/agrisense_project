@@ -1,5 +1,9 @@
 import io
+from decimal import Decimal
+from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
@@ -25,6 +29,7 @@ def png_bytes(color=(120, 140, 100), size=(64, 64)):
     return buf
 
 
+@override_settings(AI_ENGINE='rules', AI_REQUIRE_TRAINED_MODEL=False)
 class DiagnosisTests(APITestCase):
     def setUp(self):
         self.farmer = make_user('farmer1', 'farmer')
@@ -52,7 +57,61 @@ class DiagnosisTests(APITestCase):
         self.assertIn('confidence', resp.data)
         self.assertGreaterEqual(float(resp.data['confidence']), 0)
         self.assertIn('treatment_plan', resp.data)
+        self.assertEqual(resp.data['engine'], 'rule-based')
+        self.assertEqual(resp.data['model_version'], 'v2.0-rules')
         self.assertTrue(Diagnosis.objects.filter(user=self.farmer).exists())
+
+    @patch('diagnosis.views.analyze_disease')
+    def test_analyze_persists_trained_model_provenance(self, mock_analyze):
+        mock_analyze.return_value = {
+            'disease_name': 'Test Blight',
+            'confidence': Decimal('91.25'),
+            'severity': 'medium',
+            'is_healthy': False,
+            'symptoms': 'spots',
+            'causes': 'fungus',
+            'prevention': 'rotate',
+            'treatment_type': 'Fungicide',
+            'medication': 'copper',
+            'instructions': 'spray',
+            'duration': 14,
+            'engine': 'tensorflow-cnn',
+            'trained_model': True,
+            'model_version': 'field-model-3',
+            'model_label': 'Tomato___Test_blight',
+            'alternatives': [
+                {'disease_name': 'Test Blight', 'confidence': 91.25},
+            ],
+        }
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes(), 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['engine'], 'tensorflow-cnn')
+        self.assertTrue(resp.data['trained_model'])
+        self.assertEqual(resp.data['model_version'], 'field-model-3')
+        diagnosis = Diagnosis.objects.get(user=self.farmer)
+        self.assertEqual(diagnosis.inference_engine, 'tensorflow-cnn')
+        self.assertTrue(diagnosis.used_trained_model)
+        self.assertEqual(diagnosis.model_label, 'Tomato___Test_blight')
+        self.assertEqual(len(diagnosis.alternatives), 1)
+
+    @patch('diagnosis.views.analyze_disease')
+    def test_unavailable_model_returns_503_without_saving(self, mock_analyze):
+        from ai_engine.services import AIEngineUnavailable
+        mock_analyze.side_effect = AIEngineUnavailable('model file missing')
+        self.auth(self.farmer)
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': png_bytes(), 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(resp.data['code'], 'ai_model_unavailable')
+        self.assertFalse(Diagnosis.objects.filter(user=self.farmer).exists())
 
     def test_analyze_requires_crop_type(self):
         """AI v2 crop-mandatory guard: no crop -> rejected, not Tomato fallback."""
@@ -96,6 +155,17 @@ class DiagnosisTests(APITestCase):
         # Content type is text/plain by default for BytesIO => rejected pre-inference.
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_analyze_rejects_fake_image_even_with_allowed_content_type(self):
+        self.auth(self.farmer)
+        fake = SimpleUploadedFile(
+            'fake.png', b'not really a png', content_type='image/png')
+        resp = self.client.post(
+            reverse('diagnosis-analyze'),
+            {'image': fake, 'crop_type': 'Tomato'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_analyze_requires_auth(self):
         resp = self.client.post(
             reverse('diagnosis-analyze'),
@@ -137,6 +207,14 @@ class DiseaseDatabaseTests(APITestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Disease.objects.filter(disease_name='New Rust').exists())
+
+    def test_duplicate_disease_name_for_crop_is_rejected_case_insensitively(self):
+        self.auth(self.admin)
+        resp = self.client.post(reverse('disease-db-add-disease'), {
+            'disease_name': 'existing', 'crop_name': 'maize', 'severity': 'low',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Disease.objects.count(), 1)
 
     def test_farmer_cannot_add_disease(self):
         self.auth(self.farmer)

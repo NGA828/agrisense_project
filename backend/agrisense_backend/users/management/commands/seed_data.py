@@ -194,6 +194,8 @@ class Command(BaseCommand):
                 severity=info.get('severity', 'medium'),
                 causes=info.get('causes', ''),
                 prevention=info.get('prevention', ''),
+                inference_engine='rule-based',
+                model_version='v2.0-rules',
             )
             TreatmentPlan.objects.create(
                 diagnosis=diagnosis,

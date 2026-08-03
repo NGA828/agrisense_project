@@ -1684,7 +1684,7 @@ class _AdminSettings extends StatelessWidget {
                     context,
                     Icons.smart_toy_rounded,
                     'AI Model Settings',
-                    'Version 3.2 active',
+                    'OpenRouter · reviewed diseases only',
                   ),
                   const SizedBox(height: 20),
                   Text('Operations', style: AdminTheme.sectionTitle()),

@@ -102,6 +102,8 @@ class _CameraScreenState extends State<CameraScreen>
 
                       // ── Instructions ──
                       _buildInstructions(),
+                      const SizedBox(height: 12),
+                      _buildCloudAiNotice(),
                       const SizedBox(height: 24),
 
                       // ── Crop Selector ──
@@ -578,6 +580,37 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
+  Widget _buildCloudAiNotice() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE3F2FD),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF90CAF9)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cloud_outlined, color: Color(0xFF1565C0), size: 18),
+          SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'Cloud AI analysis: your photo is sent over an encrypted '
+              'connection to the configured third-party AI provider. Treatment '
+              'information always comes from AgriSense’s reviewed database.',
+              style: TextStyle(
+                color: Color(0xFF0D47A1),
+                fontSize: 10.5,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─────────────────────────────────────────────
   //  CROP SELECTOR
   // ─────────────────────────────────────────────
@@ -611,7 +644,12 @@ class _CameraScreenState extends State<CameraScreen>
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final crop = _crops[index];
-              final data = cropData[crop]!;
+              // Trained model manifests can add crops beyond the bundled five.
+              // Use a safe generic visual instead of crashing on a new label.
+              final data = cropData[crop] ?? {
+                'icon': Icons.eco_rounded,
+                'color': AppTheme.primary,
+              };
               final isSelected = crop == _selectedCrop;
 
               return GestureDetector(

@@ -394,7 +394,9 @@ class ApiService {
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
     request.files.add(http.MultipartFile.fromBytes('image', imageBytes, filename: fileName));
     request.fields['crop_type'] = cropType;
-    final streamed = await request.send().timeout(const Duration(seconds: 45));
+    // Free cloud-vision endpoints can queue briefly; keep the client timeout
+    // above the backend's configured OpenRouter timeout (60s by default).
+    final streamed = await request.send().timeout(const Duration(seconds: 90));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode == 201) return Diagnosis.fromJson(jsonDecode(response.body));
     throw ApiException(_messageFrom(response, fallback: 'Analysis failed'));

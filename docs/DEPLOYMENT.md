@@ -140,12 +140,19 @@ change, not a code change.
 
 ## 5. AI engine
 
-- Default `AI_ENGINE=rules`: deterministic feature-scoring over the
-  admin-managed `Disease` knowledge base. Same photo → same diagnosis.
-- Optional `AI_ENGINE=tensorflow` with `AI_MODEL_PATH` pointing at a Keras
-  artifact for CNN inference; degrades gracefully to the rule-based engine
-  when the artifact is missing.
-- Admin content management (add/edit diseases) immediately affects diagnoses.
+- Primary: `AI_ENGINE=openrouter` with backend-only `OPENROUTER_API_KEY` and
+  `OPENROUTER_MODEL=nex-agi/nex-n2-pro:free`.
+- The request schema and a second server-side check restrict classification to
+  `Healthy`, `Inconclusive`, or exact admin-reviewed `Disease` rows for the
+  selected crop. No treatment fields are sent to or accepted from the model.
+- Photos are resized and re-encoded without EXIF before private base64 upload.
+  The privacy notice must disclose third-party image processing.
+- Missing credentials, network/quota errors, malformed output and unreviewed
+  labels fail closed. Keep `AI_ALLOW_RULE_FALLBACK=false` in production.
+- Optional offline mode: `AI_ENGINE=tensorflow`, validated Keras artifact and
+  exact class manifest; build Docker with `INSTALL_AI=true`.
+- Every diagnosis stores engine, actual routed model, raw label and alternatives.
+  See `backend/agrisense_backend/ai_engine/README.md` for full configuration.
 
 ## 6. Tests & CI
 
@@ -154,7 +161,8 @@ cd backend/agrisense_backend
 DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3 python manage.py test
 ```
 
-76 tests cover auth/RBAC, JWT rotation + blacklist, registration hardening,
-orders/stock integrity, payments (amount, ownership, idempotency, premium),
-chat permissions, disease-DB authorization, AI determinism and health checks.
+The 200+ test suite covers auth/RBAC, JWT rotation + blacklist, registration
+hardening, orders/stock integrity, payments, chat permissions, disease-DB
+authorization, restricted OpenRouter requests/responses, local inference and
+health checks.
 `flutter analyze` should be run in CI for the frontend.
