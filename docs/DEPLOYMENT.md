@@ -140,12 +140,19 @@ change, not a code change.
 
 ## 5. AI engine
 
-- Default `AI_ENGINE=rules`: deterministic feature-scoring over the
-  admin-managed `Disease` knowledge base. Same photo → same diagnosis.
-- Optional `AI_ENGINE=tensorflow` with `AI_MODEL_PATH` pointing at a Keras
-  artifact for CNN inference; degrades gracefully to the rule-based engine
-  when the artifact is missing.
-- Admin content management (add/edit diseases) immediately affects diagnoses.
+- Default `AI_ENGINE=rules` is a deterministic **demo heuristic**, not a trained
+  pathology model. The API/UI label its provenance and health reports
+  `degraded` rather than pretending that model inference is ready.
+- Production uses `AI_ENGINE=tensorflow`, `AI_MODEL_PATH` pointing at a validated
+  Keras artifact, and `AI_CLASS_MAP_PATH` pointing at the exact output-index
+  manifest exported during training. Build Docker with `INSTALL_AI=true`.
+- Missing/mismatched artifacts fail closed (`503` / unhealthy readiness).
+  `AI_ALLOW_RULE_FALLBACK=true` is an explicit demo-only opt-in.
+- Every diagnosis stores engine, model version, raw model label and top
+  alternatives. Admin knowledge-base edits continue to control reviewed
+  treatment details without changing model output order.
+- See `backend/agrisense_backend/ai_engine/README.md` for the model contract,
+  preprocessing settings and field-validation requirements.
 
 ## 6. Tests & CI
 

@@ -76,12 +76,14 @@ def health_check(request):
     checks = {
         'database': {'status': 'ok' if db_ok else 'error', 'detail': db_err},
         'cache': {'status': 'ok' if cache_ok else 'error', 'detail': cache_err},
-        'ai_engine': {'status': engine.get('status', 'unknown'), 'detail': engine.get('detail')},
+        'ai_engine': engine,
         'push': _push_info(),
         'payments': _payments_info(),
     }
 
-    critical = ['database', 'cache']
+    # A demo heuristic is reported as degraded but remains usable. An explicitly
+    # configured trained model that failed to load is a readiness failure.
+    critical = ['database', 'cache', 'ai_engine']
     if any(checks[c]['status'] == 'error' for c in critical):
         overall = 'error'
         code = status.HTTP_503_SERVICE_UNAVAILABLE

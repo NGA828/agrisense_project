@@ -375,8 +375,30 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-# ── AI v2 (Phase E) ─────────────────────────────────────────────────────
-# Calibration + honesty thresholds for the rule-based engine.
+# ── Plant-pathology inference ────────────────────────────────────────────
+# `rules` is a transparent, deterministic demo fallback. Production diagnosis
+# should use `tensorflow` with a trained Keras artifact and the exact class map
+# exported during training (see ai_engine/README.md).
+AI_ENGINE = os.getenv('AI_ENGINE', 'rules').strip().lower()
+AI_MODEL_PATH = os.getenv('AI_MODEL_PATH', '').strip()
+AI_CLASS_MAP_PATH = os.getenv('AI_CLASS_MAP_PATH', '').strip()
+AI_MODEL_VERSION = os.getenv('AI_MODEL_VERSION', '').strip()
+AI_MODEL_INPUT_SIZE = os.getenv('AI_MODEL_INPUT_SIZE', '224x224').strip()
+AI_MAX_IMAGE_PIXELS = int(os.getenv('AI_MAX_IMAGE_PIXELS', '25000000'))
+AI_MODEL_NORMALIZATION = os.getenv('AI_MODEL_NORMALIZATION', 'zero_one').strip().lower()
+AI_MODEL_OUTPUT_NAME = os.getenv('AI_MODEL_OUTPUT_NAME', '').strip()
+AI_MODEL_CONFIDENCE_THRESHOLD = float(
+    os.getenv('AI_MODEL_CONFIDENCE_THRESHOLD', '65.0'))
+AI_MODEL_TEMPERATURE = float(os.getenv('AI_MODEL_TEMPERATURE', '1.0'))
+AI_STRICT_CLASS_COUNT = _env_bool('AI_STRICT_CLASS_COUNT', True)
+# Production can make a trained model a hard readiness requirement. Development
+# leaves this false so the explicitly-labelled heuristic remains usable.
+AI_REQUIRE_TRAINED_MODEL = _env_bool('AI_REQUIRE_TRAINED_MODEL', False)
+# Never silently disguise a missing/broken model as trained AI. Enable this
+# only for demos that intentionally accept the heuristic fallback.
+AI_ALLOW_RULE_FALLBACK = _env_bool('AI_ALLOW_RULE_FALLBACK', False)
+
+# Calibration + honesty thresholds used by the demo rule-based engine.
 AI_TEMPERATURE = float(os.getenv('AI_TEMPERATURE', '1.6'))
 AI_LOW_CONFIDENCE_THRESHOLD = float(os.getenv('AI_LOW_CONFIDENCE_THRESHOLD', '80.0'))
 

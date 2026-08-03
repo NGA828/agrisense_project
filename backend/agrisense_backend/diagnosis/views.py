@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+import logging
 import uuid
 
 from django.db import models
@@ -12,7 +13,10 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import Diagnosis, Location, TreatmentPlan, Disease
 from .serializers import (DiagnosisSerializer, LocationSerializer,
                           TreatmentPlanSerializer, DiseaseSerializer)
-from ai_engine.services import analyze_disease
+from ai_engine.services import (AIEngineUnavailable, AIInferenceError,
+                                analyze_disease)
+
+logger = logging.getLogger('agrisense.ai')
 
 
 class DiagnosisViewSet(viewsets.ModelViewSet):
@@ -40,24 +44,33 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
 
         image = request.FILES['image']
 
-        # Validate the image. Trust an explicit Content-Type when present;
-        # otherwise (or when the client lied) verify by parsing the header
-        # with Pillow so fake uploads never reach the inference engine.
-        allowed = getattr(settings, 'ALLOWED_IMAGE_TYPES', [])
-        if image.content_type and image.content_type in allowed:
-            is_valid_image = True
-        else:
-            try:
-                from PIL import Image as PilImage
-                image.seek(0)
-                PilImage.open(image).verify()
+        # Always decode/verify the file header; Content-Type is user-controlled
+        # metadata and must not let corrupt bytes reach either inference engine.
+        is_valid_image = False
+        try:
+            from PIL import Image as PilImage
+            image.seek(0)
+            parsed = PilImage.open(image)
+            valid_formats = {'JPEG', 'PNG', 'WEBP'}
+            max_pixels = int(getattr(settings, 'AI_MAX_IMAGE_PIXELS', 25_000_000))
+            if parsed.format not in valid_formats:
+                is_valid_image = False
+            elif parsed.width * parsed.height > max_pixels:
+                is_valid_image = False
+            else:
+                parsed.verify()
                 is_valid_image = True
+            image.seek(0)
+        except Exception:
+            is_valid_image = False
+            try:
                 image.seek(0)
             except Exception:
-                is_valid_image = False
+                pass
         if not is_valid_image:
             return Response(
-                {'error': 'Unsupported image. Upload a valid JPEG, PNG or WebP photo.'},
+                {'error': 'Unsupported image. Upload a valid JPEG, PNG or WebP photo '
+                          'under the allowed resolution.'},
                 status=status.HTTP_400_BAD_REQUEST)
 
         # Crop-mandatory guard (AI v2): an "unknown"/missing crop is rejected
@@ -77,8 +90,33 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
 
         symptoms_text = request.data.get('symptoms', '')
 
-        # Call AI engine (DB knowledge base + rule-based/TF backend)
-        ai_result = analyze_disease(image, crop_type)
+        # Call the configured inference backend. A missing/broken trained model
+        # is a service condition, not permission to silently fabricate a
+        # heuristic result (unless AI_ALLOW_RULE_FALLBACK was explicitly set).
+        try:
+            image.seek(0)
+            ai_result = analyze_disease(image, crop_type)
+            image.seek(0)  # inference must not leave the upload at EOF before save
+        except AIEngineUnavailable as exc:
+            logger.error('AI engine unavailable: %s', exc)
+            payload = {
+                'error': 'The trained diagnosis model is currently unavailable. '
+                         'Please try again later.',
+                'code': 'ai_model_unavailable',
+            }
+            if settings.DEBUG:
+                payload['detail'] = str(exc)
+            return Response(payload, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except AIInferenceError as exc:
+            logger.warning('AI inference failed: %s', exc)
+            payload = {
+                'error': 'The diagnosis model could not analyze this photo. '
+                         'Try a clear, well-lit image of one affected leaf.',
+                'code': 'ai_inference_failed',
+            }
+            if settings.DEBUG:
+                payload['detail'] = str(exc)
+            return Response(payload, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         # Optional location binding
         location = None
@@ -105,9 +143,15 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
             disease_name=ai_result['disease_name'],
             severity=ai_result['severity'],
             is_healthy=ai_result.get('is_healthy', False),
-            is_inconclusive=ai_result.get('low_confidence', False),
+            is_inconclusive=ai_result.get(
+                'is_inconclusive', ai_result.get('low_confidence', False)),
             causes=ai_result['causes'],
             prevention=ai_result['prevention'],
+            inference_engine=ai_result.get('engine', 'unknown'),
+            used_trained_model=ai_result.get('trained_model', False),
+            model_version=ai_result.get('model_version', ''),
+            model_label=ai_result.get('model_label', ''),
+            alternatives=ai_result.get('alternatives', []),
             location=location,
         )
 

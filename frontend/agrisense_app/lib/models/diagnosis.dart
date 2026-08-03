@@ -13,6 +13,11 @@ class Diagnosis {
   final String prevention;
   final bool isHealthy;
   final bool isInconclusive;
+  final String engine;
+  final bool trainedModel;
+  final String modelVersion;
+  final String modelLabel;
+  final List<Map<String, dynamic>> alternatives;
   final DateTime createdAt;
   final Location? location;
   final TreatmentPlan? treatmentPlan;
@@ -30,6 +35,11 @@ class Diagnosis {
     required this.prevention,
     this.isHealthy = false,
     this.isInconclusive = false,
+    this.engine = 'unknown',
+    this.trainedModel = false,
+    this.modelVersion = '',
+    this.modelLabel = '',
+    this.alternatives = const [],
     required this.createdAt,
     this.location,
     this.treatmentPlan,
@@ -49,6 +59,14 @@ class Diagnosis {
       prevention: json['prevention'],
       isHealthy: json['is_healthy'] ?? false,
       isInconclusive: json['is_inconclusive'] ?? false,
+      engine: json['engine']?.toString() ?? 'unknown',
+      trainedModel: json['trained_model'] == true,
+      modelVersion: json['model_version']?.toString() ?? '',
+      modelLabel: json['model_label']?.toString() ?? '',
+      alternatives: (json['alternatives'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(),
       createdAt: DateTime.parse(json['created_at']),
       location: json['location_data'] != null 
           ? Location.fromJson(json['location_data']) 
@@ -72,10 +90,19 @@ class Diagnosis {
         'prevention': prevention,
         'is_healthy': isHealthy,
         'is_inconclusive': isInconclusive,
+        'engine': engine,
+        'trained_model': trainedModel,
+        'model_version': modelVersion,
+        'model_label': modelLabel,
+        'alternatives': alternatives,
         'created_at': createdAt.toIso8601String(),
         'location_data': location?.toJson(),
         'treatment_plan': treatmentPlan?.toJson(),
       };
+
+  bool get usesTrainedModel => trainedModel;
+  bool get lacksTrainedModelProvenance => !usesTrainedModel;
+  bool get usesRuleFallback => engine == 'rule-based';
 }
 
 class Location {

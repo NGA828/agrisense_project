@@ -611,7 +611,12 @@ class _CameraScreenState extends State<CameraScreen>
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final crop = _crops[index];
-              final data = cropData[crop]!;
+              // Trained model manifests can add crops beyond the bundled five.
+              // Use a safe generic visual instead of crashing on a new label.
+              final data = cropData[crop] ?? {
+                'icon': Icons.eco_rounded,
+                'color': AppTheme.primary,
+              };
               final isSelected = crop == _selectedCrop;
 
               return GestureDetector(
