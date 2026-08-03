@@ -17,11 +17,11 @@ through an ordered pipeline:
      from the uploaded photo (Pillow) and scores the candidate diseases by
      feature distance. Fully deterministic, dependency-light and testable —
      the same photo always yields the same diagnosis and confidence.
-   * ``TensorFlowEngine``: when ``AI_MODEL_PATH`` points to a trained Keras
-     `.keras`/`.h5` artifact and ``AI_CLASS_MAP_PATH`` provides its exact output
-     mapping, the image is preprocessed and predicted; the knowledge base supplies the
-     treatment plan for the predicted class. Enable by setting
-     ``AI_ENGINE=tensorflow``.
+   * ``OpenRouterEngine`` (primary): submits a privacy-scrubbed image to a
+     configured vision model, constrained by a strict JSON schema to diseases
+     already reviewed in the database for the selected crop.
+   * ``TensorFlowEngine`` (optional local): loads a Keras `.keras`/`.h5`
+     artifact and exact output class map for offline CNN inference.
 """
 
 import hashlib
@@ -35,6 +35,9 @@ from django.conf import settings
 
 from .class_mapping import (ClassMapError, ModelClass, find_class_map,
                             load_class_map, parse_class_map)
+from .openrouter_client import (OpenRouterResponseError,
+                                OpenRouterUnavailableError,
+                                OpenRouterVisionClient)
 
 logger = logging.getLogger('agrisense.ai')
 
@@ -384,6 +387,140 @@ class RuleBasedEngine(PlantPathologyEngine):
         }
 
 
+class OpenRouterEngine(PlantPathologyEngine):
+    """Remote vision engine restricted to reviewed database diseases.
+
+    OpenRouter performs visual screening only. Candidate names and reviewed
+    symptoms are sent as an allow-list; all treatment content is resolved from
+    the local database after the response passes server-side validation.
+    """
+
+    engine_name = 'openrouter-vision'
+    is_trained_model = True
+
+    def __init__(self, client=None):
+        self._client = client or OpenRouterVisionClient()
+        self.model_version = self._client.model or 'unconfigured'
+
+    @property
+    def available(self):
+        return self._client.available and not self._client.configuration_error
+
+    @property
+    def load_error(self):
+        return self._client.configuration_error
+
+    @staticmethod
+    def _reviewed_candidates(crop_type):
+        """Return only admin-reviewed Disease rows—never bundled guesses."""
+        from diagnosis.models import Disease
+
+        return [
+            {
+                'disease_name': row.disease_name,
+                'pathogen': row.pathogen,
+                'symptoms': row.symptoms,
+                'causes': row.causes,
+                'severity': row.severity,
+                'prevention': row.prevention,
+                'treatment_type': row.treatment_type,
+                'medication': row.medication,
+                'instructions': row.instructions,
+                'duration': row.duration,
+            }
+            for row in Disease.objects.filter(
+                crop_name__iexact=crop_type).order_by('disease_name')
+        ]
+
+    def _fallback(self, image, crop_type, reason):
+        if not bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
+            raise AIEngineUnavailable(reason)
+        logger.warning('Using rule-based AI fallback after OpenRouter failure: %s',
+                       reason)
+        result = RuleBasedEngine().analyze(image, crop_type)
+        result['fallback_reason'] = reason
+        result['trained_model'] = False
+        return result
+
+    def analyze(self, image, crop_type):
+        if not self.available:
+            return self._fallback(
+                image, crop_type,
+                self.load_error or 'The OpenRouter vision engine is unavailable.')
+
+        candidates = self._reviewed_candidates(crop_type)
+        if not candidates:
+            raise AIInferenceError(
+                f'No reviewed diseases exist in the database for {crop_type!r}.')
+        names = [item['disease_name'].casefold() for item in candidates]
+        if len(names) != len(set(names)):
+            raise AIInferenceError(
+                f'Duplicate reviewed disease names exist for {crop_type!r}.')
+
+        try:
+            prediction = self._client.classify(image, crop_type, candidates)
+        except OpenRouterUnavailableError as exc:
+            return self._fallback(image, crop_type, str(exc))
+        except OpenRouterResponseError as exc:
+            if bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
+                return self._fallback(image, crop_type, str(exc))
+            raise AIInferenceError(str(exc)) from exc
+
+        configured_cap = min(100.0, max(0.0, float(getattr(
+            settings, 'OPENROUTER_MAX_CONFIDENCE', 95.0))))
+        confidence = min(max(prediction.confidence, 0.0), configured_cap)
+        threshold = min(100.0, max(0.0, float(getattr(
+            settings, 'OPENROUTER_CONFIDENCE_THRESHOLD', 70.0))))
+        if prediction.outcome == 'inconclusive':
+            # The model may be highly confident that it cannot classify the
+            # image; that is not a high disease-match confidence for the UI.
+            confidence = min(confidence, max(0.0, threshold - 1.0))
+        metadata = {
+            'engine': self.engine_name,
+            'trained_model': True,
+            'model_version': prediction.model,
+            'model_label': prediction.disease_name,
+            'alternatives': [{
+                'disease_name': prediction.disease_name,
+                'confidence': round(confidence, 2),
+            }],
+            'visual_evidence': list(prediction.evidence),
+        }
+
+        if prediction.outcome == 'inconclusive' or confidence < threshold:
+            result = RuleBasedEngine._build_inconclusive_result(
+                crop_type, confidence, True)
+            result.update(metadata)
+            result['is_inconclusive'] = True
+            result['low_confidence'] = True
+            return result
+
+        if prediction.outcome == 'healthy':
+            result = RuleBasedEngine._build_healthy_result(True)
+            result.update(metadata)
+            result['confidence'] = Decimal(str(round(confidence, 2)))
+            return result
+
+        # A second server-side exact allow-list check ensures a provider cannot
+        # select another crop or hallucinate a disease even if it ignores schema.
+        reviewed_by_name = {
+            item['disease_name'].casefold(): item for item in candidates
+        }
+        disease = reviewed_by_name.get(prediction.disease_name.casefold())
+        if disease is None:
+            raise AIInferenceError(
+                'OpenRouter selected a disease that is not reviewed for this crop.')
+
+        result = RuleBasedEngine._build_result(disease, confidence, True)
+        result.update(metadata)
+        result.update({
+            'is_healthy': False,
+            'is_inconclusive': False,
+            'knowledge_base_match': True,
+        })
+        return result
+
+
 class TensorFlowEngine(PlantPathologyEngine):
     """Keras/TensorFlow image-classification backend.
 
@@ -720,8 +857,11 @@ _ENGINE_CACHE = {}
 
 
 def _engine_cache_key():
+    api_key = str(getattr(settings, 'OPENROUTER_API_KEY', '') or '')
+    key_fingerprint = hashlib.sha256(api_key.encode()).hexdigest()[:12] \
+        if api_key else ''
     return (
-        str(getattr(settings, 'AI_ENGINE', 'rules')).strip().lower(),
+        str(getattr(settings, 'AI_ENGINE', 'openrouter')).strip().lower(),
         str(getattr(settings, 'AI_MODEL_PATH', '') or ''),
         str(getattr(settings, 'AI_CLASS_MAP_PATH', '') or ''),
         str(getattr(settings, 'AI_MODEL_VERSION', '') or ''),
@@ -729,6 +869,9 @@ def _engine_cache_key():
         str(getattr(settings, 'AI_MODEL_NORMALIZATION', 'zero_one')),
         bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)),
         bool(getattr(settings, 'AI_REQUIRE_TRAINED_MODEL', False)),
+        key_fingerprint,
+        str(getattr(settings, 'OPENROUTER_MODEL', '') or ''),
+        str(getattr(settings, 'OPENROUTER_BASE_URL', '') or ''),
     )
 
 
@@ -742,17 +885,25 @@ def get_engine():
     key = _engine_cache_key()
     if key not in _ENGINE_CACHE:
         requested = key[0]
-        if requested in ('tensorflow', 'keras', 'tf'):
+        if requested in ('openrouter', 'openrouter-vision', 'cloud'):
+            engine = OpenRouterEngine()
+        elif requested in ('tensorflow', 'keras', 'tf'):
             engine = TensorFlowEngine()
         elif requested == 'auto':
-            # Auto opts into a trained model only when an artifact was supplied;
-            # otherwise it exposes the clearly-labelled demo fallback.
-            engine = TensorFlowEngine() if key[1] else RuleBasedEngine()
+            # Prefer configured cloud vision, then a local artifact, and expose
+            # the labelled heuristic only when neither real model is available.
+            if str(getattr(settings, 'OPENROUTER_API_KEY', '') or '').strip():
+                engine = OpenRouterEngine()
+            elif key[1]:
+                engine = TensorFlowEngine()
+            else:
+                engine = RuleBasedEngine()
         elif requested in ('rules', 'rule-based', 'heuristic'):
             engine = RuleBasedEngine()
         else:
             raise AIEngineUnavailable(
-                f'Unknown AI_ENGINE={requested!r}; use tensorflow, auto, or rules.')
+                f'Unknown AI_ENGINE={requested!r}; use openrouter, tensorflow, '
+                f'auto, or rules.')
         _ENGINE_CACHE[key] = engine
     return _ENGINE_CACHE[key]
 
@@ -779,6 +930,30 @@ def get_engine_info():
             'engine': 'unavailable',
             'trained_model': False,
             'detail': str(exc),
+        }
+
+    if isinstance(engine, OpenRouterEngine):
+        if not engine.available:
+            fallback = bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False))
+            detail = (engine.load_error or 'OpenRouter is unavailable.') \
+                if settings.DEBUG else 'OpenRouter configuration failed readiness checks.'
+            return {
+                'status': 'degraded' if fallback else 'error',
+                'engine': 'rule-based' if fallback else engine.engine_name,
+                'requested_engine': engine.engine_name,
+                'model_version': engine.model_version,
+                'trained_model': False,
+                'remote': True,
+                'detail': detail,
+            }
+        return {
+            'status': 'ok',
+            'engine': engine.engine_name,
+            'model_version': engine.model_version,
+            'trained_model': True,
+            'remote': True,
+            'detail': ('OpenRouter vision is configured; availability is checked '
+                       'on each diagnosis request.'),
         }
 
     if isinstance(engine, RuleBasedEngine):
@@ -827,6 +1002,9 @@ def get_available_crops():
     from diagnosis.models import Disease
     db_crops = list(Disease.objects.values_list(
         'crop_name', flat=True).distinct().order_by('crop_name'))
+    if isinstance(engine, OpenRouterEngine):
+        # Cloud classification is deliberately limited to reviewed DB content.
+        return db_crops
     return list(dict.fromkeys(
         [crop for crop in db_crops] + list(FALLBACK_DISEASE_DATABASE.keys())))
 

@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
@@ -28,6 +29,7 @@ def png_bytes(color=(120, 140, 100), size=(64, 64)):
     return buf
 
 
+@override_settings(AI_ENGINE='rules', AI_REQUIRE_TRAINED_MODEL=False)
 class DiagnosisTests(APITestCase):
     def setUp(self):
         self.farmer = make_user('farmer1', 'farmer')
@@ -205,6 +207,14 @@ class DiseaseDatabaseTests(APITestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Disease.objects.filter(disease_name='New Rust').exists())
+
+    def test_duplicate_disease_name_for_crop_is_rejected_case_insensitively(self):
+        self.auth(self.admin)
+        resp = self.client.post(reverse('disease-db-add-disease'), {
+            'disease_name': 'existing', 'crop_name': 'maize', 'severity': 'low',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Disease.objects.count(), 1)
 
     def test_farmer_cannot_add_disease(self):
         self.auth(self.farmer)

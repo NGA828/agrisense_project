@@ -111,7 +111,7 @@ production-readiness through disciplined, module-by-module phases without a rewr
 | Deployment topology | **Modular monolith** (single Django app, internal app boundaries), NOT microservices | Scale today (hundreds–thousands of users) does not justify service fragmentation; microservices add distributed-transaction and ops cost. Design app boundaries so services can be extracted later (payments, AI, notifications) without a rewrite. |
 | Orchestration | Django REST = single API gateway; thin Flutter client | Matches the "waiter/kitchen" model; keeps business rules server-side and testable. |
 | Real-time | Channels + Redis channel layer; WS for chat; **separate WS push bus** (new) for inventory/notifications | Chat is group-scoped; push bus needs per-user fan-out to many rooms. |
-| AI | Adapter pattern (`RuleBasedEngine` / `TensorFlowEngine`); DB knowledge base is source of truth | Same photo → same result (deterministic, testable); admin disease edits change inference; TF drops in behind the same interface. |
+| AI | Adapter pattern (`OpenRouterEngine` / `TensorFlowEngine` / demo rules); reviewed DB knowledge base is source of truth | OpenRouter can select only reviewed crop-specific disease rows; treatments remain local; TensorFlow remains an offline option. |
 | Payments | Gateway adapter + **webhook-first** verification (new) + ledger (new) | Mobile-money providers push server-to-server callbacks; polling alone is not reconciliation-safe. |
 | Data integrity | DB `CHECK` constraints + row locks (`select_for_update`) + idempotency keys | Already partially present; extend to held-stock timeout and ledger entries. |
 | Concurrency | `transaction.atomic` + `select_for_update` at order/stock/payment boundaries | Already present; add a **reservation + expiry** model and an async task to reconcile. |
@@ -131,10 +131,10 @@ production-readiness through disciplined, module-by-module phases without a rewr
   admin cannot self-register; registration enforces Django password policy; JWT rotation
   with blacklist installed; short access tokens (30 min); env-driven secrets; image-type
   validation; DRF throttling (auth/ai/user/anon).
-- **Diagnosis & AI:** DB-driven disease knowledge base; trained TensorFlow inference
-  with an exact output manifest and persisted provenance; explicitly labelled rule demo
-  fallback; fail-closed production gate; admin CRUD immediately affects reviewed
-  treatment resolution; image digest hashing; follow-up dates.
+- **Diagnosis & AI:** OpenRouter vision restricted by strict schema and a server-side
+  allow-list to admin-reviewed crop-specific `Disease` rows; treatment resolution stays
+  local; persisted provider/model provenance; optional TensorFlow offline inference;
+  explicitly labelled rule demo fallback and fail-closed production gate.
 - **Marketplace & orders:** premium-boosted ranking that respects expiry; dealer-verified
   gate before listing; transactional stock decrement with `select_for_update`; stock
   restore on dealer cancel; real-time dealer order notification.
@@ -226,7 +226,7 @@ edge cases and logical inconsistencies.
 | **Flutter** | ✅ Appropriate | Cross-platform mobile-first matches the audience; Provider is sufficient at this scale (Riverpod could be adopted later without a rewrite). |
 | **Django + DRF** | ✅ Appropriate | Mature, batteries-included, great for a data-heavy monolith. Django 4.2 is LTS (supported through 2026). |
 | **MySQL 8** | ✅ Appropriate | Solid ACID store; the schema already uses `utf8mb4`, `CHECK` constraints, descending indexes. SQLite fallback works for dev/tests. Watch: the `order` table name (reserved word) is handled by Django's quoting. |
-| **AI Engine (trained TF adapter + rule fallback)** | ⚠️ Inference implemented; validated artifact still required | The rule scorer is explicitly a demo heuristic, **not a real pathology model**. The TensorFlow path now performs preprocessing, `model.predict`, exact class-manifest mapping, crop masking, confidence gating and knowledge-base resolution; it fails closed when misconfigured and persists model provenance. Production still requires a versioned CNN trained/calibrated and field-validated on representative local data. |
+| **AI Engine (OpenRouter vision + optional TF + rules)** | ⚠️ Implemented; field validation still required | OpenRouter uses `nex-agi/nex-n2-pro:free` and can select only reviewed DB diseases for the chosen crop; all treatment content remains local and failures close safely. TensorFlow remains available for a future specialized offline model. The general vision model still requires representative field evaluation and agronomist oversight. |
 | **External APIs (OpenWeather, MTN MoMo, Orange Money)** | ⚠️ Adapters present, providers stubbed | OpenWeather is wired (key-gated). MTN/Orange are **sandbox stubs** that raise `PaymentError` unless configured. Real integration + webhooks + reconciliation are required. |
 | **Channels + Redis** | ✅ Appropriate for chat; needs a push bus | Redis channel layer is correct for multi-worker; add a separate per-user push group. |
 | **Celery** | ❌ **Missing** | No async task queue. AI inference, notification fan-out, payment-webhook processing, held-stock reconciliation all need background workers. |
@@ -277,7 +277,7 @@ edge cases and logical inconsistencies.
 
 | Component | Status | Gap to goal |
 |---|---|---|
-| Identify the problem (AI diagnosis) | ⚠️ Artifact/validation required | Healthy/inconclusive handling, trained TensorFlow inference, exact class mapping and provenance are implemented. Release still requires a calibrated, field-validated model artifact covering the target crops/regions. **Needed for the core promise.** |
+| Identify the problem (AI diagnosis) | ⚠️ Field validation required | OpenRouter image screening, healthy/inconclusive handling, reviewed-disease restriction and provenance are implemented. Release still requires evaluation on local crop/region field photos. **Needed for the core promise.** |
 | Guided treatment plan | ✅ Present | Solid: causes, prevention, medication, instructions, follow-up. |
 | Buy the solution (marketplace → pay) | ⚠️ Partial | Happy path works; **payment-failure correctness, refunds, farmer cancel, and real-time stock are gaps** that undermine trust. |
 | Trust (verified dealers, reviews) | ⚠️ Partial | Verification exists; **no reviews/ratings or fraud signals.** |
