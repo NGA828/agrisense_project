@@ -38,7 +38,7 @@ dependencies:
   web_socket_channel: ^2.4.0
   
   # Utils
-  intl: ^0.19.0
+  intl: ^0.20.2
   percent_indicator: ^4.2.3
   flutter_svg: ^2.0.9
 
@@ -46,6 +46,15 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  image_path: "assets/app_icon/agrisense_icon.png"
+  android: true
+  ios: true
+  web:
+    generate: true
+  remove_alpha_ios: true
 
 flutter:
   uses-material-design: true

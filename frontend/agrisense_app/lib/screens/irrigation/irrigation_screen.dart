@@ -40,22 +40,40 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
     });
     try {
       final sensors = await _api.getMySensors();
-      final advices = <int, Map<String, dynamic>>{};
-      for (final s in sensors) {
-        final id = s['id'] as int?;
-        if (id == null) continue;
-        if (s['sensor_type'] != 'soil_moisture') continue;
-        try {
-          advices[id] = await _api.getIrrigationAdvice(id);
-        } catch (_) {
-          advices[id] = {'recommendation': 'unavailable'};
-        }
-      }
       if (mounted) {
         setState(() {
           _sensors = sensors;
-          _advice.addAll(advices);
           _isLoading = false;
+        });
+      }
+
+      final soilSensors =
+          sensors.where((s) => s['sensor_type'] == 'soil_moisture').toList();
+      final adviceResults = await Future.wait(
+        soilSensors.map((s) async {
+          final id = s['id'] as int?;
+          if (id == null) return null;
+          try {
+            final advice = await _api.getIrrigationAdvice(id);
+            return MapEntry(id, Map<String, dynamic>.from(advice as Map));
+          } catch (_) {
+            return MapEntry(
+                id, <String, dynamic>{'recommendation': 'unavailable'});
+          }
+        }),
+      );
+
+      final advices = <int, Map<String, dynamic>>{};
+      for (final result
+          in adviceResults.whereType<MapEntry<int, Map<String, dynamic>>>()) {
+        advices[result.key] = result.value;
+      }
+
+      if (mounted) {
+        setState(() {
+          _advice
+            ..clear()
+            ..addAll(advices);
         });
       }
     } catch (e) {
@@ -69,17 +87,34 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
   }
 
   Future<void> _refreshAll() async {
+    final soilSensors =
+        _sensors.where((s) => s['sensor_type'] == 'soil_moisture').toList();
+    final adviceResults = await Future.wait(
+      soilSensors.map((s) async {
+        final id = s['id'] as int?;
+        if (id == null) return null;
+        try {
+          final advice = await _api.getIrrigationAdvice(id);
+          return MapEntry(id, Map<String, dynamic>.from(advice as Map));
+        } catch (_) {
+          return MapEntry(
+              id, <String, dynamic>{'recommendation': 'unavailable'});
+        }
+      }),
+    );
+
     final advices = <int, Map<String, dynamic>>{};
-    for (final s in _sensors) {
-      final id = s['id'] as int?;
-      if (id == null || s['sensor_type'] != 'soil_moisture') continue;
-      try {
-        advices[id] = await _api.getIrrigationAdvice(id);
-      } catch (_) {
-        advices[id] = {'recommendation': 'unavailable'};
-      }
+    for (final result
+        in adviceResults.whereType<MapEntry<int, Map<String, dynamic>>>()) {
+      advices[result.key] = result.value;
     }
-    if (mounted) setState(() => _advice.addAll(advices));
+    if (mounted) {
+      setState(() {
+        _advice
+          ..clear()
+          ..addAll(advices);
+      });
+    }
   }
 
   Future<void> _addSensor() async {
@@ -95,6 +130,7 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
         name: result['name'] ?? '',
         crop: result['crop'] ?? '',
       );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Sensor registered. Readings will appear here.'),
@@ -102,8 +138,10 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
       );
       _load();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to register: $e'),
+        SnackBar(
+            content: Text('Failed to register: $e'),
             backgroundColor: AppTheme.error),
       );
     }
@@ -152,12 +190,14 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
   }
 
   Widget _buildContent() {
-    final soil = _sensors.where((s) => s['sensor_type'] == 'soil_moisture').toList();
+    final soil =
+        _sensors.where((s) => s['sensor_type'] == 'soil_moisture').toList();
 
     if (_sensors.isEmpty) {
       return const _EmptyState(
         icon: Icons.water_drop_outlined,
-        message: 'No sensors yet.\nTap "Add sensor" to register a soil-moisture '
+        message:
+            'No sensors yet.\nTap "Add sensor" to register a soil-moisture '
             'sensor for your field.',
       );
     }
@@ -189,12 +229,29 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
     final crop = (sensor['crop'] as String? ?? '').isNotEmpty
         ? sensor['crop']
         : advice?['crop']?.toString();
+    final cropLabel = crop?.toString() ?? 'General crop';
 
     final (icon, color, bg) = switch (recommendation) {
-      'irrigate_now' => (Icons.water_drop_rounded, AppTheme.error, const Color(0xFFFFEBEE)),
-      'delay_rain' => (Icons.umbrella_rounded, AppTheme.info, const Color(0xFFE3F2FD)),
-      'monitor' => (Icons.visibility_rounded, AppTheme.warning, const Color(0xFFFFF3E0)),
-      'adequate' => (Icons.check_circle_rounded, AppTheme.success, const Color(0xFFE8F5E9)),
+      'irrigate_now' => (
+          Icons.water_drop_rounded,
+          AppTheme.error,
+          const Color(0xFFFFEBEE)
+        ),
+      'delay_rain' => (
+          Icons.umbrella_rounded,
+          AppTheme.info,
+          const Color(0xFFE3F2FD)
+        ),
+      'monitor' => (
+          Icons.visibility_rounded,
+          AppTheme.warning,
+          const Color(0xFFFFF3E0)
+        ),
+      'adequate' => (
+          Icons.check_circle_rounded,
+          AppTheme.success,
+          const Color(0xFFE8F5E9)
+        ),
       _ => (Icons.sensors_off_rounded, Colors.grey, Colors.grey.shade100),
     };
 
@@ -239,9 +296,11 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
                         style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700, fontSize: 14)),
                     Text(
-                      '${crop?.toString() ?? 'General crop'} · ${_label(recommendation)}',
+                      '$cropLabel · ${_label(recommendation)}',
                       style: GoogleFonts.poppins(
-                          color: color, fontSize: 12, fontWeight: FontWeight.w600),
+                          color: color,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -249,7 +308,9 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
               if (moisture != null)
                 Text('${moisture}%',
                     style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w800, fontSize: 18, color: color)),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: color)),
             ],
           ),
           if (moisture != null && dry != null) ...[
@@ -257,7 +318,7 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
             LinearPercentIndicator(
               percent: (moisture / 100).clamp(0.0, 1.0),
               lineHeight: 8,
-              barColor: color,
+              progressColor: color,
               backgroundColor: Colors.grey.shade200,
               animateFromLastPercent: true,
             ),
@@ -331,11 +392,12 @@ class _AddSensorDialogState extends State<_AddSensorDialog> {
             TextField(
               controller: _nameCtrl,
               decoration: const InputDecoration(
-                  labelText: 'Sensor name (optional)', hintText: 'e.g. Field A'),
+                  labelText: 'Sensor name (optional)',
+                  hintText: 'e.g. Field A'),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _crop,
+              initialValue: _crop,
               decoration: const InputDecoration(labelText: 'Crop'),
               items: _crops
                   .map((c) => DropdownMenuItem(value: c, child: Text(c)))
@@ -399,7 +461,8 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: AppTheme.primary.withValues(alpha: 0.5)),
+            Icon(icon,
+                size: 56, color: AppTheme.primary.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(message,
                 textAlign: TextAlign.center,

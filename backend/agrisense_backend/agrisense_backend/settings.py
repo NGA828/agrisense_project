@@ -12,6 +12,7 @@ import pymysql
 pymysql.install_as_MySQLdb()
 
 import os
+import socket
 from pathlib import Path
 from datetime import timedelta
 
@@ -48,7 +49,15 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'm(l2!fbpl&%gy9yx47k=a)2h@ie@%fm%t60
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = _env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS') or (['localhost', '127.0.0.1'] if DEBUG else ['*'])
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS') or ['localhost', '127.0.0.1']
+if DEBUG:
+    try:
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        if local_ip not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(local_ip)
+    except Exception:
+        pass
 
 
 # Application definition

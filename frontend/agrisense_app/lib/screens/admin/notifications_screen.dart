@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:math';
 
 import '../../services/api/api_service.dart';
 import '../../theme/app_theme.dart';
@@ -249,7 +250,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 icon: active ? Icons.circle : Icons.pause_rounded,
               ),
               Text(
-                announcement['created_at']?.toString().substring(0, 10) ?? '',
+                (announcement['created_at']?.toString() ?? '').substring(0, min(10, (announcement['created_at']?.toString() ?? '').length)),
                 style: AdminTheme.smallMuted(),
               ),
               TextButton.icon(

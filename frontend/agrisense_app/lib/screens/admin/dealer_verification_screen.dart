@@ -176,8 +176,8 @@ class _DealerVerificationScreenState extends State<DealerVerificationScreen> {
           _infoRow(Icons.email_rounded, dealer['email'] ?? '—'),
           _infoRow(
               Icons.calendar_today_rounded,
-              dealer['date_joined']?.toString().substring(0, 10) ?? '—'),
-          const SizedBox(height: 12),
+              _short(dealer['date_joined']?.toString()),
+            ),
           Row(
             children: [
               Expanded(
@@ -215,6 +215,11 @@ class _DealerVerificationScreenState extends State<DealerVerificationScreen> {
         ],
       ),
     );
+  }
+
+  static String _short(String? value) {
+    if (value == null || value.isEmpty) return '—';
+    return value.length > 10 ? value.substring(0, 10) : value;
   }
 
   Widget _infoRow(IconData icon, String text) {

@@ -221,7 +221,7 @@ class ApiService {
     }
     var response = await attempt(headers).timeout(const Duration(seconds: 30));
 
-    final isLoginRequest = response.request?.url.path.endsWith('/auth/login/') ?? false;
+    final isLoginRequest = (response.request?.url?.path ?? '').endsWith('/auth/login/');
     if (response.statusCode == 401 && !isLoginRequest) {
       final refreshed = await _tryRefreshToken();
       if (refreshed) {
@@ -244,7 +244,13 @@ class ApiService {
       ).timeout(const Duration(seconds: 10));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
-        await _storage.write(key: 'access_token', value: data['access']);
+        final access = data is Map ? data['access'] : null;
+        if (access == null) {
+          await _storage.delete(key: 'access_token');
+          await _storage.delete(key: 'refresh_token');
+          return false;
+        }
+        await _storage.write(key: 'access_token', value: access);
         if (data['refresh'] != null) {
           await _storage.write(key: 'refresh_token', value: data['refresh']);
         }
@@ -275,8 +281,13 @@ class ApiService {
     ).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      await _storage.write(key: 'access_token', value: data['access']);
-      await _storage.write(key: 'refresh_token', value: data['refresh']);
+      final access = data is Map ? data['access'] : null;
+      final refresh = data is Map ? data['refresh'] : null;
+      if (access == null || refresh == null) {
+        throw ApiException('Invalid login response');
+      }
+      await _storage.write(key: 'access_token', value: access);
+      await _storage.write(key: 'refresh_token', value: refresh);
       return data;
     }
     throw ApiException(_messageFrom(response, fallback: 'Login failed'));
