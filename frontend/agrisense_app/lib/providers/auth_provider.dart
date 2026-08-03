@@ -40,11 +40,9 @@ class AuthProvider with ChangeNotifier {
   /// Called on app start: if a stored token exists, restore the session so
   /// the farmer is not asked to log in again ("persistent session management").
   ///
-  /// Guarantees a minimum display time (``_minSplashDuration``) so the splash
-  /// logo animation always plays to completion before navigating — on a fresh
-  /// launch with no stored token, ``restoreSession`` would otherwise resolve in
-  /// a few hundred milliseconds and cut the animation off.
-  static const Duration _minSplashDuration = Duration(milliseconds: 2200);
+  /// Keeps the splash/loading screen visible for exactly the requested minimum
+  /// of 50 seconds, even when session restoration finishes sooner.
+  static const Duration _minSplashDuration = Duration(seconds: 50);
 
   Future<void> restoreSession() async {
     if (!_isRestoring) {

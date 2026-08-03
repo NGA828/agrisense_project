@@ -201,7 +201,7 @@ class _SystemHealthScreenState extends State<SystemHealthScreen> {
     final detail = checks?['ai_engine']?['detail'] ?? '';
     return status == 'ok'
         ? (detail.toString().isNotEmpty ? detail.toString() : 'Operational')
-        : 'degraded — $detail';
+        : '$status — $detail';
   }
 
   String _timestamp() {

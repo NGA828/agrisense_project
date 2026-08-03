@@ -37,7 +37,10 @@ services:
 
   # Backend image used by the web/ASGI, worker and beat services.
   backend:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_AI: ${INSTALL_AI:-false}
     restart: unless-stopped
     command: >
       sh -c "python manage.py migrate --noinput &&
@@ -45,6 +48,7 @@ services:
     volumes:
       - ./backend/agrisense_backend/media:/app/media
       - ./backend/agrisense_backend/staticfiles:/app/staticfiles
+      - ./backend/agrisense_backend/ai_models:/app/ai_models:ro
     environment: &backend-env
       DEBUG: ${DEBUG:-"False"}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
@@ -67,6 +71,24 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      # OpenRouter vision (primary). Keep the API key in the host environment.
+      AI_ENGINE: ${AI_ENGINE:-openrouter}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-nex-agi/nex-n2-pro:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-60}
+      OPENROUTER_IMAGE_MAX_DIMENSION: ${OPENROUTER_IMAGE_MAX_DIMENSION:-1280}
+      OPENROUTER_CONFIDENCE_THRESHOLD: ${OPENROUTER_CONFIDENCE_THRESHOLD:-70}
+      OPENROUTER_MAX_CONFIDENCE: ${OPENROUTER_MAX_CONFIDENCE:-95}
+      AI_REQUIRE_TRAINED_MODEL: ${AI_REQUIRE_TRAINED_MODEL:-true}
+      AI_ALLOW_RULE_FALLBACK: ${AI_ALLOW_RULE_FALLBACK:-false}
+      # Optional local CNN (set AI_ENGINE=tensorflow + INSTALL_AI=true).
+      AI_MODEL_PATH: ${AI_MODEL_PATH:-}
+      AI_CLASS_MAP_PATH: ${AI_CLASS_MAP_PATH:-}
+      AI_MODEL_VERSION: ${AI_MODEL_VERSION:-}
+      AI_MODEL_INPUT_SIZE: ${AI_MODEL_INPUT_SIZE:-224x224}
+      AI_MODEL_NORMALIZATION: ${AI_MODEL_NORMALIZATION:-zero_one}
+      AI_MODEL_CONFIDENCE_THRESHOLD: ${AI_MODEL_CONFIDENCE_THRESHOLD:-65.0}
       JWT_ACCESS_MINUTES: "30"
       JWT_REFRESH_DAYS: "7"
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-dev-webhook-secret}
@@ -81,10 +103,17 @@ services:
 
   # Celery worker — runs background tasks (fan-out, reservations, reconcile).
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_AI: ${INSTALL_AI:-false}
     restart: unless-stopped
     command: celery -A agrisense_backend worker -l info
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      # The worker does not perform image inference; keep the provider key scoped
+      # to the web backend process.
+      OPENROUTER_API_KEY: ""
     volumes:
       - ./backend/agrisense_backend/media:/app/media
     depends_on:
@@ -96,10 +125,15 @@ services:
   # Celery beat — schedules periodic tasks (reservations, premiums, reconcile,
   # weather cleanup) via CELERY_BEAT_SCHEDULE.
   beat:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_AI: ${INSTALL_AI:-false}
     restart: unless-stopped
     command: celery -A agrisense_backend beat -l info
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      OPENROUTER_API_KEY: ""
     depends_on:
       db:
         condition: service_healthy

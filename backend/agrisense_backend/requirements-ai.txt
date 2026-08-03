@@ -1,0 +1,4 @@
+# Optional runtime for local trained-model inference.
+# Install in addition to requirements.txt. The production Docker image uses
+# Python 3.11, which is supported by this TensorFlow release.
+tensorflow-cpu==2.21.0

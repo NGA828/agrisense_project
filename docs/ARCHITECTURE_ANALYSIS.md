@@ -154,7 +154,7 @@ The repository contains a **structurally correct skeleton with a polished UI lay
 
 14. **Excessive JWT lifetimes** (1 day access / 7 days refresh). **Fix:** short access token (15–30 min) + sliding refresh; frontend auto-refresh.
 15. **Diagnosis & product image validation** — file type/size enforced only globally (10 MB); add allow-list (`jpeg/png/webp`) validation.
-16. **AI engine placeholder behavior** — random disease + random confidence: misleading in production. **Fix:** deterministic model-backed scoring when a model artifact exists, DB-driven knowledge base, explicit "model: rule-based fallback" metadata, and confidence calibration.
+16. **AI engine placeholder behavior** — random/heuristic disease confidence is misleading in production. **Implemented fix:** OpenRouter vision restricted to reviewed crop-specific DB diseases, local-only treatment resolution, strict structured output, persisted provider/model provenance, confidence gating, and optional TensorFlow/offline or explicitly labelled rule engines.
 17. **No logging configuration** — add structured logging for auth failures, payments, admin actions.
 18. **WebSocket `Origin` not validated; in-memory channel layer not multi-worker safe.** **Fix:** Redis channel layer for prod (config switch), origin check.
 19. **`media`/`static` served by dev server only** — note deployment requirements (nginx/CDN) in docs.
@@ -165,7 +165,7 @@ The repository contains a **structurally correct skeleton with a polished UI lay
 ## 5. Architecture Recommendations
 
 1. **Keep the layered design** — Django as the single orchestrator is correct; Flutter stays a thin client. Do not push business logic into the app.
-2. **AI Engine as an adapter** — `ai_engine/services.py` should expose `PlantPathologyEngine` with pluggable backends: `RuleBasedEngine` (DB knowledge base; deterministic, works offline, fully testable) and `TensorFlowEngine`/`PyTorchEngine` (optional `.h5`/`.tflite` artifact; used when `AI_MODEL_PATH` is configured). The API response should include `engine` + `model_version` for trust/audit.
+2. **AI Engine as an adapter** — `ai_engine/services.py` exposes `PlantPathologyEngine` with `OpenRouterEngine` (primary reviewed-disease-only vision), `TensorFlowEngine` (optional local artifact) and `RuleBasedEngine` (explicit demo fallback). API responses persist engine/model provenance for trust and audit.
 3. **Knowledge base = source of truth** — seed `Disease` rows from the curated disease dictionary (management command), and have the analyzer resolve disease info from the DB (falling back to bundled data). Admin edits then genuinely change diagnoses.
 4. **Payment gateway adapter** — `payments/gateway.py` with `MobileMoneyGateway` interface; `SandboxGateway` (current simulation) and `MTNMoMoGateway`/`OrangeMoneyGateway` skeletons using the official sandbox APIs, plus idempotency via `transaction_id` and status-transition guards.
 5. **Real-time layer** — keep Channels + Redis channel layer; add token-auth middleware for WS; Flutter uses `web_socket_channel` with reconnect + backfill fallback to REST.

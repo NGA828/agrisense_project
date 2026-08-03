@@ -20,6 +20,13 @@ class Diagnosis(models.Model):
     is_inconclusive = models.BooleanField(default=False)
     causes = models.TextField(blank=True, default='')
     prevention = models.TextField(blank=True, default='')
+    # Inference provenance is persisted so history/audits can distinguish a
+    # trained model result from the explicitly-labelled demo heuristic.
+    inference_engine = models.CharField(max_length=50, default='unknown')
+    used_trained_model = models.BooleanField(default=False)
+    model_version = models.CharField(max_length=100, blank=True, default='')
+    model_label = models.CharField(max_length=200, blank=True, default='')
+    alternatives = models.JSONField(blank=True, default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='diagnoses')
 
