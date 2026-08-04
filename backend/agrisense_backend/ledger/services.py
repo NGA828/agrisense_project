@@ -129,7 +129,7 @@ def settle_order(order):
     fees = platform_fees_account()
     total = Decimal(str(order.total_price))
     commission = (total * Decimal(str(settings.PLATFORM_COMMISSION_RATE))).quantize(Decimal('0.01'))
-    net = (total - commission).quantize(Decimal('0.01'))
+    net = total - commission
 
     ref = f'order:{order.id}'
     entry = post_entry(escrow, dealer, net, f'Settlement of order #{order.id} to dealer', reference=ref)
