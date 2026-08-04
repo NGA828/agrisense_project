@@ -203,8 +203,8 @@ class FarmerPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 12, color: color),
-            const SizedBox(width: 4),
+            Icon(icon, size: 11, color: color),
+            const SizedBox(width: 3),
           ],
           Text(
             label.toUpperCase(),

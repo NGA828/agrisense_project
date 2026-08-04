@@ -199,7 +199,7 @@ class _DealerHomeState extends State<_DealerHome> {
           _revenue = _orders
               .where((o) => (o['payment_status'] ?? '') == 'paid')
               .fold<double>(
-                  0, (sum, o) => sum + ((o['total_price'] ?? 0) as num).toDouble());
+                   0, (sum, o) => sum + (double.tryParse((o['total_price'] ?? '0').toString()) ?? 0.0));
           _isLoading = false;
         });
       }
@@ -253,7 +253,7 @@ class _DealerHomeState extends State<_DealerHome> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 1.7,
+                childAspectRatio: 1.35,
                 children: [
                   DealerStatCard(
                     value: '$_productCount',
