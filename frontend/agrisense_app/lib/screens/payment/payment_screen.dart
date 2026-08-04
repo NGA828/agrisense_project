@@ -8,12 +8,18 @@ class PaymentScreen extends StatefulWidget {
   final String unitPrice;
   final int quantity;
 
+  /// Server-computed order total (from the `createOrder` response). When
+  /// present this is the authoritative amount the backend will accept;
+  /// otherwise the screen falls back to unitPrice × quantity.
+  final double? totalAmount;
+
   const PaymentScreen({
     super.key,
     this.orderId,
     required this.productName,
     required this.unitPrice,
     required this.quantity,
+    this.totalAmount,
   });
 
   @override
@@ -49,15 +55,32 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
   Color get _creditCardColor => const Color(0xFF1E241E); // Slate / Charcoal
   Color get _successColor => const Color(0xFF4CAF50);
 
+  /// Amount to charge: the server-computed order total when the order was
+  /// created online (authoritative — the backend rejects any other amount),
+  /// otherwise unitPrice × quantity as an offline fallback.
+  double get _orderTotal {
+    final serverTotal = widget.totalAmount;
+    if (serverTotal != null) return serverTotal;
+    final money = widget.unitPrice.replaceAll(RegExp(r'[,\s]'), '');
+    final unit = double.tryParse(money) ?? 0;
+    return unit * widget.quantity;
+  }
+
+  /// Format a numeric FCFA amount as a whole number with thousands separators.
+  String _formatAmount(double value) {
+    final whole = value.round().toString();
+    return whole.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Formatting variables
     final unitPrice = int.tryParse(widget.unitPrice.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-    final total = unitPrice * widget.quantity;
-    final totalFormatted = total.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]},',
-        );
+    final total = _orderTotal;
+    final totalFormatted = _formatAmount(total);
 
     // Dynamic button styling depending on active choice
     Color buttonColor;
@@ -662,8 +685,6 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
     setState(() => _isProcessing = true);
     try {
       final api = ApiService();
-      final unitPrice = int.tryParse(widget.unitPrice.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-      final total = unitPrice * widget.quantity;
 
       // Map dynamic naming for backend API expectations
       final apiPaymentType = _selectedPayment == 'mtn'
@@ -690,7 +711,7 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
         widget.orderId!,
         apiPaymentType,
         phone.isEmpty ? '+237600000000' : phone,
-        total.toDouble(),
+        _orderTotal,
       );
 
       final result = await api.processPayment(payment['id']);

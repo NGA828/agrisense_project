@@ -42,10 +42,10 @@ class AuthProvider with ChangeNotifier {
   ///
   /// Keeps the splash/loading screen visible for exactly the requested minimum
   /// of 50 seconds, even when session restoration finishes sooner.
-  static const Duration _minSplashDuration = Duration(seconds: 50);
+  static const Duration _minSplashDuration = Duration(seconds: 10);
 
   Future<void> restoreSession() async {
-    if (!_isRestoring) {
+    if (!_isRestoring) 
       _isRestoring = true;
       notifyListeners();
     }

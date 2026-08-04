@@ -990,6 +990,9 @@ def get_engine_info():
     }
 
 
+DEFAULT_SUPPORTED_CROPS = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa', 'Potato', 'Rice']
+
+
 def get_available_crops():
     """Crops supported by the active model, or by the heuristic knowledge base."""
     try:
@@ -1002,11 +1005,13 @@ def get_available_crops():
     from diagnosis.models import Disease
     db_crops = list(Disease.objects.values_list(
         'crop_name', flat=True).distinct().order_by('crop_name'))
-    if isinstance(engine, OpenRouterEngine):
-        # Cloud classification is deliberately limited to reviewed DB content.
-        return db_crops
-    return list(dict.fromkeys(
-        [crop for crop in db_crops] + list(FALLBACK_DISEASE_DATABASE.keys())))
+    
+    crops = list(dict.fromkeys(
+        [crop for crop in db_crops if crop] +
+        list(FALLBACK_DISEASE_DATABASE.keys()) +
+        DEFAULT_SUPPORTED_CROPS
+    ))
+    return crops
 
 
 def get_disease_info(disease_name):

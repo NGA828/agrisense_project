@@ -82,11 +82,13 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
         if not crop_type:
             return Response({'error': 'Please select the crop you are diagnosing.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        if crop_type not in supported:
+        matched_crop = next((c for c in supported if c.lower() == crop_type.lower()), None)
+        if not matched_crop:
             return Response(
                 {'error': f'"{crop_type}" is not a supported crop. Supported crops: '
                           f'{", ".join(supported)}.'},
                 status=status.HTTP_400_BAD_REQUEST)
+        crop_type = matched_crop
 
         symptoms_text = request.data.get('symptoms', '')
 
