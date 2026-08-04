@@ -84,6 +84,24 @@ class LedgerBusinessFlowTests(TestCase):
             self.assertEqual(ledger.platform_fees_account().balance, Decimal('200.00'))
             self.assertEqual(ledger.escrow_account().balance, Decimal('0.00'))
 
+    def test_commission_split_exact_total_no_rounding_discrepancy(self):
+        order = Order.objects.create(
+            farmer=self.farmer, product=self.product, quantity=1,
+            total_price=Decimal('15.55'), payment_method='MTN_MOMO',
+        )
+        payment = Payment.objects.create(
+            order=order, user=self.farmer, amount=Decimal('15.55'),
+            payment_method='MTN_MOMO', phone_number='+237670000008',
+            transaction_id='TXN-FRACTIONAL', status='completed',
+        )
+        with self.settings(PLATFORM_COMMISSION_RATE=0.075):
+            ledger.record_payment_collected(payment, reference=f'order:{order.id}')
+            ledger.settle_order(order)
+            dealer_bal = ledger.dealer_account(self.dealer).balance
+            fees_bal = ledger.platform_fees_account().balance
+            self.assertEqual(dealer_bal + fees_bal, Decimal('15.55'))
+            self.assertEqual(ledger.escrow_account().balance, Decimal('0.00'))
+
     def test_refund_reverses_escrow(self):
         ledger.record_payment_collected(self.payment, reference=f'order:{self.order.id}')
         ledger.record_refund(self.payment, reference=f'payment:{self.payment.transaction_id}')
