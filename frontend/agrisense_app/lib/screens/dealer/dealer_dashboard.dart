@@ -197,7 +197,7 @@ class _DealerHomeState extends State<_DealerHome> {
           _lowStockCount =
               products.where((p) => (p.stockQuantity ?? 0) <= 5).length;
           _revenue = _orders
-              .where((o) => o['status'] != 'cancelled')
+              .where((o) => (o['payment_status'] ?? '') == 'paid')
               .fold<double>(
                   0, (sum, o) => sum + ((o['total_price'] ?? 0) as num).toDouble());
           _isLoading = false;
