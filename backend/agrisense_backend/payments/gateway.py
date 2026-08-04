@@ -18,8 +18,12 @@ Idempotency: every payment row carries a unique `transaction_id`; gateways must
 return the same transaction reference for retries of the same payment.
 """
 
+import base64
+import json
 import os
 import uuid
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from decimal import Decimal
 
@@ -92,14 +96,78 @@ class MTNMoMoGateway(BaseGateway):
 
     provider = 'MTN_MOMO'
 
+    def __init__(self):
+        self.primary_key = os.getenv('MTN_MOMO_PRIMARY_KEY', '').strip()
+        self.api_user = os.getenv('MTN_MOMO_API_USER', '').strip()
+        self.api_key = os.getenv('MTN_MOMO_API_KEY', '').strip()
+        self.environment = os.getenv('MTN_MOMO_ENVIRONMENT', 'sandbox').strip().lower()
+        if self.environment not in ('sandbox', 'live'):
+            raise PaymentError('MTN_MOMO_ENVIRONMENT must be sandbox or live')
+        if not all((self.primary_key, self.api_user, self.api_key)):
+            raise PaymentError('Set MTN_MOMO_PRIMARY_KEY, MTN_MOMO_API_USER and MTN_MOMO_API_KEY')
+        host = 'https://sandbox.momodeveloper.mtn.com' if self.environment == 'sandbox' else 'https://momodeveloper.mtn.com'
+        self.host = host
+
+    def _request(self, method, path, *, headers=None, body=None):
+        if body is None:
+            payload = None
+        elif headers and headers.get('Content-Type') == 'application/x-www-form-urlencoded':
+            payload = body.encode()
+        else:
+            payload = json.dumps(body).encode()
+        request = Request(self.host + path, data=payload, method=method,
+                          headers={'Accept': 'application/json', **(headers or {})})
+        try:
+            with urlopen(request, timeout=30) as response:
+                raw = response.read().decode()
+                return response.status, (json.loads(raw) if raw else {})
+        except (HTTPError, URLError, TimeoutError) as exc:
+            detail = getattr(exc, 'read', lambda: b'')().decode(errors='replace')
+            raise PaymentError(f'MTN request failed: {detail or exc}') from exc
+
+    def _token(self):
+        credentials = base64.b64encode(f'{self.api_user}:{self.api_key}'.encode()).decode()
+        _, data = self._request('POST', '/collection/token/', headers={
+            'Authorization': f'Basic {credentials}',
+            'Ocp-Apim-Subscription-Key': self.primary_key,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }, body='grant_type=client_credentials')
+        if not data.get('access_token'):
+            raise PaymentError('MTN did not return an access token')
+        return data['access_token']
+
     def request_payment(self, *, amount, phone_number, description, transaction_id):
-        # NOTE: implement the MTN collection flow here:
-        #   1. POST /collection/v1_0/requesttopay with X-Reference-Id,
-        #      X-Target-Environment, Ocp-Apim-Subscription-Key and body
-        #      {amount, currency: 'XAF', externalId, payer: {partyIdType: 'MSISDN',
-        #       partyId: phone_number}, payerMessage, payeeNote}.
-        #   2. Poll /collection/v1_0/requesttopay/{referenceId} for status.
-        raise PaymentError('MTN MoMo integration is not configured (set MTN_MOMO_ENABLED=true and API credentials)')
+        token = self._token()
+        phone = ''.join(ch for ch in str(phone_number) if ch.isdigit())
+        if phone.startswith('00'):
+            phone = phone[2:]
+        if phone.startswith('6'):
+            phone = '237' + phone
+        if not phone.startswith('237'):
+            raise PaymentError('Use a Cameroon MTN number, for example 2376XXXXXXXX')
+        status, _ = self._request('POST', '/collection/v1_0/requesttopay', headers={
+            'Authorization': f'Bearer {token}',
+            'X-Reference-Id': transaction_id,
+            'X-Target-Environment': self.environment,
+            'Ocp-Apim-Subscription-Key': self.primary_key,
+            'Content-Type': 'application/json',
+        }, body={'amount': str(amount), 'currency': 'XAF', 'externalId': transaction_id,
+                'payer': {'partyIdType': 'MSISDN', 'partyId': phone},
+                'payerMessage': description[:160], 'payeeNote': description[:160]})
+        if status not in (200, 202):
+            raise PaymentError(f'MTN rejected the payment request (HTTP {status})')
+        return {'status': 'pending', 'provider': self.provider,
+                'provider_reference': transaction_id}
+
+    def verify_transaction(self, transaction_id):
+        token = self._token()
+        _, data = self._request('GET', f'/collection/v1_0/requesttopay/{transaction_id}', headers={
+            'Authorization': f'Bearer {token}',
+            'X-Target-Environment': self.environment,
+            'Ocp-Apim-Subscription-Key': self.primary_key,
+        })
+        return {'SUCCESSFUL': 'completed', 'FAILED': 'failed'}.get(
+            str(data.get('status', 'PENDING')).upper(), 'pending')
 
 
 class OrangeMoneyGateway(BaseGateway):
