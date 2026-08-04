@@ -796,6 +796,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 productName: widget.name,
                 unitPrice: widget.price,
                 quantity: quantity,
+                totalAmount: double.tryParse(order['total_price']?.toString() ?? '') ?? 0,
               ),
             ),
           );

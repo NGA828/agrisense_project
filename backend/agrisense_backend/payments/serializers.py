@@ -3,7 +3,7 @@ from .models import Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    user_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
@@ -12,6 +12,12 @@ class PaymentSerializer(serializers.ModelSerializer):
                   'description', 'created_at', 'updated_at']
         read_only_fields = ['id', 'user', 'transaction_id', 'status', 'payment_type',
                             'created_at', 'updated_at']
+
+    def get_user_name(self, obj):
+        if not obj.user:
+            return ""
+        name = f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return name or getattr(obj.user, 'username', '') or getattr(obj.user, 'email', '')
 
     def create(self, validated_data):
         import uuid

@@ -487,6 +487,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             productName: product.name,
             unitPrice: product.price.toInt().toString(),
             quantity: 1,
+            totalAmount: double.tryParse(order['total_price']?.toString() ?? '') ?? 0,
           ),
         ),
       );
