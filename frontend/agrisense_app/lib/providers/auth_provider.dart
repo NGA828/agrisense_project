@@ -45,10 +45,10 @@ class AuthProvider with ChangeNotifier {
   static const Duration _minSplashDuration = Duration(seconds: 10);
 
   Future<void> restoreSession() async {
-    if (!_isRestoring) 
-      _isRestoring = true;
-      notifyListeners();
-    }
+ if (!_isRestoring) {
+  _isRestoring = true;
+  notifyListeners();
+}
     final stopwatch = Stopwatch()..start();
     try {
       if (await _apiService.hasStoredTokens) {
