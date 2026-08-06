@@ -49,7 +49,10 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'm(l2!fbpl&%gy9yx47k=a)2h@ie@%fm%t60
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = _env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS') or ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+_allowed = os.getenv('ALLOWED_HOSTS')
+if _allowed:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed.split(',') if h.strip()]
 if DEBUG:
     try:
         hostname = socket.gethostname()
