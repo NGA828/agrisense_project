@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -397,7 +397,8 @@ class _ProfileScreen extends StatelessWidget {
     final firstName = TextEditingController(text: user.firstName);
     final lastName = TextEditingController(text: user.lastName);
     final phone = TextEditingController(text: user.phoneNumber);
-    File? profilePhoto;
+    XFile? profilePhoto;
+    Uint8List? profilePhotoBytes;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -414,7 +415,11 @@ class _ProfileScreen extends StatelessWidget {
                     final picked =
                         await picker.pickImage(source: ImageSource.gallery);
                     if (picked != null) {
-                      setStateDialog(() => profilePhoto = File(picked.path));
+                      final bytes = await picked.readAsBytes();
+                      setStateDialog(() {
+                        profilePhoto = picked;
+                        profilePhotoBytes = bytes;
+                      });
                     }
                   },
                   child: Stack(
@@ -424,14 +429,14 @@ class _ProfileScreen extends StatelessWidget {
                         radius: 42,
                         backgroundColor:
                             AppTheme.primary.withValues(alpha: 0.1),
-                        backgroundImage: profilePhoto != null
-                            ? FileImage(profilePhoto!) as ImageProvider
+                        backgroundImage: profilePhotoBytes != null
+                            ? MemoryImage(profilePhotoBytes!) as ImageProvider
                             : (user.profilePhoto != null &&
                                     user.profilePhoto!.isNotEmpty
                                 ? CachedNetworkImageProvider(
                                     ApiService.resolveMedia(user.profilePhoto))
                                 : null),
-                        child: (profilePhoto == null &&
+                        child: (profilePhotoBytes == null &&
                                 (user.profilePhoto == null ||
                                     user.profilePhoto!.isEmpty))
                             ? const Icon(Icons.person,
