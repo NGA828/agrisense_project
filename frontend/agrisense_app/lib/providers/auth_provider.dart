@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/user.dart';
@@ -84,7 +84,7 @@ class AuthProvider with ChangeNotifier {
     String? firstName,
     String? lastName,
     String? phoneNumber,
-    File? profilePhoto,
+    XFile? profilePhoto,
   }) async {
     try {
       await _apiService.updateProfile(

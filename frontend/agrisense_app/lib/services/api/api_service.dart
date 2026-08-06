@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
@@ -56,8 +56,15 @@ class ApiService {
   static String resolveMedia(String? path) {
     if (path == null || path.isEmpty) return '';
     if (path.startsWith('http')) return path;
-    final normalized = path.startsWith('/') ? path : '/$path';
-    return '$mediaUrl$normalized';
+    
+    // Ensure path has /media prefix if it doesn't already
+    String cleanPath = path.startsWith('/') ? path : '/$path';
+    if (!cleanPath.startsWith('/media/')) {
+      cleanPath = '/media$cleanPath';
+    }
+    
+    final base = baseUrl.replaceFirst(RegExp(r'/api$'), '');
+    return '$base$cleanPath';
   }
 
   /// WebSocket URL for a chat room (wss in production, ws otherwise).
@@ -349,7 +356,7 @@ class ApiService {
     String? firstName,
     String? lastName,
     String? phoneNumber,
-    File? profilePhoto,
+    XFile? profilePhoto,
   }) async {
     if (profilePhoto != null) {
       var request = http.MultipartRequest('PATCH', Uri.parse('$baseUrl/users/me/'));
@@ -358,7 +365,11 @@ class ApiService {
       if (firstName != null) request.fields['first_name'] = firstName;
       if (lastName != null) request.fields['last_name'] = lastName;
       if (phoneNumber != null) request.fields['phone_number'] = phoneNumber;
-      request.files.add(await http.MultipartFile.fromPath('profile_photo', profilePhoto.path));
+      final bytes = await profilePhoto.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes(
+        'profile_photo', bytes,
+        filename: profilePhoto.name,
+      ));
       final streamed = await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode != 200) {
@@ -444,7 +455,7 @@ class ApiService {
     required String category,
     required double price,
     required int stockQuantity,
-    File? imageFile,
+    XFile? imageFile,
     bool isAvailable = true,
   }) async {
     if (imageFile != null) {
@@ -457,7 +468,8 @@ class ApiService {
       request.fields['price'] = price.toString();
       request.fields['stock_quantity'] = stockQuantity.toString();
       request.fields['is_available'] = isAvailable.toString();
-      request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+      final bytes = await imageFile.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: imageFile.name));
       final streamed = await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode == 201) return jsonDecode(response.body);
@@ -487,7 +499,7 @@ class ApiService {
     required String category,
     required double price,
     required int stockQuantity,
-    File? imageFile,
+    XFile? imageFile,
     bool? isAvailable,
   }) async {
     if (imageFile != null) {
@@ -500,7 +512,8 @@ class ApiService {
       request.fields['price'] = price.toString();
       request.fields['stock_quantity'] = stockQuantity.toString();
       if (isAvailable != null) request.fields['is_available'] = isAvailable.toString();
-      request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+      final bytes = await imageFile.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: imageFile.name));
       final streamed = await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode == 200) return jsonDecode(response.body);
@@ -609,7 +622,8 @@ class ApiService {
     var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/chat/$roomId/send_message/'));
     final token = await _storage.read(key: 'access_token');
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
-    request.files.add(await http.MultipartFile.fromPath('image', image.path));
+    final imgBytes = await image.readAsBytes();
+    request.files.add(http.MultipartFile.fromBytes('image', imgBytes, filename: image.name));
     final streamed = await request.send().timeout(const Duration(seconds: 45));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode == 201) return jsonDecode(response.body);

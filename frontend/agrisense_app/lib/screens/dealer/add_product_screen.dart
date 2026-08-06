@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,7 +24,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   String _selectedCategory = 'fertilizer';
   bool _isAvailable = true;
   bool _isLoading = false;
-  File? _imageFile;
+  XFile? _imageFile;
+  Uint8List? _imageBytes;
 
   final List<Map<String, dynamic>> _categories = [
     {'value': 'fertilizer', 'label': 'Fertilizer', 'icon': Icons.science_rounded},
@@ -97,8 +98,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(18),
-                                      child: Image.file(
-                                        _imageFile!,
+                                      child: Image.memory(
+                                        _imageBytes!,
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -107,7 +108,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                       top: 10,
                                       child: GestureDetector(
                                         onTap: () =>
-                                            setState(() => _imageFile = null),
+                                             setState(() {
+                                               _imageFile = null;
+                                               _imageBytes = null;
+                                             }),
                                         child: Container(
                                           padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
@@ -432,7 +436,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) setState(() => _imageFile = File(picked.path));
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _imageFile = picked;
+        _imageBytes = bytes;
+      });
+    }
   }
 
   void _submitProduct() async {

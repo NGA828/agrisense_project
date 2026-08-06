@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -26,7 +26,8 @@ class _EditProductScreenState extends State<EditProductScreen> {
   final _stockController = TextEditingController();
   String _selectedCategory = 'fertilizer';
   bool _isLoading = false;
-  File? _imageFile;
+  XFile? _imageFile;
+  Uint8List? _imageBytes;
   String? _existingImageUrl;
 
   final List<Map<String, dynamic>> _categories = [
@@ -62,7 +63,11 @@ class _EditProductScreenState extends State<EditProductScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
-      setState(() => _imageFile = File(picked.path));
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _imageFile = picked;
+        _imageBytes = bytes;
+      });
     }
   }
 
@@ -159,8 +164,8 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(18),
-                                      child: Image.file(
-                                        _imageFile!,
+                                      child: Image.memory(
+                                        _imageBytes!,
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -169,7 +174,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                       top: 10,
                                       child: GestureDetector(
                                         onTap: () =>
-                                            setState(() => _imageFile = null),
+                                             setState(() {
+                                               _imageFile = null;
+                                               _imageBytes = null;
+                                             }),
                                         child: Container(
                                           padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
