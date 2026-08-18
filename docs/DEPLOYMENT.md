@@ -141,7 +141,7 @@ change, not a code change.
 ## 5. AI engine
 
 - Primary: `AI_ENGINE=openrouter` with backend-only `OPENROUTER_API_KEY` and
-  `OPENROUTER_MODEL=nex-agi/nex-n2-pro:free`.
+  `OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free`.
 - The request schema and a second server-side check restrict classification to
   `Healthy`, `Inconclusive`, or exact admin-reviewed `Disease` rows for the
   selected crop. No treatment fields are sent to or accepted from the model.
