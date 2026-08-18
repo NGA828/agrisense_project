@@ -45,7 +45,16 @@ class OpenRouterVisionClient:
         self.api_key = str(getattr(settings, 'OPENROUTER_API_KEY', '') or '').strip()
         self.model = str(getattr(
             settings, 'OPENROUTER_MODEL',
-            'nex-agi/nex-n2-pro:free') or '').strip()
+            'dots-studio/dots-3-note-preview:free') or '').strip()
+        # Server-side failover list (see OPENROUTER_FALLBACK_MODELS). Free
+        # endpoints are the first thing providers throttle under load, so a
+        # single-model configuration turns a provider hiccup into a failed
+        # diagnosis for the farmer.
+        self.fallback_models = tuple(
+            str(name).strip()
+            for name in (getattr(settings, 'OPENROUTER_FALLBACK_MODELS', ()) or ())
+            if str(name).strip() and str(name).strip() != self.model
+        )
         self.base_url = str(getattr(
             settings, 'OPENROUTER_BASE_URL',
             'https://openrouter.ai/api/v1') or '').rstrip('/')
@@ -56,6 +65,12 @@ class OpenRouterVisionClient:
         self.app_url = str(getattr(settings, 'OPENROUTER_APP_URL', '') or '').strip()
         self.app_title = str(getattr(
             settings, 'OPENROUTER_APP_TITLE', 'AgriSense AI') or '').strip()
+        # Hard spend guard. When true (the default), only model ids ending in
+        # ':free' may be used, and the request additionally pins `max_price` to
+        # zero so OpenRouter itself refuses to bill. A deployment that wants
+        # paid models must opt in explicitly by setting
+        # OPENROUTER_ALLOW_PAID_MODELS=true.
+        self.free_only = bool(getattr(settings, 'OPENROUTER_FREE_ONLY', True))
         if post is None:
             import requests
             post = requests.post
@@ -79,6 +94,15 @@ class OpenRouterVisionClient:
             return 'OPENROUTER_IMAGE_MAX_DIMENSION must be at least 224.'
         if not 40 <= self.jpeg_quality <= 100:
             return 'OPENROUTER_IMAGE_QUALITY must be between 40 and 100.'
+        if self.free_only:
+            paid = [name for name in (self.model, *self.fallback_models)
+                    if not name.endswith(':free')]
+            if paid:
+                return (
+                    f'OPENROUTER_FREE_ONLY is enabled but these models are not '
+                    f'free: {", ".join(paid)}. Use a model id ending in ":free" '
+                    f'(run `manage.py check_ai_model --list-free`), or set '
+                    f'OPENROUTER_ALLOW_PAID_MODELS=true to permit billing.')
         return ''
 
     def _encode_image(self, image_file) -> str:
@@ -185,7 +209,7 @@ class OpenRouterVisionClient:
             f'confidence; uncertainty must not be hidden.\n\n'
             f'Reviewed diseases for {crop_type}:\n{candidate_json}'
         )
-        return {
+        payload: dict[str, Any] = {
             'model': self.model,
             'messages': [
                 {
@@ -218,6 +242,16 @@ class OpenRouterVisionClient:
             # Route only to endpoints that can honor structured output.
             'provider': {'require_parameters': True},
         }
+        if self.free_only:
+            # Belt-and-braces: even if a ':free' slug were ever silently
+            # remapped to a billable endpoint, OpenRouter rejects the request
+            # rather than charging the account.
+            payload['provider']['max_price'] = {'prompt': 0, 'completion': 0}
+        if self.fallback_models:
+            # OpenRouter tries these in order when the primary model errors,
+            # is rate-limited, or is down — one HTTP request, no extra upload.
+            payload['models'] = [self.model, *self.fallback_models]
+        return payload
 
     def _headers(self) -> dict[str, str]:
         headers = {

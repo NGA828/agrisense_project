@@ -165,7 +165,8 @@ class _FakeOpenRouterResponse:
 @override_settings(
     AI_ENGINE='openrouter',
     OPENROUTER_API_KEY='test-openrouter-key',
-    OPENROUTER_MODEL='nex-agi/nex-n2-pro:free',
+    OPENROUTER_MODEL='dots-studio/dots-3-note-preview:free',
+    OPENROUTER_FALLBACK_MODELS=['google/gemma-4-26b-a4b-it:free'],
     OPENROUTER_CONFIDENCE_THRESHOLD=70,
     OPENROUTER_MAX_CONFIDENCE=95,
     AI_ALLOW_RULE_FALLBACK=False,
@@ -196,12 +197,16 @@ class OpenRouterEngineTests(TestCase):
         }
         self.status_code = 200
         self.error = None
+        # Which model the provider reports answering; with the `models`
+        # failover array this can differ from the one we requested.
+        self.responding_model = 'dots-studio/dots-3-note-preview:free'
 
     def post(self, url, **kwargs):
         self.requests.append((url, kwargs))
         return _FakeOpenRouterResponse(
             result=self.result,
             status_code=self.status_code,
+            model=self.responding_model,
             error=self.error,
         )
 
@@ -298,6 +303,90 @@ class OpenRouterEngineTests(TestCase):
     def test_missing_api_key_fails_closed(self):
         with self.assertRaises(AIEngineUnavailable):
             self.engine().analyze(png_bytes(), 'Tomato')
+
+    # ── model routing / availability ─────────────────────────────────────
+    def test_request_sends_server_side_fallback_chain(self):
+        """Free endpoints get throttled first; OpenRouter must fail over for us.
+
+        Sending the `models` array means a rate-limited primary is retried
+        against the fallback inside a single HTTP request, so the farmer never
+        re-uploads the photo.
+        """
+        self.engine().analyze(png_bytes(), 'Tomato')
+        payload = self.requests[0][1]['json']
+        self.assertEqual(
+            payload['models'],
+            ['dots-studio/dots-3-note-preview:free',
+             'google/gemma-4-26b-a4b-it:free'],
+        )
+        # `model` stays set for providers/proxies that ignore `models`.
+        self.assertEqual(payload['model'], 'dots-studio/dots-3-note-preview:free')
+
+    @override_settings(OPENROUTER_FALLBACK_MODELS=[])
+    def test_no_fallback_configured_omits_models_array(self):
+        self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertNotIn('models', self.requests[0][1]['json'])
+
+    @override_settings(
+        OPENROUTER_FALLBACK_MODELS=['dots-studio/dots-3-note-preview:free'])
+    def test_fallback_duplicating_primary_is_dropped(self):
+        """A duplicated id would waste a retry on the model that just failed."""
+        self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertNotIn('models', self.requests[0][1]['json'])
+
+    def test_structured_output_routing_is_still_required(self):
+        """require_parameters keeps us off endpoints that ignore json_schema.
+
+        Without it a provider may return prose, and the disease allow-list
+        stops being enforced at the transport layer.
+        """
+        self.engine().analyze(png_bytes(), 'Tomato')
+        payload = self.requests[0][1]['json']
+        self.assertTrue(payload['provider']['require_parameters'])
+        self.assertEqual(payload['response_format']['type'], 'json_schema')
+        self.assertTrue(payload['response_format']['json_schema']['strict'])
+
+    def test_records_the_model_that_actually_answered(self):
+        """With failover the responder may differ from the requested model."""
+        self.responding_model = 'google/gemma-4-26b-a4b-it:free'
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['model_version'], 'google/gemma-4-26b-a4b-it:free')
+
+    # ── spend guard (this deployment must never be billed) ───────────────
+    def test_configured_models_are_all_free(self):
+        client = OpenRouterVisionClient(post=self.post)
+        for name in (client.model, *client.fallback_models):
+            self.assertTrue(
+                name.endswith(':free'),
+                f'{name} is a paid model; the default config must stay free.')
+
+    def test_request_pins_max_price_to_zero(self):
+        """OpenRouter must refuse to bill rather than silently charge."""
+        self.engine().analyze(png_bytes(), 'Tomato')
+        provider = self.requests[0][1]['json']['provider']
+        self.assertEqual(provider['max_price'], {'prompt': 0, 'completion': 0})
+
+    @override_settings(OPENROUTER_MODEL='openai/gpt-4o')
+    def test_paid_primary_is_refused_before_any_request(self):
+        with self.assertRaises(AIEngineUnavailable):
+            self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(self.requests, [], 'no billable call may be made')
+
+    @override_settings(OPENROUTER_FALLBACK_MODELS=['openai/gpt-4o'])
+    def test_paid_fallback_is_refused_before_any_request(self):
+        with self.assertRaises(AIEngineUnavailable):
+            self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(self.requests, [])
+
+    @override_settings(
+        OPENROUTER_MODEL='openai/gpt-4o',
+        OPENROUTER_FREE_ONLY=False,
+    )
+    def test_paid_model_allowed_only_with_explicit_opt_in(self):
+        self.responding_model = 'openai/gpt-4o'
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['model_version'], 'openai/gpt-4o')
+        self.assertNotIn('max_price', self.requests[0][1]['json']['provider'])
 
 
 class _FakeModel:

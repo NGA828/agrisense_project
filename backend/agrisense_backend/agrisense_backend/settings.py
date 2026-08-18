@@ -384,10 +384,30 @@ CELERY_BEAT_SCHEDULE = {
 # treatments are always resolved locally. TensorFlow remains an offline option.
 AI_ENGINE = os.getenv('AI_ENGINE', 'openrouter').strip().lower()
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '').strip()
+# The diagnosis client needs three things from a model: image input, strict
+# JSON-schema structured outputs, and a provider actually serving it. Very few
+# free models satisfy all three — verify with `manage.py check_ai_model` before
+# changing this. Dots3-Note Preview is served by AtlasCloud at ~99.5-99.9%
+# uptime, is free, and is a 16B-active MoE (fast for a screening call).
 OPENROUTER_MODEL = os.getenv(
-    'OPENROUTER_MODEL', 'nex-agi/nex-n2-pro:free').strip()
+    'OPENROUTER_MODEL', 'dots-studio/dots-3-note-preview:free').strip()
+# Comma-separated models tried, in order, when the primary is rate-limited
+# (free tiers are 20 req/min and 50-1000 req/day), down, or moderation-blocked.
+# Sent as OpenRouter's `models` array so failover happens server-side in one
+# round trip instead of costing the farmer a second upload.
+OPENROUTER_FALLBACK_MODELS = [
+    model.strip()
+    for model in os.getenv(
+        'OPENROUTER_FALLBACK_MODELS',
+        'google/gemma-4-26b-a4b-it:free').split(',')
+    if model.strip()
+]
 OPENROUTER_BASE_URL = os.getenv(
     'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1').strip()
+# Spend guard: refuse to call any model that is not ':free', and pin the
+# request's max_price to zero so OpenRouter cannot bill the account. Opt in to
+# paid models deliberately with OPENROUTER_ALLOW_PAID_MODELS=true.
+OPENROUTER_FREE_ONLY = not _env_bool('OPENROUTER_ALLOW_PAID_MODELS', False)
 OPENROUTER_TIMEOUT_SECONDS = float(
     os.getenv('OPENROUTER_TIMEOUT_SECONDS', '60'))
 OPENROUTER_IMAGE_MAX_DIMENSION = int(

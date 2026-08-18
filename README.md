@@ -16,7 +16,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 | **Database** | MySQL 8 (utf8mb4) — SQLite supported for local dev | Users, products, orders, payments, chats, diagnoses |
 | **Cache / Queue** | Redis (django-redis cache + Celery broker); locmem/eager in dev | Caching, async workers, background scheduling |
 | **Async** | Celery + django-celery-beat schedules (reservations, premiums, reconciliation, weather cleanup) | Background jobs that never block requests |
-| **AI Engine** | OpenRouter vision (`nex-agi/nex-n2-pro:free`) restricted to reviewed DB diseases; optional local TensorFlow; labelled demo rules | Image-based crop screening with auditable model provenance |
+| **AI Engine** | OpenRouter vision (`dots-studio/dots-3-note-preview:free`) restricted to reviewed DB diseases; optional local TensorFlow; labelled demo rules | Image-based crop screening with auditable model provenance |
 | **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + push-bus (live notifications & stock) |
 | **External** | OpenWeatherMap, MTN MoMo / Orange Money gateway adapters | Weather forecasts & mobile-money payments |
 | **Observability** | JSON structured logging, request-id tracing, `/api/health/`, optional Sentry | Trace + monitor production |
@@ -33,6 +33,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 - **Payments** — MTN MoMo / Orange Money checkout with amount validation & provider simulation
 - **History** — diagnosis history and order history modules
 - **Offline-first** — diagnosis history, marketplace catalog and weather are cached for low-coverage areas, with an offline action outbox
+- **Works on first launch, offline** — a pre-populated SQLite knowledge base (crops, diseases, treatments, irrigation thresholds) ships inside the APK and installs itself into internal storage on first run; see [docs/BUNDLED_DATABASE.md](docs/BUNDLED_DATABASE.md)
 - **Irrigation dashboard** — register soil-moisture sensors and get live, crop-aware irrigation advice (moisture + rain + thresholds); reachable from the Home quick-access grid
 - **In-app notifications** — order/payment/premium updates with unread badge, delivered live over the push bus
 
@@ -145,16 +146,27 @@ DB_NAME=agrisense_db DB_USER=root DB_PASSWORD=yourpass DB_HOST=localhost DB_PORT
 
 ### OpenRouter AI setup
 
-OpenRouter vision is the primary engine, using the free Nex-N2-Pro endpoint.
-Create an OpenRouter key and place it only in
-`backend/agrisense_backend/.env` (never in Flutter or source control):
+OpenRouter vision is the primary engine, on a free vision model. **Step-by-step
+guide: [docs/AI_SETUP.md](docs/AI_SETUP.md).**
+
+Only two things are needed: a free OpenRouter key (no credit card) in
+`backend/agrisense_backend/.env`, and a seeded disease knowledge base
+(`python manage.py seed_data`) — the AI can only return diseases that already
+exist in the database, so scans fail without it.
 
 ```dotenv
 AI_ENGINE=openrouter
 OPENROUTER_API_KEY=your-private-key
-OPENROUTER_MODEL=nex-agi/nex-n2-pro:free
+OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
+OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free
 AI_REQUIRE_TRAINED_MODEL=true
 AI_ALLOW_RULE_FALLBACK=false
+```
+
+Verify the model is live and free before scanning:
+
+```bash
+python manage.py check_ai_model
 ```
 
 The remote model can return only `Healthy`, `Inconclusive`, or an exact disease
@@ -339,10 +351,12 @@ agrisense_project/
 │       ├── providers/         # auth, diagnosis, marketplace, weather, chat, ...
 │       ├── screens/           # farmer/dealer/admin UIs
 │       ├── services/api/      # ApiService (JWT refresh, media resolution, WS urls)
-│       ├── services/local/    # offline cache + action outbox
+│       ├── services/local/    # offline cache + action outbox + bundled SQLite KB
 │       ├── l10n/              # EN/FR localization
 │       ├── theme/             # green premium theme
 │       └── widgets/
+│   └── assets/db/             # pre-populated SQLite shipped inside the APK
+├── tools/                     # build_offline_db.py — generates the bundled DB asset
 ├── docs/                      # architecture analysis + deployment guide
 ├── Dockerfile
 └── docker-compose.yml         # MySQL + Redis + backend (daphne)

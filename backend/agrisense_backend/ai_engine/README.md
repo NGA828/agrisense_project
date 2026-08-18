@@ -5,7 +5,7 @@
 AgriSense uses a pluggable backend with three deliberately distinct modes:
 
 1. `AI_ENGINE=openrouter` — **primary** cloud vision path. The default model is
-   `nex-agi/nex-n2-pro:free`.
+   `dots-studio/dots-3-note-preview:free`.
 2. `AI_ENGINE=tensorflow` — optional local/offline Keras CNN with an exact class
    manifest.
 3. `AI_ENGINE=rules` — deterministic colour/lesion heuristic for demos only. It
@@ -18,7 +18,8 @@ Create an OpenRouter key and keep it only in the backend environment:
 ```dotenv
 AI_ENGINE=openrouter
 OPENROUTER_API_KEY=replace-in-the-private-server-environment
-OPENROUTER_MODEL=nex-agi/nex-n2-pro:free
+OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
+OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_TIMEOUT_SECONDS=60
 OPENROUTER_IMAGE_MAX_DIMENSION=1280
@@ -30,6 +31,55 @@ AI_ALLOW_RULE_FALLBACK=false
 
 No OpenRouter SDK is required; the existing `requests` dependency calls the
 OpenAI-compatible chat-completions endpoint.
+
+### Choosing a model (verify before you deploy)
+
+A model is only usable by this client if it meets **all three** requirements:
+
+| Requirement | Why | Symptom when missing |
+|---|---|---|
+| **Image input** | The photo is sent as a base64 JPEG data URL | HTTP 400 / the image is ignored |
+| **`structured_outputs`** | The disease allow-list is enforced with `response_format: json_schema` plus `provider.require_parameters` | No endpoint satisfies the request; it fails to route |
+| **A live provider endpoint** | A model can stay listed in the catalog with `"endpoints": []` after being deprecated | HTTP 404 — "diagnosis unavailable" to the farmer |
+
+Capability flags alone are misleading: the catalog lists models that nothing
+currently serves. Always verify against the live API:
+
+```bash
+python manage.py check_ai_model              # check primary + fallbacks
+python manage.py check_ai_model --list-free  # working free alternatives
+python manage.py check_ai_model --list-all   # include paid models
+```
+
+### Failover
+
+`OPENROUTER_FALLBACK_MODELS` is sent as OpenRouter's `models` array, so a
+rate-limited, down, or moderation-blocked primary is retried against the next
+model **inside the same HTTP request** — the farmer never re-uploads the photo.
+This matters because free endpoints are the first thing providers throttle:
+free tiers allow roughly **20 requests/minute** and **50 requests/day**, rising
+to 1,000/day after a one-time $10 credit purchase.
+
+The response's `model` field records which model actually answered, and that
+value is persisted on every `Diagnosis` row.
+
+### Spend guard — this deployment cannot be billed
+
+Both default models are `:free` ($0 per input and output token, verified against
+the live catalog). Two independent mechanisms keep it that way:
+
+1. **Config validation** — with `OPENROUTER_ALLOW_PAID_MODELS=false` (the
+   default) the client refuses to run if `OPENROUTER_MODEL` or any fallback is
+   not a `:free` slug. It fails *before* any HTTP call, so a mistyped model id
+   cannot cost money.
+2. **Zero price ceiling** — every request pins
+   `provider.max_price = {prompt: 0, completion: 0}`, so even if a `:free` slug
+   were remapped to a billable endpoint, OpenRouter rejects the request instead
+   of charging.
+
+OpenRouter is prepaid with no card required: with a $0 balance the worst case is
+an HTTP 429 (daily cap) or 402 — never a surprise bill. Only set
+`OPENROUTER_ALLOW_PAID_MODELS=true` if you deliberately want paid models.
 
 ### Database-only disease restriction
 
