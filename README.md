@@ -191,6 +191,14 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api   # Android emul
 
 The default base URL adapts per platform automatically (`10.0.2.2` on Android, `localhost` elsewhere), so plain `flutter run` works on emulators.
 
+Release APK:
+
+```bash
+flutter build apk --release
+```
+
+Signing behavior and how to set up a release keystore: [docs/RELEASE_SIGNING.md](docs/RELEASE_SIGNING.md).
+
 ### Demo accounts
 
 | Role | Username | Password | Notes |

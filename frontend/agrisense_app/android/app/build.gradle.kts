@@ -1,9 +1,46 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// ---------------------------------------------------------------------------
+// Release signing.
+//
+// To sign release builds with a real keystore, create `android/key.properties`
+// (already gitignored — never commit it) with:
+//
+//   storePassword=********
+//   keyPassword=********
+//   keyAlias=upload
+//   storeFile=C:/Users/<you>/<path>/upload-keystore.jks   <- forward slashes,
+//                                                            even on Windows
+//
+// Full walkthrough: docs/RELEASE_SIGNING.md.
+//
+// If `android/key.properties` does not exist, release builds fall back to the
+// DEBUG keystore so `flutter build apk --release` always works out of the box.
+// A debug-signed APK is fine for testing/installing manually, but it cannot be
+// uploaded to the Play Store, and it must be uninstalled before a properly
+// signed APK can be installed (signatures differ).
+// ---------------------------------------------------------------------------
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
+fun keystoreProperty(name: String): String =
+    keystoreProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: error(
+            "android/key.properties exists but is missing the \"$name\" entry. " +
+                "See docs/RELEASE_SIGNING.md for the expected format."
+        )
 
 android {
     namespace = "com.example.agrisense_app"
@@ -30,11 +67,48 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                val storeFileRaw = keystoreProperty("storeFile")
+                // Resolve relative to the app module first, then to android/.
+                // Absolute paths (with FORWARD slashes on Windows) work too.
+                val storeFileRef =
+                    listOf(file(storeFileRaw), rootProject.file(storeFileRaw))
+                        .distinct()
+                        .firstOrNull { it.isFile }
+                        ?: error(
+                            "Keystore not found at \"$storeFileRaw\" " +
+                                "(looked relative to android/app and android/). " +
+                                "Use forward slashes in key.properties, e.g. " +
+                                "storeFile=C:/Users/<you>/upload-keystore.jks"
+                        )
+
+                keyAlias = keystoreProperty("keyAlias")
+                keyPassword = keystoreProperty("keyPassword")
+                storeFile = storeFileRef
+                storePassword = keystoreProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+                logger.lifecycle(
+                    "Release build will be signed with the keystore from android/key.properties"
+                )
+            } else {
+                // No android/key.properties found — sign with the debug key so
+                // `flutter build apk --release` works without extra setup.
+                signingConfig = signingConfigs.getByName("debug")
+                logger.lifecycle(
+                    "No android/key.properties found — release build will be signed " +
+                        "with the DEBUG key (fine for testing, not for the Play Store). " +
+                        "See docs/RELEASE_SIGNING.md to set up release signing."
+                )
+            }
         }
     }
 
