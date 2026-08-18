@@ -45,7 +45,16 @@ class OpenRouterVisionClient:
         self.api_key = str(getattr(settings, 'OPENROUTER_API_KEY', '') or '').strip()
         self.model = str(getattr(
             settings, 'OPENROUTER_MODEL',
-            'nex-agi/nex-n2-pro:free') or '').strip()
+            'dots-studio/dots-3-note-preview:free') or '').strip()
+        # Server-side failover list (see OPENROUTER_FALLBACK_MODELS). Free
+        # endpoints are the first thing providers throttle under load, so a
+        # single-model configuration turns a provider hiccup into a failed
+        # diagnosis for the farmer.
+        self.fallback_models = tuple(
+            str(name).strip()
+            for name in (getattr(settings, 'OPENROUTER_FALLBACK_MODELS', ()) or ())
+            if str(name).strip() and str(name).strip() != self.model
+        )
         self.base_url = str(getattr(
             settings, 'OPENROUTER_BASE_URL',
             'https://openrouter.ai/api/v1') or '').rstrip('/')
@@ -185,7 +194,7 @@ class OpenRouterVisionClient:
             f'confidence; uncertainty must not be hidden.\n\n'
             f'Reviewed diseases for {crop_type}:\n{candidate_json}'
         )
-        return {
+        payload: dict[str, Any] = {
             'model': self.model,
             'messages': [
                 {
@@ -218,6 +227,11 @@ class OpenRouterVisionClient:
             # Route only to endpoints that can honor structured output.
             'provider': {'require_parameters': True},
         }
+        if self.fallback_models:
+            # OpenRouter tries these in order when the primary model errors,
+            # is rate-limited, or is down — one HTTP request, no extra upload.
+            payload['models'] = [self.model, *self.fallback_models]
+        return payload
 
     def _headers(self) -> dict[str, str]:
         headers = {
