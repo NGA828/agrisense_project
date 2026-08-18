@@ -37,6 +37,17 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    androidResources {
+        // Store the bundled SQLite knowledge base uncompressed inside the APK.
+        //
+        // A compressed asset must be fully inflated into RAM before it can be
+        // read; an uncompressed, zipalign-ed one is page-aligned and can be
+        // streamed straight out of the APK. SQLite files are already compact
+        // after VACUUM, so the size cost is small and the first-launch copy in
+        // OfflineDatabase gets measurably faster and cheaper in memory.
+        noCompress += "db"
+    }
 }
 
 flutter {

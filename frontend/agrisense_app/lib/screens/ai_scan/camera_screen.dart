@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/diagnosis_provider.dart';
 import '../../services/api/api_service.dart';
+import '../../services/local/offline_database.dart';
 import '../diagnosis/diagnosis_result_screen.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -47,20 +48,33 @@ class _CameraScreenState extends State<CameraScreen>
     _loadSupportedCrops();
   }
 
-  /// Pull the crop list from the server's knowledge base; fall back to the
-  /// bundled defaults when offline or on error.
+  /// Pull the crop list from the server's knowledge base; when offline fall
+  /// back to the pre-populated SQLite database shipped inside the APK, and only
+  /// then to the hard-coded defaults.
   Future<void> _loadSupportedCrops() async {
     try {
       final crops = await ApiService().getSupportedCrops();
       if (mounted && crops.isNotEmpty) {
-        setState(() {
-          _crops = crops.cast<String>();
-          if (!_crops.contains(_selectedCrop)) _selectedCrop = _crops.first;
-        });
+        _applyCrops(crops.cast<String>());
+        return;
       }
     } catch (_) {
-      // Bundled default list remains in use.
+      // Fall through to the bundled database.
     }
+
+    try {
+      final offline = await OfflineDatabase.instance.supportedCrops();
+      if (mounted && offline.isNotEmpty) _applyCrops(offline);
+    } catch (_) {
+      // Hard-coded default list remains in use.
+    }
+  }
+
+  void _applyCrops(List<String> crops) {
+    setState(() {
+      _crops = crops;
+      if (!_crops.contains(_selectedCrop)) _selectedCrop = _crops.first;
+    });
   }
 
   @override

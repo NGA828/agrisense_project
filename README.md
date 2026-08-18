@@ -33,6 +33,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 - **Payments** — MTN MoMo / Orange Money checkout with amount validation & provider simulation
 - **History** — diagnosis history and order history modules
 - **Offline-first** — diagnosis history, marketplace catalog and weather are cached for low-coverage areas, with an offline action outbox
+- **Works on first launch, offline** — a pre-populated SQLite knowledge base (crops, diseases, treatments, irrigation thresholds) ships inside the APK and installs itself into internal storage on first run; see [docs/BUNDLED_DATABASE.md](docs/BUNDLED_DATABASE.md)
 - **Irrigation dashboard** — register soil-moisture sensors and get live, crop-aware irrigation advice (moisture + rain + thresholds); reachable from the Home quick-access grid
 - **In-app notifications** — order/payment/premium updates with unread badge, delivered live over the push bus
 
@@ -339,10 +340,12 @@ agrisense_project/
 │       ├── providers/         # auth, diagnosis, marketplace, weather, chat, ...
 │       ├── screens/           # farmer/dealer/admin UIs
 │       ├── services/api/      # ApiService (JWT refresh, media resolution, WS urls)
-│       ├── services/local/    # offline cache + action outbox
+│       ├── services/local/    # offline cache + action outbox + bundled SQLite KB
 │       ├── l10n/              # EN/FR localization
 │       ├── theme/             # green premium theme
 │       └── widgets/
+│   └── assets/db/             # pre-populated SQLite shipped inside the APK
+├── tools/                     # build_offline_db.py — generates the bundled DB asset
 ├── docs/                      # architecture analysis + deployment guide
 ├── Dockerfile
 └── docker-compose.yml         # MySQL + Redis + backend (daphne)

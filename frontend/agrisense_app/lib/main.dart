@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -18,6 +20,7 @@ import 'screens/farmer/farmer_dashboard.dart';
 import 'screens/dealer/dealer_dashboard.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/chat/chat_list_screen.dart';
+import 'services/local/offline_database.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -26,6 +29,10 @@ void main() {
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
+  // Install the pre-populated knowledge base from the APK asset into internal
+  // storage while the splash screen is up. Fire-and-forget: it never throws and
+  // the UI must not block on it.
+  unawaited(OfflineDatabase.instance.warmUp());
   runApp(const AgriSenseApp());
 }
 

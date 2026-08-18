@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules for Android 11 and lower (android:fullBackupContent).
+
+  By default Auto Backup uploads everything in the app's internal storage,
+  including our bundled knowledge base. That is pure waste (the file already
+  ships inside every APK) and it is actively harmful: a restore on a new device
+  can drop an OLD copy of the database onto a NEW app install before first
+  launch. OfflineDatabase's PRAGMA user_version check would recover from that,
+  but excluding the file avoids the round-trip and the backup quota entirely.
+
+  Path is relative to the "file" domain = getFilesDir(); Flutter's
+  getApplicationDocumentsDirectory() maps to <filesDir>/app_flutter.
+-->
+<full-backup-content>
+    <exclude domain="file" path="app_flutter/databases/" />
+</full-backup-content>
