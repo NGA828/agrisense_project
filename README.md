@@ -146,16 +146,27 @@ DB_NAME=agrisense_db DB_USER=root DB_PASSWORD=yourpass DB_HOST=localhost DB_PORT
 
 ### OpenRouter AI setup
 
-OpenRouter vision is the primary engine, using the free Nex-N2-Pro endpoint.
-Create an OpenRouter key and place it only in
-`backend/agrisense_backend/.env` (never in Flutter or source control):
+OpenRouter vision is the primary engine, on a free vision model. **Step-by-step
+guide: [docs/AI_SETUP.md](docs/AI_SETUP.md).**
+
+Only two things are needed: a free OpenRouter key (no credit card) in
+`backend/agrisense_backend/.env`, and a seeded disease knowledge base
+(`python manage.py seed_data`) — the AI can only return diseases that already
+exist in the database, so scans fail without it.
 
 ```dotenv
 AI_ENGINE=openrouter
 OPENROUTER_API_KEY=your-private-key
 OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
+OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free
 AI_REQUIRE_TRAINED_MODEL=true
 AI_ALLOW_RULE_FALLBACK=false
+```
+
+Verify the model is live and free before scanning:
+
+```bash
+python manage.py check_ai_model
 ```
 
 The remote model can return only `Healthy`, `Inconclusive`, or an exact disease
