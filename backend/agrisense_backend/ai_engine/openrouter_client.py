@@ -157,20 +157,21 @@ class OpenRouterVisionClient:
 
     @staticmethod
     def _response_schema(disease_names: list[str]) -> dict[str, Any]:
-        allowed_names = ['Healthy', 'Inconclusive', *disease_names]
+        allowed_names = ['Healthy', 'Inconclusive', 'NotACrop', 'CropMismatch', *disease_names]
         return {
             'type': 'object',
             'properties': {
                 'outcome': {
                     'type': 'string',
-                    'enum': ['healthy', 'disease', 'inconclusive'],
+                    'enum': ['healthy', 'disease', 'inconclusive', 'not_a_crop', 'crop_mismatch'],
                 },
                 'disease_name': {
                     'type': 'string',
                     'enum': allowed_names,
                     'description': (
-                        'Healthy for a healthy plant, Inconclusive when uncertain, '
-                        'or exactly one reviewed disease_name.'),
+                        'Healthy for a healthy plant, NotACrop if not a crop image, '
+                        'CropMismatch if the crop in the image does not match the selected crop, '
+                        'Inconclusive when uncertain, or exactly one reviewed disease_name.'),
                 },
                 'confidence': {
                     'type': 'number',
@@ -200,11 +201,15 @@ class OpenRouterVisionClient:
         candidate_json = json.dumps(reviewed, ensure_ascii=False)
         prompt = (
             f'Analyze this image as a cautious crop-screening assistant. The farmer '
-            f'selected crop is {crop_type!r}. You may classify it ONLY as Healthy, '
-            f'Inconclusive, or one disease in the reviewed list below. Do not invent '
-            f'a disease, treatment, pesticide, dosage, cause, or symptom. Use only '
-            f'visible evidence from this image. If the image is not clearly the '
-            f'selected crop, is blurry, shows no useful plant area, or does not '
+            f'selected crop is {crop_type!r}. CRITICAL: First verify the image shows the SELECTED '
+            f'crop type. If the image contains a DIFFERENT crop (e.g., user selected Tomato but '
+            f'image shows Maize), return CropMismatch with outcome crop_mismatch immediately. '
+            f'You may classify valid {crop_type} images ONLY as Healthy, NotACrop, Inconclusive, '
+            f'or one disease in the reviewed list below. Do not invent a disease, treatment, '
+            f'pesticide, dosage, cause, or symptom. Use only visible evidence from this image. '
+            f'If the image is clearly NOT a crop (e.g., a person, animal, building, or other '
+            f'non-agricultural subject), return NotACrop with outcome not_a_crop. '
+            f'If the image is unclear, blurry, shows no useful plant area, or does not '
             f'closely match a reviewed disease, return Inconclusive. Use conservative '
             f'confidence; uncertainty must not be hidden.\n\n'
             f'Reviewed diseases for {crop_type}:\n{candidate_json}'
@@ -317,7 +322,7 @@ class OpenRouterVisionClient:
                 'OpenRouter returned fields outside the restricted diagnosis schema.')
         outcome = str(result.get('outcome') or '').strip().lower()
         disease_name = str(result.get('disease_name') or '').strip()
-        if outcome not in {'healthy', 'disease', 'inconclusive'}:
+        if outcome not in {'healthy', 'disease', 'inconclusive', 'not_a_crop', 'crop_mismatch'}:
             raise OpenRouterResponseError('OpenRouter returned an invalid outcome.')
 
         try:
@@ -351,6 +356,16 @@ class OpenRouterVisionClient:
                 raise OpenRouterResponseError(
                     'Inconclusive outcome must use the Inconclusive label.')
             disease_name = 'Inconclusive'
+        elif outcome == 'not_a_crop':
+            if disease_name.casefold() != 'notacrop':
+                raise OpenRouterResponseError(
+                    'NotACrop outcome must use the NotACrop label.')
+            disease_name = 'NotACrop'
+        elif outcome == 'crop_mismatch':
+            if disease_name.casefold() != 'cropmismatch':
+                raise OpenRouterResponseError(
+                    'CropMismatch outcome must use the CropMismatch label.')
+            disease_name = 'CropMismatch'
         else:
             canonical = allowed.get(disease_name.casefold())
             if canonical is None:

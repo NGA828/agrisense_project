@@ -1,4 +1,4 @@
-package com.example.agrisense_app
+package com.agrisense.ai
 
 import io.flutter.embedding.android.FlutterActivity
 

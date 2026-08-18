@@ -344,6 +344,50 @@ class RuleBasedEngine(PlantPathologyEngine):
             'low_confidence': True,
         }
 
+    @staticmethod
+    def _build_not_a_crop_result(ok):
+        return {
+            'is_healthy': False,
+            'disease_name': 'NotACrop',
+            'confidence': Decimal('0'),
+            'severity': 'invalid',
+            'symptoms': 'This image does not appear to contain a crop plant.',
+            'causes': 'The uploaded image shows a non-agricultural subject (e.g., a person, animal, building, or other non-plant object).',
+            'prevention': 'Please upload a clear photo of an actual crop plant.',
+            'treatment_type': 'Invalid Image',
+            'medication': 'N/A - Please upload a crop image.',
+            'instructions': 'Upload a clear photo of a crop plant showing leaves, stems, or affected areas. Ensure the plant is the main subject of the image.',
+            'duration': 0,
+            'follow_up_date': None,
+            'engine': 'openrouter-vision',
+            'trained_model': True,
+            'model_version': 'vision-validation',
+            'image_parsed': ok,
+            'is_inconclusive': True,
+        }
+
+    @staticmethod
+    def _build_crop_mismatch_result(selected_crop, ok):
+        return {
+            'is_healthy': False,
+            'disease_name': 'CropMismatch',
+            'confidence': Decimal('0'),
+            'severity': 'mismatch',
+            'symptoms': f'The image does not show the selected crop type ({selected_crop}).',
+            'causes': f'The uploaded image appears to show a different crop than {selected_crop!r}. This could be a Tomato image when Maize was selected, for example.',
+            'prevention': f'Please upload an image of {selected_crop} specifically, not other crop types.',
+            'treatment_type': 'Incorrect Crop',
+            'medication': 'N/A - Image does not match selected crop.',
+            'instructions': f'Upload a clear photo of {selected_crop} plants showing leaves, stems, or affected areas. Make sure the image matches the crop type you selected.',
+            'duration': 0,
+            'follow_up_date': None,
+            'engine': 'openrouter-vision',
+            'trained_model': True,
+            'model_version': 'crop-validation',
+            'image_parsed': ok,
+            'is_inconclusive': True,
+        }
+
     def _candidates(self, crop_type):
         from diagnosis.models import Disease
         db_rows = Disease.objects.filter(crop_name__iexact=crop_type)
@@ -486,6 +530,18 @@ class OpenRouterEngine(PlantPathologyEngine):
             }],
             'visual_evidence': list(prediction.evidence),
         }
+
+        if prediction.outcome == 'crop_mismatch':
+            result = RuleBasedEngine._build_crop_mismatch_result(crop_type, True)
+            result.update(metadata)
+            result['is_inconclusive'] = True
+            return result
+
+        if prediction.outcome == 'not_a_crop':
+            result = RuleBasedEngine._build_not_a_crop_result(True)
+            result.update(metadata)
+            result['is_inconclusive'] = True
+            return result
 
         if prediction.outcome == 'inconclusive' or confidence < threshold:
             result = RuleBasedEngine._build_inconclusive_result(
