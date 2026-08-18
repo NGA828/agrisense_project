@@ -60,9 +60,26 @@ This matters because free endpoints are the first thing providers throttle:
 free tiers allow roughly **20 requests/minute** and **50 requests/day**, rising
 to 1,000/day after a one-time $10 credit purchase.
 
-For production traffic, point `OPENROUTER_MODEL` at a paid vision model and
-keep a free one as the fallback; the response's `model` field records which one
-actually answered, and that value is persisted on every `Diagnosis` row.
+The response's `model` field records which model actually answered, and that
+value is persisted on every `Diagnosis` row.
+
+### Spend guard — this deployment cannot be billed
+
+Both default models are `:free` ($0 per input and output token, verified against
+the live catalog). Two independent mechanisms keep it that way:
+
+1. **Config validation** — with `OPENROUTER_ALLOW_PAID_MODELS=false` (the
+   default) the client refuses to run if `OPENROUTER_MODEL` or any fallback is
+   not a `:free` slug. It fails *before* any HTTP call, so a mistyped model id
+   cannot cost money.
+2. **Zero price ceiling** — every request pins
+   `provider.max_price = {prompt: 0, completion: 0}`, so even if a `:free` slug
+   were remapped to a billable endpoint, OpenRouter rejects the request instead
+   of charging.
+
+OpenRouter is prepaid with no card required: with a $0 balance the worst case is
+an HTTP 429 (daily cap) or 402 — never a surprise bill. Only set
+`OPENROUTER_ALLOW_PAID_MODELS=true` if you deliberately want paid models.
 
 ### Database-only disease restriction
 

@@ -352,6 +352,42 @@ class OpenRouterEngineTests(TestCase):
         result = self.engine().analyze(png_bytes(), 'Tomato')
         self.assertEqual(result['model_version'], 'google/gemma-4-26b-a4b-it:free')
 
+    # ── spend guard (this deployment must never be billed) ───────────────
+    def test_configured_models_are_all_free(self):
+        client = OpenRouterVisionClient(post=self.post)
+        for name in (client.model, *client.fallback_models):
+            self.assertTrue(
+                name.endswith(':free'),
+                f'{name} is a paid model; the default config must stay free.')
+
+    def test_request_pins_max_price_to_zero(self):
+        """OpenRouter must refuse to bill rather than silently charge."""
+        self.engine().analyze(png_bytes(), 'Tomato')
+        provider = self.requests[0][1]['json']['provider']
+        self.assertEqual(provider['max_price'], {'prompt': 0, 'completion': 0})
+
+    @override_settings(OPENROUTER_MODEL='openai/gpt-4o')
+    def test_paid_primary_is_refused_before_any_request(self):
+        with self.assertRaises(AIEngineUnavailable):
+            self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(self.requests, [], 'no billable call may be made')
+
+    @override_settings(OPENROUTER_FALLBACK_MODELS=['openai/gpt-4o'])
+    def test_paid_fallback_is_refused_before_any_request(self):
+        with self.assertRaises(AIEngineUnavailable):
+            self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(self.requests, [])
+
+    @override_settings(
+        OPENROUTER_MODEL='openai/gpt-4o',
+        OPENROUTER_FREE_ONLY=False,
+    )
+    def test_paid_model_allowed_only_with_explicit_opt_in(self):
+        self.responding_model = 'openai/gpt-4o'
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['model_version'], 'openai/gpt-4o')
+        self.assertNotIn('max_price', self.requests[0][1]['json']['provider'])
+
 
 class _FakeModel:
     def __init__(self, output):

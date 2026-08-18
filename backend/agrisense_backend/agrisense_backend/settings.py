@@ -404,6 +404,10 @@ OPENROUTER_FALLBACK_MODELS = [
 ]
 OPENROUTER_BASE_URL = os.getenv(
     'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1').strip()
+# Spend guard: refuse to call any model that is not ':free', and pin the
+# request's max_price to zero so OpenRouter cannot bill the account. Opt in to
+# paid models deliberately with OPENROUTER_ALLOW_PAID_MODELS=true.
+OPENROUTER_FREE_ONLY = not _env_bool('OPENROUTER_ALLOW_PAID_MODELS', False)
 OPENROUTER_TIMEOUT_SECONDS = float(
     os.getenv('OPENROUTER_TIMEOUT_SECONDS', '60'))
 OPENROUTER_IMAGE_MAX_DIMENSION = int(
