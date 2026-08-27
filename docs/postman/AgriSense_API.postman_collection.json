@@ -1,0 +1,1157 @@
+{
+  "info": {
+    "_postman_id": "agrisense-api-collection",
+    "name": "AgriSense API",
+    "description": "Complete Postman collection for testing the AgriSense Django REST + Channels backend. Import alongside the `AgriSense Local` environment, then run **Login** first to populate the access token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-refresh JWT if it's about to expire (5-min buffer)",
+          "const expiry = pm.environment.get('access_token_expiry');",
+          "if (expiry && Date.now() > Number(expiry) - 5 * 60 * 1000) {",
+          "  pm.sendRequest({",
+          "    url: pm.environment.get('base_url') + '/api/auth/refresh/',",
+          "    method: 'POST',",
+          "    header: { 'Content-Type': 'application/json' },",
+          "    body: { mode: 'raw', raw: JSON.stringify({",
+          "      refresh: pm.environment.get('refresh_token')",
+          "    }) }",
+          "  }, (err, res) => {",
+          "    if (!err && res.code === 200) {",
+          "      const json = res.json();",
+          "      pm.environment.set('access_token', json.access);",
+          "      pm.environment.set('access_token_expiry', Date.now() + 5 * 60 * 1000);",
+          "    }",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Health (no auth)",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Auth",
+      "item": [
+        {
+          "name": "Login (capture JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login returns 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.access) {",
+                  "  pm.environment.set('access_token', json.access);",
+                  "  pm.environment.set('refresh_token', json.refresh);",
+                  "  pm.environment.set('access_token_expiry', Date.now() + 5 * 60 * 1000);",
+                  "  if (json.user_id) pm.environment.set('user_id', json.user_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login", ""]
+            }
+          }
+        },
+        {
+          "name": "Refresh access token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access) {",
+                  "  pm.environment.set('access_token', json.access);",
+                  "  pm.environment.set('access_token_expiry', Date.now() + 5 * 60 * 1000);",
+                  "}",
+                  "if (json.refresh) pm.environment.set('refresh_token', json.refresh);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "refresh", ""]
+            }
+          }
+        },
+        {
+          "name": "Register farmer",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newfarmer\",\n  \"email\": \"newfarmer@example.com\",\n  \"password\": \"password123\",\n  \"password_confirm\": \"password123\",\n  \"first_name\": \"New\",\n  \"last_name\": \"Farmer\",\n  \"phone_number\": \"+237670000000\",\n  \"role\": \"farmer\",\n  \"region\": \"Centre\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register", ""]
+            }
+          }
+        },
+        {
+          "name": "OTP - send",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"+237670000000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/otp/send/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "otp", "send", ""]
+            }
+          }
+        },
+        {
+          "name": "OTP - verify",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"+237670000000\",\n  \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/otp/verify/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "otp", "verify", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Users",
+      "item": [
+        {
+          "name": "Get me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/me/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me", ""]
+            }
+          }
+        },
+        {
+          "name": "Update me (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Updated\",\n  \"phone_number\": \"+237677112233\",\n  \"region\": \"Adamawa\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/me/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - list users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - dealer requests queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/dealer_requests/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "dealer_requests", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - suspend user",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}/suspend/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}", "suspend", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - activate user",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}/activate/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}", "activate", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - verify dealer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}/verify_dealer/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}", "verify_dealer", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - upgrade premium",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}/upgrade_premium/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}", "upgrade_premium", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Diagnosis & Diseases",
+      "item": [
+        {
+          "name": "Get supported crops",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/diseases/supported_crops/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "diseases", "supported_crops", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - list diseases",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/diseases/list_diseases/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "diseases", "list_diseases", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - add disease",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tomato Early Blight\",\n  \"crop\": \"Tomato\",\n  \"symptoms\": \"Dark concentric spots on lower leaves\",\n  \"causes\": \"Alternaria solani fungus in warm humid weather\",\n  \"prevention\": \"Rotate crops, remove debris, water at the base\",\n  \"medication\": \"Mancozeb 80WP \\u2014 2 g/L water\",\n  \"instructions\": \"Spray every 7-10 days, 3 applications\",\n  \"severity\": \"moderate\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/diseases/add_disease/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "diseases", "add_disease", ""]
+            }
+          }
+        },
+        {
+          "name": "Run AI diagnosis (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "image", "type": "file", "src": "" },
+                { "key": "crop_type", "value": "Tomato", "type": "text" },
+                { "key": "latitude", "value": "4.0511", "type": "text" },
+                { "key": "longitude", "value": "9.7679", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/diagnosis/analyze/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "diagnosis", "analyze", ""]
+            }
+          }
+        },
+        {
+          "name": "Diagnosis history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/diagnosis/history/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "diagnosis", "history", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Products & Marketplace",
+      "item": [
+        {
+          "name": "Marketplace (search)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/marketplace/?search=mancozeb",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "marketplace", ""],
+              "query": [{ "key": "search", "value": "mancozeb" }]
+            }
+          }
+        },
+        {
+          "name": "Marketplace (filter category)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/marketplace/?category=Fungicide",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "marketplace", ""],
+              "query": [{ "key": "category", "value": "Fungicide" }]
+            }
+          }
+        },
+        {
+          "name": "Get product by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Dealer - my products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/my_products/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "my_products", ""]
+            }
+          }
+        },
+        {
+          "name": "Dealer - create product (form-data)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Copper Fungicide 50WP", "type": "text" },
+                { "key": "description", "value": "Broad-spectrum fungicide for vegetables", "type": "text" },
+                { "key": "category", "value": "Fungicide", "type": "text" },
+                { "key": "price", "value": "4200", "type": "text" },
+                { "key": "stock", "value": "50", "type": "text" },
+                { "key": "image", "type": "file", "src": "" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", ""]
+            }
+          }
+        },
+        {
+          "name": "Dealer - update product (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": \"4500\",\n  \"stock\": 40\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Dealer - toggle availability",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}/toggle_availability/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}", "toggle_availability", ""]
+            }
+          }
+        },
+        {
+          "name": "Dealer - delete product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "products", "{{product_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Reviews for product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/reviews/?product={{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reviews", ""],
+              "query": [{ "key": "product", "value": "{{product_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Post a review",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product\": {{product_id}},\n  \"rating\": 5,\n  \"comment\": \"Worked great on my tomatoes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/reviews/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reviews", ""]
+            }
+          }
+        },
+        {
+          "name": "Report a product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product\": {{product_id}},\n  \"reason\": \"Counterfeit packaging\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/product_reports/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "product_reports", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Orders",
+      "item": [
+        {
+          "name": "Create order (farmer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('order_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"product\": {{product_id}}, \"quantity\": 2 }\n  ],\n  \"shipping_address\": \"Carrefour Bastos, Yaound\\u00e9\",\n  \"phone_number\": \"+237670000000\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", ""]
+            }
+          }
+        },
+        {
+          "name": "List my orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", ""]
+            }
+          }
+        },
+        {
+          "name": "Get order by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{order_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{order_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Update order status (ship/deliver)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shipped\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{order_id}}/update_status/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{order_id}}", "update_status", ""]
+            }
+          }
+        },
+        {
+          "name": "Cancel order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/orders/{{order_id}}/cancel/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders", "{{order_id}}", "cancel", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Payments",
+      "item": [
+        {
+          "name": "Create payment for order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('payment_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order\": {{order_id}},\n  \"provider\": \"mtn_momo\",\n  \"phone_number\": \"+237670000002\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", ""]
+            }
+          }
+        },
+        {
+          "name": "Process payment (even phone = success)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"+237670000002\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/process_payment/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "process_payment", ""]
+            }
+          }
+        },
+        {
+          "name": "Verify payment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/verify/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "verify", ""]
+            }
+          }
+        },
+        {
+          "name": "My payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/payments/my_payments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "my_payments", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - refund payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer returned goods\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/refund/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "refund", ""]
+            }
+          }
+        },
+        {
+          "name": "Provider webhook (HMAC-signed)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Signature", "value": "<HMAC-SHA256 of body using WEBHOOK_SECRET>" },
+              { "key": "X-Idempotency-Key", "value": "unique-uuid-here" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_id\": \"MTN-20250827-000123\",\n  \"status\": \"completed\",\n  \"order\": {{order_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/webhook/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "webhook", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Chat (REST)",
+      "item": [
+        {
+          "name": "List chat rooms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/chat/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "chat", ""]
+            }
+          }
+        },
+        {
+          "name": "Open chat with dealer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('chat_room_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dealer\": {{dealer_user_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/chat/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "chat", ""]
+            }
+          }
+        },
+        {
+          "name": "List messages in room",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/chat/{{chat_room_id}}/messages/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "chat", "{{chat_room_id}}", "messages", ""]
+            }
+          }
+        },
+        {
+          "name": "Send message",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello, is this still available?\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/chat/{{chat_room_id}}/send_message/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "chat", "{{chat_room_id}}", "send_message", ""]
+            }
+          }
+        },
+        {
+          "name": "Mark room read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/chat/{{chat_room_id}}/mark_read/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "chat", "{{chat_room_id}}", "mark_read", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Weather / Announcements / Notifications",
+      "item": [
+        {
+          "name": "Get weather (POST)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 4.0511,\n  \"longitude\": 9.7679,\n  \"city\": \"Yaound\\u00e9\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/weather/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "weather", ""]
+            }
+          }
+        },
+        {
+          "name": "List announcements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/announcements/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "announcements", ""]
+            }
+          }
+        },
+        {
+          "name": "Active announcements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/announcements/active/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "announcements", "active", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin - create announcement",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Frost warning\",\n  \"body\": \"Cover sensitive crops tonight.\",\n  \"audience\": \"farmers\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/announcements/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "announcements", ""]
+            }
+          }
+        },
+        {
+          "name": "List notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", ""]
+            }
+          }
+        },
+        {
+          "name": "Unread notification count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/unread_count/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "unread_count", ""]
+            }
+          }
+        },
+        {
+          "name": "Mark notification read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/1/mark_read/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "1", "mark_read", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Admin analytics & audit log",
+      "item": [
+        {
+          "name": "Admin stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/stats/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "stats", ""]
+            }
+          }
+        },
+        {
+          "name": "Admin analytics (30d)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/analytics/?period=30d",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "analytics", ""],
+              "query": [{ "key": "period", "value": "30d" }]
+            }
+          }
+        },
+        {
+          "name": "Admin regional (7d)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/regional/?period=7d",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "regional", ""],
+              "query": [{ "key": "period", "value": "7d" }]
+            }
+          }
+        },
+        {
+          "name": "Admin outbreaks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/outbreaks/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "outbreaks", ""]
+            }
+          }
+        },
+        {
+          "name": "Dealer analytics (30d)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/dealers/analytics/?period=30d",
+              "host": ["{{base_url}}"],
+              "path": ["api", "dealers", "analytics", ""],
+              "query": [{ "key": "period", "value": "30d" }]
+            }
+          }
+        },
+        {
+          "name": "Audit logs (filter category)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/audit_logs/?category=user",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit_logs", ""],
+              "query": [{ "key": "category", "value": "user" }]
+            }
+          }
+        },
+        {
+          "name": "Audit logs summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/audit_logs/summary/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit_logs", "summary", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - IoT Sensors & Irrigation",
+      "item": [
+        {
+          "name": "Register sensor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('sensor_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"SENSOR-001\",\n  \"name\": \"Field A\",\n  \"crop\": \"Tomato\",\n  \"latitude\": 4.0511,\n  \"longitude\": 9.7679\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sensors/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sensors", ""]
+            }
+          }
+        },
+        {
+          "name": "Ingest reading",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moisture\": 38.2,\n  \"temperature\": 27.4,\n  \"humidity\": 65,\n  \"rainfall\": 0.0,\n  \"recorded_at\": \"2026-08-27T10:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sensors/{{sensor_id}}/ingest/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sensors", "{{sensor_id}}", "ingest", ""]
+            }
+          }
+        },
+        {
+          "name": "Latest reading + advice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sensors/{{sensor_id}}/latest/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sensors", "{{sensor_id}}", "latest", ""]
+            }
+          }
+        },
+        {
+          "name": "Precision irrigation advice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sensors/{{sensor_id}}/irrigation_advice/?crop=Tomato",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sensors", "{{sensor_id}}", "irrigation_advice", ""],
+              "query": [{ "key": "crop", "value": "Tomato" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Push & USSD",
+      "item": [
+        {
+          "name": "Register FCM/APNs token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fcm-device-token-here\",\n  \"platform\": \"android\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/push/register/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "push", "register", ""]
+            }
+          }
+        },
+        {
+          "name": "Unregister token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fcm-device-token-here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/push/unregister/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "push", "unregister", ""]
+            }
+          }
+        },
+        {
+          "name": "USSD menu (initial)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+237670000000\",\n  \"text\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ussd/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ussd", ""]
+            }
+          }
+        },
+        {
+          "name": "USSD - pick weather",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+237670000000\",\n  \"text\": \"1\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ussd/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ussd", ""]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    }
+  ]
+}
