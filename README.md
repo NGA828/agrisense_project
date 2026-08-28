@@ -75,7 +75,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 
 ```bash
 cd backend/agrisense_backend
-python -m venv venv && source venv/bin/activate     # Windows: venv\Scripts\activate
+python -m venv venv && source      Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
