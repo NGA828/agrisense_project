@@ -966,9 +966,13 @@ class _AdminUsersState extends State<_AdminUsers> {
                       const Icon(Icons.phone_outlined,
                           size: 12, color: AppTheme.textMuted),
                       const SizedBox(width: 4),
-                      Text(u['phone_number'],
-                          style: const TextStyle(
-                              color: AppTheme.textSecondary, fontSize: 12)),
+                      Flexible(
+                        child: Text(u['phone_number'],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 12)),
+                      ),
                     ],
                   ),
                 ],

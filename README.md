@@ -16,7 +16,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 | **Database** | MySQL 8 (utf8mb4) — SQLite supported for local dev | Users, products, orders, payments, chats, diagnoses |
 | **Cache / Queue** | Redis (django-redis cache + Celery broker); locmem/eager in dev | Caching, async workers, background scheduling |
 | **Async** | Celery + django-celery-beat schedules (reservations, premiums, reconciliation, weather cleanup) | Background jobs that never block requests |
-| **AI Engine** | OpenRouter vision (`dots-studio/dots-3-note-preview:free`) restricted to reviewed DB diseases; optional local TensorFlow; labelled demo rules | Image-based crop screening with auditable model provenance |
+| **AI Engine** | OpenRouter vision (`google/gemma-4-26b-a4b-it:free`) restricted to reviewed DB diseases; optional local TensorFlow; labelled demo rules | Image-based crop screening with auditable model provenance |
 | **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + push-bus (live notifications & stock) |
 | **External** | OpenWeatherMap, MTN MoMo / Orange Money gateway adapters | Weather forecasts & mobile-money payments |
 | **Observability** | JSON structured logging, request-id tracing, `/api/health/`, optional Sentry | Trace + monitor production |
@@ -157,8 +157,8 @@ exist in the database, so scans fail without it.
 ```dotenv
 AI_ENGINE=openrouter
 OPENROUTER_API_KEY=your-private-key
-OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
-OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free
+OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
+OPENROUTER_FALLBACK_MODELS=meta-llama/llama-4-scout:free,mistralai/mistral-small-3.1-24b-instruct:free
 AI_REQUIRE_TRAINED_MODEL=true
 AI_ALLOW_RULE_FALLBACK=false
 ```

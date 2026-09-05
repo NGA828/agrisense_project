@@ -1033,10 +1033,14 @@ class _DealerProductsState extends State<_DealerProducts> {
                     Row(children: [
                       Icon(Icons.attach_money_rounded,
                           size: 13, color: AppTheme.primary),
-                      Text(
-                        '${product.price.toInt()} FCFA',
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w700, fontSize: 13),
+                      Flexible(
+                        child: Text(
+                          '${product.price.toInt()} FCFA',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Icon(Icons.inventory_2_rounded,
@@ -1045,23 +1049,29 @@ class _DealerProductsState extends State<_DealerProducts> {
                               ? AppTheme.warning
                               : AppTheme.textMuted),
                       const SizedBox(width: 3),
-                      Text(
-                        '${product.stockQuantity} units',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: lowStock
-                              ? AppTheme.warning
-                              : AppTheme.textMuted,
-                          fontWeight:
-                              lowStock ? FontWeight.w700 : FontWeight.w400,
+                      Flexible(
+                        child: Text(
+                          '${product.stockQuantity} units',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: lowStock
+                                ? AppTheme.warning
+                                : AppTheme.textMuted,
+                            fontWeight:
+                                lowStock ? FontWeight.w700 : FontWeight.w400,
+                          ),
                         ),
                       ),
                       if (lowStock) ...[
                         const SizedBox(width: 6),
-                        const DealerPill(
-                            label: 'Low stock',
-                            color: AppTheme.warning,
-                            icon: Icons.warning_amber_rounded),
+                        const Flexible(
+                          child: DealerPill(
+                              label: 'Low stock',
+                              color: AppTheme.warning,
+                              icon: Icons.warning_amber_rounded),
+                        ),
                       ],
                     ]),
                   ],
@@ -1096,13 +1106,16 @@ class _DealerProductsState extends State<_DealerProducts> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              DealerPill(
-                label: product.isAvailable ? 'Active' : 'Hidden',
-                color:
-                    product.isAvailable ? AppTheme.success : AppTheme.textMuted,
-                icon: product.isAvailable
-                    ? Icons.visibility_rounded
-                    : Icons.visibility_off_rounded,
+              Flexible(
+                child: DealerPill(
+                  label: product.isAvailable ? 'Active' : 'Hidden',
+                  color: product.isAvailable
+                      ? AppTheme.success
+                      : AppTheme.textMuted,
+                  icon: product.isAvailable
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
+                ),
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -2359,9 +2372,15 @@ class _contactRow extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: AppTheme.primary),
         const SizedBox(width: 8),
-        Text(text,
-            style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 12.5)),
+        // Emails, phone numbers and locations can exceed the card width on
+        // small screens; ellipsize instead of overflowing.
+        Flexible(
+          child: Text(text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 12.5)),
+        ),
       ],
     );
   }

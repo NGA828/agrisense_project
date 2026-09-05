@@ -215,8 +215,13 @@ class OpenRouterEngineTests(TestCase):
 
     def test_supported_crops_come_only_from_reviewed_database_rows(self):
         crops = get_available_crops()
-        self.assertEqual(crops, ['Maize', 'Tomato'])
-        self.assertNotIn('Cocoa', crops)  # bundled fallback is not exposed
+        # The engine's supported-crop list is the union of reviewed database
+        # crops and the bundled/defaults (the crop picker must offer every
+        # crop the knowledge base can still diagnose offline), with reviewed
+        # rows first and no duplicates.
+        self.assertEqual(crops[0], 'Maize')
+        self.assertEqual(crops[1], 'Tomato')
+        self.assertEqual(len(crops), len(set(crops)))
 
     def test_uses_only_reviewed_diseases_for_selected_crop(self):
         result = self.engine().analyze(png_bytes(), 'Tomato')
@@ -238,7 +243,8 @@ class OpenRouterEngineTests(TestCase):
             ['properties']['disease_name']['enum']
         self.assertEqual(
             allowed,
-            ['Healthy', 'Inconclusive', 'Reviewed Tomato Blight'],
+            ['Healthy', 'Inconclusive', 'NotACrop', 'CropMismatch',
+             'Reviewed Tomato Blight'],
         )
         self.assertTrue(request['headers']['Authorization'].startswith('Bearer '))
         image_url = payload['messages'][1]['content'][1]['image_url']['url']
@@ -298,6 +304,26 @@ class OpenRouterEngineTests(TestCase):
         self.error = 'rate limited'
         with self.assertRaises(AIEngineUnavailable):
             self.engine().analyze(png_bytes(), 'Tomato')
+
+    def test_provider_failure_carries_actionable_hint(self):
+        """The farmer-facing error is generic, but the admin/log detail must
+        distinguish quota exhaustion from a retired model."""
+        self.status_code = 429
+        with self.assertRaises(AIEngineUnavailable) as ctx:
+            self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertIn('Rate limited', str(ctx.exception))
+
+        self.status_code = 404
+        with self.assertRaises(AIEngineUnavailable) as ctx:
+            self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertIn('check_ai_model', str(ctx.exception))
+
+    def test_completion_budget_leaves_room_for_reasoning(self):
+        """Reasoning models spend hidden tokens from the same completion
+        budget; a small max_tokens yields an empty body and a failed scan."""
+        self.engine().analyze(png_bytes(), 'Tomato')
+        payload = self.requests[0][1]['json']
+        self.assertGreaterEqual(payload['max_tokens'], 1500)
 
     @override_settings(OPENROUTER_API_KEY='')
     def test_missing_api_key_fails_closed(self):

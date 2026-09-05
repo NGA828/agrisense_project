@@ -387,10 +387,13 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '').strip()
 # The diagnosis client needs three things from a model: image input, strict
 # JSON-schema structured outputs, and a provider actually serving it. Very few
 # free models satisfy all three — verify with `manage.py check_ai_model` before
-# changing this. Dots3-Note Preview is served by AtlasCloud at ~99.5-99.9%
-# uptime, is free, and is a 16B-active MoE (fast for a screening call).
+# changing this. Gemma 4 26B is served by Google AI Studio (~99.9% uptime),
+# is free, accepts images, and natively supports structured outputs. NOTE:
+# free OpenRouter models are retired regularly (dots-3-note-preview:free is
+# scheduled for removal 2026-09-30) — when diagnoses suddenly all fail, run
+# `python manage.py check_ai_model --list-free` and refresh these ids.
 OPENROUTER_MODEL = os.getenv(
-    'OPENROUTER_MODEL', 'dots-studio/dots-3-note-preview:free').strip()
+    'OPENROUTER_MODEL', 'google/gemma-4-26b-a4b-it:free').strip()
 # Comma-separated models tried, in order, when the primary is rate-limited
 # (free tiers are 20 req/min and 50-1000 req/day), down, or moderation-blocked.
 # Sent as OpenRouter's `models` array so failover happens server-side in one
@@ -399,9 +402,14 @@ OPENROUTER_FALLBACK_MODELS = [
     model.strip()
     for model in os.getenv(
         'OPENROUTER_FALLBACK_MODELS',
-        'google/gemma-4-26b-a4b-it:free').split(',')
+        'meta-llama/llama-4-scout:free,'
+        'mistralai/mistral-small-3.1-24b-instruct:free,'
+        'dots-studio/dots-3-note-preview:free').split(',')
     if model.strip()
 ]
+# Completion budget shared by the final JSON and any hidden reasoning tokens.
+# Small caps make reasoning models return an empty body and fail every scan.
+OPENROUTER_MAX_TOKENS = int(os.getenv('OPENROUTER_MAX_TOKENS', '2000'))
 OPENROUTER_BASE_URL = os.getenv(
     'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1').strip()
 # Spend guard: refuse to call any model that is not ':free', and pin the
