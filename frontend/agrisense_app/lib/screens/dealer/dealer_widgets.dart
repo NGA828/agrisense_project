@@ -19,6 +19,7 @@ class DealerTheme {
   static const Color card = Colors.white;
   static const Color headerTop = Color(0xFF14421E);
   static const Color headerBottom = Color(0xFF2E6B28);
+  static const Color accent = Color(0xFF2E7D32);
 
   // Domain accents
   static const Color sky = Color(0xFF0288D1); // info / orders
@@ -272,30 +273,6 @@ class DealerStatCard extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
-              if (footnote != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.trending_up_rounded, size: 12, color: color),
-                      const SizedBox(width: 4),
-                      Text(
-                        footnote!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
           const Spacer(),
@@ -321,6 +298,8 @@ class DealerStatCard extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               footnote!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: color,
                 fontSize: 10,

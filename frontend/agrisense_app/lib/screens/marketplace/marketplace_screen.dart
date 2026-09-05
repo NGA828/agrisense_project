@@ -8,6 +8,7 @@ import '../notifications/notifications_screen.dart';
 import '../payment/payment_screen.dart';
 import '../farmer/order_history_screen.dart';
 import 'product_detail_screen.dart';
+import '../../utils/responsive.dart';
 
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
@@ -98,44 +99,47 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7F3),
       body: SafeArea(
-        child: Column(
-          children: [
-            // ── Header ──
-            _buildHeader(),
+        child: ResponsiveCenter(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              // ── Header ──
+              _buildHeader(),
 
-            // ── Category Chips ──
-            _buildCategoryChips(),
+              // ── Category Chips ──
+              _buildCategoryChips(),
 
-            // ── Promo Banner ──
-            _buildPromoBanner(),
+              // ── Promo Banner ──
+              _buildPromoBanner(),
 
-            // ── Products Grid ──
-            Expanded(
-              child: marketplace.isLoading
-                  ? _buildLoadingState()
-                  : products.isEmpty
-                      ? _buildEmptyState()
-                      : RefreshIndicator(
-                          color: AppTheme.primary,
-                          backgroundColor: Colors.white,
-                          displacement: 40,
-                          onRefresh: _refresh,
-                          child: GridView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 14,
-                              mainAxisSpacing: 14,
-                              childAspectRatio: 0.62,
+              // ── Products Grid ──
+              Expanded(
+                child: marketplace.isLoading
+                    ? _buildLoadingState()
+                    : products.isEmpty
+                        ? _buildEmptyState()
+                        : RefreshIndicator(
+                            color: AppTheme.primary,
+                            backgroundColor: Colors.white,
+                            displacement: 40,
+                            onRefresh: _refresh,
+                            child: GridView.builder(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 240,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 14,
+                                childAspectRatio: 0.62,
+                              ),
+                              itemCount: products.length,
+                              itemBuilder: (context, index) =>
+                                  _buildProductCard(products[index], index),
                             ),
-                            itemCount: products.length,
-                            itemBuilder: (context, index) =>
-                                _buildProductCard(products[index], index),
                           ),
-                        ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -487,7 +491,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             productName: product.name,
             unitPrice: product.price.toInt().toString(),
             quantity: 1,
-            totalAmount: double.tryParse(order['total_price']?.toString() ?? '') ?? 0,
+            totalAmount:
+                double.tryParse(order['total_price']?.toString() ?? '') ?? 0,
           ),
         ),
       );

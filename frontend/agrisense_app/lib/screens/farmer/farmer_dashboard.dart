@@ -20,6 +20,8 @@ import 'farmer_home_screen.dart';
 import 'farmer_widgets.dart';
 import 'order_history_screen.dart';
 
+import '../../utils/responsive.dart';
+
 /// AgriSense farmer app shell.
 ///
 /// Information architecture (redesigned around the farmer's daily workflow):
@@ -85,6 +87,8 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().currentUser;
+    final isWide = Responsive.isWide(context);
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: FarmerTheme.canvas,
@@ -98,52 +102,117 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
         email: user?.email,
         photo: user?.profilePhoto,
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
-              ),
-              BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildNavItem(
-                      0, Icons.home_rounded, 'Home', Icons.home_outlined),
-                  _buildNavItem(1, Icons.camera_alt_rounded, 'Scan',
-                      Icons.camera_alt_outlined),
-                  _buildNavItem(2, Icons.shopping_bag_rounded, 'Market',
-                      Icons.shopping_bag_outlined),
-                  _buildNavItem(
-                      3, Icons.chat_rounded, 'Chat', Icons.chat_outlined),
-                  _buildNavItem(
-                      4, Icons.person_rounded, 'Profile', Icons.person_outline),
-                ],
+      body: isWide
+          ? Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _onItemTapped,
+                  labelType: NavigationRailLabelType.all,
+                  backgroundColor: Colors.white,
+                  indicatorColor: AppTheme.primary.withValues(alpha: 0.15),
+                  selectedIconTheme: const IconThemeData(color: AppTheme.primary),
+                  selectedLabelTextStyle: GoogleFonts.poppins(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                  unselectedLabelTextStyle: GoogleFonts.poppins(
+                    color: AppTheme.textMuted,
+                    fontSize: 11,
+                  ),
+                  leading: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: IconButton(
+                      icon: const Icon(Icons.menu_rounded, color: AppTheme.primary),
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                    ),
+                  ),
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home_rounded),
+                      label: Text('Home'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.camera_alt_outlined),
+                      selectedIcon: Icon(Icons.camera_alt_rounded),
+                      label: Text('Scan'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.shopping_bag_outlined),
+                      selectedIcon: Icon(Icons.shopping_bag_rounded),
+                      label: Text('Market'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.chat_outlined),
+                      selectedIcon: Icon(Icons.chat_rounded),
+                      label: Text('Chat'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.person_outline),
+                      selectedIcon: Icon(Icons.person_rounded),
+                      label: Text('Profile'),
+                    ),
+                  ],
+                ),
+                const VerticalDivider(thickness: 1, width: 1, color: Color(0xFFE0E0E0)),
+                Expanded(
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: _screens,
+                  ),
+                ),
+              ],
+            )
+          : IndexedStack(
+              index: _selectedIndex,
+              children: _screens,
+            ),
+      bottomNavigationBar: isWide
+          ? null
+          : SafeArea(
+              top: false,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 30,
+                      offset: const Offset(0, 10),
+                    ),
+                    BoxShadow(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildNavItem(
+                            0, Icons.home_rounded, 'Home', Icons.home_outlined),
+                        _buildNavItem(1, Icons.camera_alt_rounded, 'Scan',
+                            Icons.camera_alt_outlined),
+                        _buildNavItem(2, Icons.shopping_bag_rounded, 'Market',
+                            Icons.shopping_bag_outlined),
+                        _buildNavItem(
+                            3, Icons.chat_rounded, 'Chat', Icons.chat_outlined),
+                        _buildNavItem(
+                            4, Icons.person_rounded, 'Profile', Icons.person_outline),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ),
     );
   }
 

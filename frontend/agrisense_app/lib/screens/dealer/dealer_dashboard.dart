@@ -20,6 +20,8 @@ import 'edit_product_screen.dart';
 import 'premium_screen.dart';
 import 'dealer_analytics_screen.dart';
 
+import '../../utils/responsive.dart';
+
 /// AgriSense dealer console.
 ///
 /// Information architecture (designed around the dealer's daily workflow):
@@ -41,6 +43,7 @@ class DealerDashboard extends StatefulWidget {
 
 class _DealerDashboardState extends State<DealerDashboard> {
   int _selectedIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final List<Widget> _screens = [
     const _DealerHome(),
@@ -75,7 +78,10 @@ class _DealerDashboardState extends State<DealerDashboard> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().currentUser;
+    final isWide = Responsive.isWide(context);
+
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: DealerTheme.canvas,
       drawer: DealerDrawer(
         selectedTab: _selectedIndex,
@@ -86,37 +92,107 @@ class _DealerDashboardState extends State<DealerDashboard> {
         email: user?.email,
         photo: user?.profilePhoto,
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+      body: isWide
+          ? Row(
               children: [
-                _buildNavItem(0, Icons.space_dashboard_rounded, 'Dashboard'),
-                _buildNavItem(1, Icons.inventory_2_rounded, 'Products'),
-                _buildNavItem(2, Icons.receipt_long_rounded, 'Orders'),
-                _buildNavItem(3, Icons.chat_rounded, 'Chats'),
-                _buildNavItem(4, Icons.person_rounded, 'Profile'),
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _onItemTapped,
+                  labelType: NavigationRailLabelType.all,
+                  backgroundColor: Colors.white,
+                  indicatorColor: DealerTheme.accent.withValues(alpha: 0.15),
+                  selectedIconTheme:
+                      const IconThemeData(color: DealerTheme.accent),
+                  selectedLabelTextStyle: GoogleFonts.poppins(
+                    color: DealerTheme.accent,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                  unselectedLabelTextStyle: GoogleFonts.poppins(
+                    color: AppTheme.textMuted,
+                    fontSize: 11,
+                  ),
+                  leading: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: IconButton(
+                      icon: const Icon(Icons.menu_rounded,
+                          color: DealerTheme.accent),
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                    ),
+                  ),
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.space_dashboard_outlined),
+                      selectedIcon: Icon(Icons.space_dashboard_rounded),
+                      label: Text('Dashboard'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.inventory_2_outlined),
+                      selectedIcon: Icon(Icons.inventory_2_rounded),
+                      label: Text('Products'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.receipt_long_outlined),
+                      selectedIcon: Icon(Icons.receipt_long_rounded),
+                      label: Text('Orders'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.chat_outlined),
+                      selectedIcon: Icon(Icons.chat_rounded),
+                      label: Text('Chats'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.person_outline),
+                      selectedIcon: Icon(Icons.person_rounded),
+                      label: Text('Profile'),
+                    ),
+                  ],
+                ),
+                const VerticalDivider(
+                    thickness: 1, width: 1, color: Color(0xFFE0E0E0)),
+                Expanded(
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: _screens,
+                  ),
+                ),
               ],
+            )
+          : IndexedStack(
+              index: _selectedIndex,
+              children: _screens,
             ),
-          ),
-        ),
-      ),
+      bottomNavigationBar: isWide
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 12,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(
+                          0, Icons.space_dashboard_rounded, 'Dashboard'),
+                      _buildNavItem(1, Icons.inventory_2_rounded, 'Products'),
+                      _buildNavItem(2, Icons.receipt_long_rounded, 'Orders'),
+                      _buildNavItem(3, Icons.chat_rounded, 'Chats'),
+                      _buildNavItem(4, Icons.person_rounded, 'Profile'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
     );
   }
 
@@ -199,7 +275,11 @@ class _DealerHomeState extends State<_DealerHome> {
           _revenue = _orders
               .where((o) => (o['payment_status'] ?? '') == 'paid')
               .fold<double>(
-                   0, (sum, o) => sum + (double.tryParse((o['total_price'] ?? '0').toString()) ?? 0.0));
+                  0,
+                  (sum, o) =>
+                      sum +
+                      (double.tryParse((o['total_price'] ?? '0').toString()) ??
+                          0.0));
           _isLoading = false;
         });
       }
@@ -253,7 +333,7 @@ class _DealerHomeState extends State<_DealerHome> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 1.35,
+                childAspectRatio: 1.2,
                 children: [
                   DealerStatCard(
                     value: '$_productCount',
@@ -279,7 +359,8 @@ class _DealerHomeState extends State<_DealerHome> {
                     footnote: 'Excludes cancelled',
                   ),
                   DealerStatCard(
-                    value: '${_orders.where((o) => o['status'] == 'delivered').length}',
+                    value:
+                        '${_orders.where((o) => o['status'] == 'delivered').length}',
                     label: 'Delivered',
                     icon: Icons.check_circle_rounded,
                     color: AppTheme.success,
@@ -299,8 +380,7 @@ class _DealerHomeState extends State<_DealerHome> {
                   icon: const Icon(Icons.arrow_forward_rounded,
                       size: 15, color: AppTheme.primary),
                   label: const Text('View All',
-                      style:
-                          TextStyle(color: AppTheme.primary, fontSize: 13)),
+                      style: TextStyle(color: AppTheme.primary, fontSize: 13)),
                 ),
               ),
             ),
@@ -337,7 +417,8 @@ class _DealerHomeState extends State<_DealerHome> {
                     color: AppTheme.primary,
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const AddProductScreen()),
+                      MaterialPageRoute(
+                          builder: (_) => const AddProductScreen()),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -468,8 +549,7 @@ class _DealerHomeState extends State<_DealerHome> {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF3E0),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: DealerTheme.sun.withValues(alpha: 0.3)),
+        border: Border.all(color: DealerTheme.sun.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -506,12 +586,12 @@ class _DealerHomeState extends State<_DealerHome> {
 
   Widget _orderRow(dynamic order) {
     final statusColor = {
-      'pending': AppTheme.warning,
-      'confirmed': AppTheme.info,
-      'shipped': AppTheme.primary,
-      'delivered': AppTheme.success,
-      'cancelled': AppTheme.error,
-    }[order['status']] ??
+          'pending': AppTheme.warning,
+          'confirmed': AppTheme.info,
+          'shipped': AppTheme.primary,
+          'delivered': AppTheme.success,
+          'cancelled': AppTheme.error,
+        }[order['status']] ??
         AppTheme.textMuted;
 
     return Container(
@@ -642,8 +722,8 @@ class _DealerHomeState extends State<_DealerHome> {
                       blurRadius: 12),
                 ],
               ),
-              child:
-                  const Icon(Icons.star_rounded, color: DealerTheme.sun, size: 28),
+              child: const Icon(Icons.star_rounded,
+                  color: DealerTheme.sun, size: 28),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -753,8 +833,7 @@ class _DealerProductsState extends State<_DealerProducts> {
     return list;
   }
 
-  int get _activeCount =>
-      _products.where((p) => p.isAvailable == true).length;
+  int get _activeCount => _products.where((p) => p.isAvailable == true).length;
   int get _lowStockCount =>
       _products.where((p) => (p.stockQuantity ?? 0) <= 5).length;
 
@@ -812,7 +891,8 @@ class _DealerProductsState extends State<_DealerProducts> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(value ? 'Product is now available' : 'Product hidden'),
+            content:
+                Text(value ? 'Product is now available' : 'Product hidden'),
             backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
@@ -898,8 +978,13 @@ class _DealerProductsState extends State<_DealerProducts> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  'all', 'seed', 'fertilizer', 'pesticide', 'fungicide',
-                  'herbicide', 'equipment'
+                  'all',
+                  'seed',
+                  'fertilizer',
+                  'pesticide',
+                  'fungicide',
+                  'herbicide',
+                  'equipment'
                 ].map((cat) {
                   final label = cat == 'all'
                       ? 'All'
@@ -916,8 +1001,9 @@ class _DealerProductsState extends State<_DealerProducts> {
                           color: selected ? AppTheme.primary : Colors.white,
                           borderRadius: BorderRadius.circular(999),
                           border: Border.all(
-                            color:
-                                selected ? AppTheme.primary : Colors.grey.shade300,
+                            color: selected
+                                ? AppTheme.primary
+                                : Colors.grey.shade300,
                           ),
                         ),
                         child: Text(
@@ -961,8 +1047,8 @@ class _DealerProductsState extends State<_DealerProducts> {
                                           builder: (_) =>
                                               const AddProductScreen()),
                                     ),
-                                    icon: const Icon(Icons.add_rounded,
-                                        size: 18),
+                                    icon:
+                                        const Icon(Icons.add_rounded, size: 18),
                                     label: const Text('Add product'),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppTheme.primary,
@@ -977,8 +1063,7 @@ class _DealerProductsState extends State<_DealerProducts> {
                             onRefresh: _loadProducts,
                             color: AppTheme.primary,
                             child: ListView.builder(
-                              padding:
-                                  const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                               itemCount: _filtered.length,
                               itemBuilder: (context, index) =>
                                   _buildProductItem(_filtered[index]),
@@ -1041,17 +1126,15 @@ class _DealerProductsState extends State<_DealerProducts> {
                       const SizedBox(width: 10),
                       Icon(Icons.inventory_2_rounded,
                           size: 13,
-                          color: lowStock
-                              ? AppTheme.warning
-                              : AppTheme.textMuted),
+                          color:
+                              lowStock ? AppTheme.warning : AppTheme.textMuted),
                       const SizedBox(width: 3),
                       Text(
                         '${product.stockQuantity} units',
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: lowStock
-                              ? AppTheme.warning
-                              : AppTheme.textMuted,
+                          color:
+                              lowStock ? AppTheme.warning : AppTheme.textMuted,
                           fontWeight:
                               lowStock ? FontWeight.w700 : FontWeight.w400,
                         ),
@@ -1074,8 +1157,8 @@ class _DealerProductsState extends State<_DealerProducts> {
                       final result = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => EditProductScreen(
-                              product: product.toMap()),
+                          builder: (_) =>
+                              EditProductScreen(product: product.toMap()),
                         ),
                       );
                       if (result == true) _loadProducts();
@@ -1220,10 +1303,8 @@ class _DealerOrdersState extends State<_DealerOrders> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingCount =
-        _orders.where((o) => o['status'] == 'pending').length;
-    final shippedCount =
-        _orders.where((o) => o['status'] == 'shipped').length;
+    final pendingCount = _orders.where((o) => o['status'] == 'pending').length;
+    final shippedCount = _orders.where((o) => o['status'] == 'shipped').length;
 
     return SafeArea(
       bottom: false,
@@ -1268,7 +1349,11 @@ class _DealerOrdersState extends State<_DealerOrders> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  'All', 'Pending', 'Confirmed', 'Shipped', 'Delivered',
+                  'All',
+                  'Pending',
+                  'Confirmed',
+                  'Shipped',
+                  'Delivered',
                   'Cancelled'
                 ].map((t) {
                   final f = t.toLowerCase();
@@ -1327,8 +1412,7 @@ class _DealerOrdersState extends State<_DealerOrders> {
                             onRefresh: _loadOrders,
                             color: AppTheme.primary,
                             child: ListView.builder(
-                              padding:
-                                  const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                               itemCount: _filtered.length,
                               itemBuilder: (context, index) =>
                                   _buildOrderCard(_filtered[index]),
@@ -1368,12 +1452,12 @@ class _DealerOrdersState extends State<_DealerOrders> {
   Widget _buildOrderCard(dynamic order) {
     final status = order['status'] ?? 'pending';
     final statusColor = {
-      'pending': AppTheme.warning,
-      'confirmed': AppTheme.info,
-      'shipped': AppTheme.primary,
-      'delivered': AppTheme.success,
-      'cancelled': AppTheme.error,
-    }[status] ??
+          'pending': AppTheme.warning,
+          'confirmed': AppTheme.info,
+          'shipped': AppTheme.primary,
+          'delivered': AppTheme.success,
+          'cancelled': AppTheme.error,
+        }[status] ??
         AppTheme.textMuted;
     final paid = (order['payment_status'] == 'paid' ||
         order['payment_status'] == 'completed');
@@ -1484,8 +1568,7 @@ class _DealerOrdersState extends State<_DealerOrders> {
                     icon: const Icon(Icons.check_rounded,
                         size: 16, color: Colors.white),
                     label: const Text('Accept',
-                        style:
-                            TextStyle(color: Colors.white, fontSize: 12)),
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.success,
                       shape: RoundedRectangleBorder(
@@ -1591,11 +1674,10 @@ class _DealerChatListState extends State<_DealerChatList> {
                         onRefresh: () => chatProvider.loadConversations(),
                         color: AppTheme.primary,
                         child: ListView.builder(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                           itemCount: conversations.length,
-                          itemBuilder: (context, index) => _buildChatItem(
-                              conversations[index]),
+                          itemBuilder: (context, index) =>
+                              _buildChatItem(conversations[index]),
                         ),
                       ),
           ),
@@ -1610,8 +1692,8 @@ class _DealerChatListState extends State<_DealerChatList> {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatScreen(
-              conversationId: chat.id, conversationName: chat.name),
+          builder: (_) =>
+              ChatScreen(conversationId: chat.id, conversationName: chat.name),
         ),
       ),
       child: Container(
@@ -1682,8 +1764,7 @@ class _DealerChatListState extends State<_DealerChatList> {
             const SizedBox(width: 8),
             if (unread)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: const BoxDecoration(
                     color: AppTheme.primary, shape: BoxShape.circle),
                 child: Text('${chat.unread}',
@@ -1749,8 +1830,7 @@ class _DealerProfile extends StatelessWidget {
                             : (user.profilePhoto != null &&
                                     user.profilePhoto!.isNotEmpty
                                 ? CachedNetworkImageProvider(
-                                    ApiService.resolveMedia(
-                                        user.profilePhoto))
+                                    ApiService.resolveMedia(user.profilePhoto))
                                 : null),
                         child: (profilePhotoBytes == null &&
                                 (user.profilePhoto == null ||
@@ -1974,17 +2054,15 @@ class _DealerProfile extends StatelessWidget {
                                     ? Icons.workspace_premium_rounded
                                     : Icons.star_outline_rounded,
                                 size: 13,
-                                color: isPremium
-                                    ? Colors.black87
-                                    : Colors.white),
+                                color:
+                                    isPremium ? Colors.black87 : Colors.white),
                             const SizedBox(width: 5),
                             Text(
                               isPremium ? 'Premium' : 'Standard',
                               style: GoogleFonts.poppins(
                                 fontSize: 11.5,
-                                color: isPremium
-                                    ? Colors.black87
-                                    : Colors.white,
+                                color:
+                                    isPremium ? Colors.black87 : Colors.white,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -2289,8 +2367,7 @@ class _HelpSupportScreen extends StatelessWidget {
                         Text('Contact us', style: DealerTheme.sectionTitle()),
                         const SizedBox(height: 12),
                         const _contactRow(
-                            Icons.email_rounded,
-                            'support@agrisense.cm'),
+                            Icons.email_rounded, 'support@agrisense.cm'),
                         const SizedBox(height: 8),
                         const _contactRow(
                             Icons.phone_rounded, '+237 6XX XX XX XX'),
@@ -2360,8 +2437,8 @@ class _contactRow extends StatelessWidget {
         Icon(icon, size: 16, color: AppTheme.primary),
         const SizedBox(width: 8),
         Text(text,
-            style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 12.5)),
+            style:
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 12.5)),
       ],
     );
   }

@@ -234,8 +234,13 @@ class OpenRouterVisionClient:
                     ],
                 },
             ],
+            # Prevent vision models from consuming the completion budget on
+            # hidden reasoning before returning the structured diagnosis.
+            'reasoning': {'exclude': True},
             'temperature': 0,
-            'max_tokens': 450,
+            # Dots may emit a long internal trace even when reasoning is
+            # excluded, so leave enough room for the final JSON object.
+            'max_tokens': 2000,
             'response_format': {
                 'type': 'json_schema',
                 'json_schema': {

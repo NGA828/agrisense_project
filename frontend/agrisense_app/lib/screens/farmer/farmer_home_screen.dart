@@ -20,6 +20,8 @@ import '../irrigation/irrigation_screen.dart';
 import 'farmer_widgets.dart';
 import 'order_history_screen.dart';
 
+import '../../utils/responsive.dart';
+
 /// Farmer home — the command center of the app.
 /// Redesigned with premium UI/UX following reference screen patterns.
 class FarmerHomeScreen extends StatefulWidget {
@@ -99,33 +101,36 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                 ),
               );
             },
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
+            child: ResponsiveCenter(
               padding: EdgeInsets.zero,
-              children: [
-                _buildHeader(user),
-                _buildGreeting(user),
-                const SizedBox(height: 20),
-                _buildWeatherMiniCard(weather),
-                const SizedBox(height: 24),
-                _buildFarmSnapshot(),
-                const SizedBox(height: 24),
-                _buildQuickScanHero(),
-                const SizedBox(height: 28),
-                _buildQuickAccessSection(),
-                if (announcementProvider.announcements.isNotEmpty) ...[
+              child: ListView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.zero,
+                children: [
+                  _buildHeader(user),
+                  _buildGreeting(user),
+                  const SizedBox(height: 20),
+                  _buildWeatherMiniCard(weather),
                   const SizedBox(height: 24),
-                  _buildAnnouncementBanner(
-                      announcementProvider.announcements.first),
-                ],
-                if (diagnosisProvider.history.isNotEmpty) ...[
+                  _buildFarmSnapshot(),
                   const SizedBox(height: 24),
-                  _buildRecentDiagnosis(diagnosisProvider),
+                  _buildQuickScanHero(),
+                  const SizedBox(height: 28),
+                  _buildQuickAccessSection(),
+                  if (announcementProvider.announcements.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _buildAnnouncementBanner(
+                        announcementProvider.announcements.first),
+                  ],
+                  if (diagnosisProvider.history.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _buildRecentDiagnosis(diagnosisProvider),
+                  ],
+                  const SizedBox(height: 24),
+                  _buildDailyTip(),
+                  const SizedBox(height: 100),
                 ],
-                const SizedBox(height: 24),
-                _buildDailyTip(),
-                const SizedBox(height: 100),
-              ],
+              ),
             ),
           ),
         ),
