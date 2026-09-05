@@ -45,7 +45,7 @@ class OpenRouterVisionClient:
         self.api_key = str(getattr(settings, 'OPENROUTER_API_KEY', '') or '').strip()
         self.model = str(getattr(
             settings, 'OPENROUTER_MODEL',
-            'dots-studio/dots-3-note-preview:free') or '').strip()
+            'google/gemma-4-26b-a4b-it:free') or '').strip()
         # Server-side failover list (see OPENROUTER_FALLBACK_MODELS). Free
         # endpoints are the first thing providers throttle under load, so a
         # single-model configuration turns a provider hiccup into a failed
@@ -137,6 +137,36 @@ class OpenRouterVisionClient:
                 image_file.seek(0)
             except Exception:
                 pass
+
+    @staticmethod
+    def _hint_for_status(status_code: int) -> str:
+        """Map well-known OpenRouter status codes to actionable hints.
+
+        The raw provider message is deliberately not forwarded (it can contain
+        upstream diagnostics); these curated hints cover the failure modes an
+        AgriSense administrator can actually act on.
+        """
+        if status_code == 401:
+            return ('The API key was rejected. Check OPENROUTER_API_KEY at '
+                    'https://openrouter.ai/settings/keys.')
+        if status_code == 402:
+            return ('The account is out of free-tier credit/quota for now. '
+                    'Free models allow ~50 requests/day (1000/day after a '
+                    'one-time $10 top-up); wait for the reset or top up.')
+        if status_code == 429:
+            return ('Rate limited: free tiers allow ~20 requests/minute and '
+                    '~50/day. Wait a moment (or a day) and retry; consider a '
+                    'one-time $10 top-up for 1000 requests/day.')
+        if status_code in (400, 404):
+            return ('The configured model (or every fallback) no longer has a '
+                    'live provider — free models are retired regularly. Run '
+                    '`python manage.py check_ai_model --list-free` and update '
+                    'OPENROUTER_MODEL.')
+        if status_code in (408, 504):
+            return 'The vision provider timed out. Retry with a smaller image.'
+        if status_code >= 500:
+            return 'OpenRouter or the upstream provider is having an outage.'
+        return 'Unexpected OpenRouter response.'
 
     @staticmethod
     def _candidate_payload(candidates: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -238,9 +268,14 @@ class OpenRouterVisionClient:
             # hidden reasoning before returning the structured diagnosis.
             'reasoning': {'exclude': True},
             'temperature': 0,
-            # Dots may emit a long internal trace even when reasoning is
-            # excluded, so leave enough room for the final JSON object.
-            'max_tokens': 2000,
+            # Reasoning-capable models spend hidden reasoning tokens from the
+            # same completion budget. With a small cap the model can exhaust
+            # the budget thinking and return an EMPTY JSON body, which surfaces
+            # to the farmer as "the photo could not be analyzed". The final
+            # schema object itself is tiny, so a generous cap costs nothing on
+            # free endpoints and only prevents truncation.
+            'max_tokens': int(getattr(
+                settings, 'OPENROUTER_MAX_TOKENS', 2000)),
             'response_format': {
                 'type': 'json_schema',
                 'json_schema': {
@@ -295,7 +330,10 @@ class OpenRouterVisionClient:
         if isinstance(content, dict):
             return content
         if not isinstance(content, str) or not content.strip():
-            raise OpenRouterResponseError('OpenRouter returned empty diagnosis content.')
+            raise OpenRouterResponseError(
+                'OpenRouter returned empty diagnosis content. The model likely '
+                'spent its output budget on hidden reasoning (raise '
+                'OPENROUTER_MAX_TOKENS) or cannot serve vision requests.')
         text = content.strip()
         # Defensive compatibility for providers that wrap JSON despite strict mode.
         if text.startswith('```'):
@@ -424,8 +462,12 @@ class OpenRouterVisionClient:
         if status_code < 200 or status_code >= 300 or data.get('error'):
             # Provider messages are intentionally not propagated: they are not
             # needed by the client and could contain upstream diagnostic data.
+            # The status code alone is mapped to an actionable reason so an
+            # administrator can tell "model retired" from "out of free quota"
+            # without guessing.
             raise OpenRouterUnavailableError(
-                f'OpenRouter returned HTTP {status_code}.')
+                f'OpenRouter returned HTTP {status_code}. '
+                f'{self._hint_for_status(status_code)}')
 
         content = self._message_content(data)
         result = self._parse_content(content)

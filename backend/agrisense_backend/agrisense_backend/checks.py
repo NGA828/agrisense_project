@@ -113,7 +113,7 @@ def check_weather_config(app_configs, **kwargs):
         if not getattr(settings, 'OPENROUTER_MODEL', ''):
             errors.append(Warning(
                 'OPENROUTER_MODEL is empty.',
-                hint='Set a vision model such as dots-studio/dots-3-note-preview:free.',
+                hint='Set a vision model such as google/gemma-4-26b-a4b-it:free.',
                 id='agrisense.W011',
             ))
     return errors

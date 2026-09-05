@@ -503,7 +503,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Your farm at a glance', style: FarmerTheme.sectionTitle()),
+              Flexible(
+                child: Text('Your farm at a glance',
+                    style: FarmerTheme.sectionTitle(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -1115,10 +1120,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text(
-                        d.cropType,
-                        style: const TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 12),
+                      Flexible(
+                        child: Text(
+                          d.cropType,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 12),
+                        ),
                       ),
                       Container(
                         width: 4,
@@ -1129,10 +1138,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      Text(
-                        _timeAgo(d.createdAt),
-                        style: const TextStyle(
-                            color: AppTheme.textMuted, fontSize: 12),
+                      Flexible(
+                        child: Text(
+                          _timeAgo(d.createdAt),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: AppTheme.textMuted, fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
@@ -1233,12 +1246,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                 children: [
                   Row(
                     children: [
-                      Text(
-                        tip['title'] as String,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                          color: accent,
+                      Flexible(
+                        child: Text(
+                          tip['title'] as String,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: accent,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),

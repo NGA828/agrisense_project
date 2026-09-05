@@ -5,7 +5,7 @@
 AgriSense uses a pluggable backend with three deliberately distinct modes:
 
 1. `AI_ENGINE=openrouter` — **primary** cloud vision path. The default model is
-   `dots-studio/dots-3-note-preview:free`.
+   `google/gemma-4-26b-a4b-it:free`.
 2. `AI_ENGINE=tensorflow` — optional local/offline Keras CNN with an exact class
    manifest.
 3. `AI_ENGINE=rules` — deterministic colour/lesion heuristic for demos only. It
@@ -18,8 +18,8 @@ Create an OpenRouter key and keep it only in the backend environment:
 ```dotenv
 AI_ENGINE=openrouter
 OPENROUTER_API_KEY=replace-in-the-private-server-environment
-OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
-OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free
+OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
+OPENROUTER_FALLBACK_MODELS=meta-llama/llama-4-scout:free,mistralai/mistral-small-3.1-24b-instruct:free
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_TIMEOUT_SECONDS=60
 OPENROUTER_IMAGE_MAX_DIMENSION=1280

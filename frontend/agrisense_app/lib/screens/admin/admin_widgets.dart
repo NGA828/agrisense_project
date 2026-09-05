@@ -170,8 +170,18 @@ class AdminSectionTitle extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: AdminTheme.sectionTitle()),
-          if (action != null) action!,
+          // Flexible: long titles + an action on the same line must ellipsize
+          // instead of overflowing on narrow phones / large text scale.
+          Flexible(
+            child: Text(title,
+                style: AdminTheme.sectionTitle(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+          if (action != null) ...[
+            const SizedBox(width: 8),
+            action!,
+          ],
         ],
       ),
     );
