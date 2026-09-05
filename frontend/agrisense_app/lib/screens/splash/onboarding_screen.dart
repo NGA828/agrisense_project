@@ -2,8 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../theme/app_theme.dart';
-import '../auth/role_selection_screen.dart';
+import '../auth/login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -44,7 +43,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _OnboardingData(
       icon: Icons.camera_alt_rounded,
       title: 'Detect Crop\nDiseases Instantly',
-      subtitle: 'Take a photo of your plant and our AI identifies the disease, severity, and provides treatment plans in seconds.',
+      subtitle:
+          'Take a photo of your plant and our AI identifies the disease, severity, and provides treatment plans in seconds.',
       primaryColor: const Color(0xFF4CAF50),
       bgGradient: [
         const Color(0xFF0C2B11),
@@ -56,7 +56,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _OnboardingData(
       icon: Icons.wb_sunny_rounded,
       title: 'Smart Weather\n& Farming Advice',
-      subtitle: 'Get localized weather forecasts and AI-powered farming recommendations tailored to your crops.',
+      subtitle:
+          'Get localized weather forecasts and AI-powered farming recommendations tailored to your crops.',
       primaryColor: const Color(0xFF2196F3),
       bgGradient: [
         const Color(0xFF0D1E36),
@@ -68,7 +69,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _OnboardingData(
       icon: Icons.shopping_cart_rounded,
       title: 'Buy From\nVerified Dealers',
-      subtitle: 'Browse quality seeds, fertilizers, and pesticides from trusted agro-dealers. Pay securely via MoMo.',
+      subtitle:
+          'Browse quality seeds, fertilizers, and pesticides from trusted agro-dealers. Pay securely via MoMo.',
       primaryColor: const Color(0xFFFF9800),
       bgGradient: [
         const Color(0xFF2E1502),
@@ -101,27 +103,30 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             Positioned(
               top: -120,
               left: -120,
-              child: _AmbientGlowBubble(color: activePage.primaryColor.withValues(alpha: 0.25)),
+              child: _AmbientGlowBubble(
+                  color: activePage.primaryColor.withValues(alpha: 0.25)),
             ),
             Positioned(
               top: screenHeight * 0.35,
               right: -180,
-              child: _AmbientGlowBubble(color: activePage.primaryColor.withValues(alpha: 0.15)),
+              child: _AmbientGlowBubble(
+                  color: activePage.primaryColor.withValues(alpha: 0.15)),
             ),
             Positioned(
               bottom: -100,
               left: -50,
-              child: _AmbientGlowBubble(color: activePage.primaryColor.withValues(alpha: 0.1)),
+              child: _AmbientGlowBubble(
+                  color: activePage.primaryColor.withValues(alpha: 0.1)),
             ),
 
             SafeArea(
               child: Column(
                 children: [
-                  // App Branding & Skip Button
+                  // App Branding
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 16),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         // App Brand
                         FadeTransition(
@@ -153,25 +158,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             ],
                           ),
                         ),
-                        // Skip Button
-                        TextButton(
-                          onPressed: _navigateToLogin,
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.12),
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          child: Text(
-                            'Skip',
-                            style: GoogleFonts.poppins(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -181,7 +167,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     child: PageView.builder(
                       controller: _pageController,
                       itemCount: _pages.length,
-                      onPageChanged: (index) => setState(() => _currentPage = index),
+                      onPageChanged: (index) =>
+                          setState(() => _currentPage = index),
                       itemBuilder: (context, index) {
                         final page = _pages[index];
                         return Column(
@@ -211,15 +198,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(45),
                                     child: BackdropFilter(
-                                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 12, sigmaY: 12),
                                       child: Container(
                                         width: 150,
                                         height: 150,
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(45),
+                                          color: Colors.white
+                                              .withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(45),
                                           border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.25),
+                                            color: Colors.white
+                                                .withValues(alpha: 0.25),
                                             width: 1.5,
                                           ),
                                         ),
@@ -250,7 +241,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 32, vertical: 40),
                         decoration: BoxDecoration(
                           color: const Color(0xFF121511).withValues(alpha: 0.5),
                           borderRadius: const BorderRadius.only(
@@ -272,7 +264,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 _pages.length,
                                 (index) => AnimatedContainer(
                                   duration: const Duration(milliseconds: 400),
-                                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                                  margin:
+                                      const EdgeInsets.symmetric(horizontal: 5),
                                   width: _currentPage == index ? 32 : 10,
                                   height: 10,
                                   decoration: BoxDecoration(
@@ -283,7 +276,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                     boxShadow: _currentPage == index
                                         ? [
                                             BoxShadow(
-                                              color: Colors.white.withValues(alpha: 0.5),
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.5),
                                               blurRadius: 8,
                                               offset: const Offset(0, 2),
                                             ),
@@ -326,12 +320,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                   ),
                                   const SizedBox(height: 16),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12),
                                     child: Text(
                                       activePage.subtitle,
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.inter(
-                                        color: Colors.white.withValues(alpha: 0.8),
+                                        color:
+                                            Colors.white.withValues(alpha: 0.8),
                                         fontSize: 15,
                                         height: 1.6,
                                         fontWeight: FontWeight.w400,
@@ -351,7 +347,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 onPressed: () {
                                   if (_currentPage < _pages.length - 1) {
                                     _pageController.nextPage(
-                                      duration: const Duration(milliseconds: 500),
+                                      duration:
+                                          const Duration(milliseconds: 500),
                                       curve: Curves.easeInOut,
                                     );
                                   } else {
@@ -365,13 +362,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   elevation: 8,
-                                  shadowColor: activePage.primaryColor.withValues(alpha: 0.4),
+                                  shadowColor: activePage.primaryColor
+                                      .withValues(alpha: 0.4),
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Text(
-                                      _currentPage < _pages.length - 1 ? 'Continue' : 'Get Started',
+                                      _currentPage < _pages.length - 1
+                                          ? 'Continue'
+                                          : 'Get Started',
                                       style: GoogleFonts.poppins(
                                         fontSize: 17,
                                         fontWeight: FontWeight.w700,
@@ -433,7 +433,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   void _navigateToLogin() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
   }
 }

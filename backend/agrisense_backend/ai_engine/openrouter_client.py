@@ -264,6 +264,9 @@ class OpenRouterVisionClient:
                     ],
                 },
             ],
+            # Prevent vision models from consuming the completion budget on
+            # hidden reasoning before returning the structured diagnosis.
+            'reasoning': {'exclude': True},
             'temperature': 0,
             # Reasoning-capable models spend hidden reasoning tokens from the
             # same completion budget. With a small cap the model can exhaust

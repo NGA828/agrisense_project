@@ -239,30 +239,6 @@ class AdminStatCard extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color, size: 24),
               ),
-              if (footnote != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.trending_up_rounded, size: 14, color: color),
-                      const SizedBox(width: 5),
-                      Text(
-                        footnote!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
           const Spacer(),
@@ -294,6 +270,8 @@ class AdminStatCard extends StatelessWidget {
               ),
               child: Text(
                 footnote!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: color,
                   fontSize: 10,

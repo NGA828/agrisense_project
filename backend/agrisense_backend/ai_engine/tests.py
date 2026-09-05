@@ -372,6 +372,12 @@ class OpenRouterEngineTests(TestCase):
         self.assertEqual(payload['response_format']['type'], 'json_schema')
         self.assertTrue(payload['response_format']['json_schema']['strict'])
 
+    def test_reasoning_is_excluded_so_content_contains_diagnosis(self):
+        self.engine().analyze(png_bytes(), 'Tomato')
+        payload = self.requests[0][1]['json']
+        self.assertEqual(payload['reasoning'], {'exclude': True})
+        self.assertEqual(payload['max_tokens'], 2000)
+
     def test_records_the_model_that_actually_answered(self):
         """With failover the responder may differ from the requested model."""
         self.responding_model = 'google/gemma-4-26b-a4b-it:free'

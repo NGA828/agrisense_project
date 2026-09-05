@@ -19,6 +19,8 @@ import 'system_health_screen.dart';
 import 'audit_log_screen.dart';
 import 'outbreaks_screen.dart';
 
+import '../../utils/responsive.dart';
+
 /// AgriSense admin console.
 ///
 /// Redesigned around a single coherent design system (see admin_widgets.dart):
@@ -34,6 +36,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   /// Standalone pages reachable from the drawer (and quick actions).
   static const List<AdminNavItem> _pages = [
@@ -75,7 +78,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().currentUser;
+    final isWide = Responsive.isWide(context);
+
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AdminTheme.canvas,
       drawer: AdminDrawer(
         selectedIndex: _selectedIndex,
@@ -87,47 +93,112 @@ class _AdminDashboardState extends State<AdminDashboard> {
         adminEmail: user?.email,
         adminPhoto: user?.profilePhoto,
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: const [
-          _AdminOverview(),
-          _AdminUsers(),
-          _AdminOrders(),
-          _AdminSettings(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: Colors.white,
-        indicatorColor: AppTheme.primary.withValues(alpha: 0.14),
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.space_dashboard_outlined),
-            selectedIcon: Icon(Icons.space_dashboard_rounded,
-                color: AppTheme.primaryDark),
-            label: 'Overview',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_alt_outlined),
-            selectedIcon:
-                Icon(Icons.people_alt_rounded, color: AppTheme.primaryDark),
-            label: 'Users',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long_rounded,
-                color: AppTheme.primaryDark),
-            label: 'Orders',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon:
-                Icon(Icons.settings_rounded, color: AppTheme.primaryDark),
-            label: 'Settings',
-          ),
-        ],
-      ),
+      body: isWide
+          ? Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+                  labelType: NavigationRailLabelType.all,
+                  backgroundColor: Colors.white,
+                  indicatorColor: AppTheme.primary.withValues(alpha: 0.14),
+                  selectedIconTheme: const IconThemeData(color: AppTheme.primaryDark),
+                  selectedLabelTextStyle: GoogleFonts.poppins(
+                    color: AppTheme.primaryDark,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                  unselectedLabelTextStyle: GoogleFonts.poppins(
+                    color: AppTheme.textMuted,
+                    fontSize: 11,
+                  ),
+                  leading: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: IconButton(
+                      icon: const Icon(Icons.menu_rounded, color: AppTheme.primaryDark),
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                    ),
+                  ),
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.space_dashboard_outlined),
+                      selectedIcon: Icon(Icons.space_dashboard_rounded, color: AppTheme.primaryDark),
+                      label: Text('Overview'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.people_alt_outlined),
+                      selectedIcon: Icon(Icons.people_alt_rounded, color: AppTheme.primaryDark),
+                      label: Text('Users'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.receipt_long_outlined),
+                      selectedIcon: Icon(Icons.receipt_long_rounded, color: AppTheme.primaryDark),
+                      label: Text('Orders'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings_rounded, color: AppTheme.primaryDark),
+                      label: Text('Settings'),
+                    ),
+                  ],
+                ),
+                const VerticalDivider(thickness: 1, width: 1, color: Color(0xFFE0E0E0)),
+                Expanded(
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: const [
+                      _AdminOverview(),
+                      _AdminUsers(),
+                      _AdminOrders(),
+                      _AdminSettings(),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : IndexedStack(
+              index: _selectedIndex,
+              children: const [
+                _AdminOverview(),
+                _AdminUsers(),
+                _AdminOrders(),
+                _AdminSettings(),
+              ],
+            ),
+      bottomNavigationBar: isWide
+          ? null
+          : NavigationBar(
+              backgroundColor: Colors.white,
+              indicatorColor: AppTheme.primary.withValues(alpha: 0.14),
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.space_dashboard_outlined),
+                  selectedIcon: Icon(Icons.space_dashboard_rounded,
+                      color: AppTheme.primaryDark),
+                  label: 'Overview',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.people_alt_outlined),
+                  selectedIcon:
+                      Icon(Icons.people_alt_rounded, color: AppTheme.primaryDark),
+                  label: 'Users',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  selectedIcon: Icon(Icons.receipt_long_rounded,
+                      color: AppTheme.primaryDark),
+                  label: 'Orders',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon:
+                      Icon(Icons.settings_rounded, color: AppTheme.primaryDark),
+                  label: 'Settings',
+                ),
+              ],
+            ),
     );
   }
 }

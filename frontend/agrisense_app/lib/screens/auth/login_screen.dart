@@ -8,9 +8,11 @@ import '../farmer/farmer_dashboard.dart';
 import '../dealer/dealer_dashboard.dart';
 import '../admin/admin_dashboard.dart';
 
+import '../../utils/responsive.dart';
+
 class LoginScreen extends StatefulWidget {
   final String? selectedRole;
-  
+
   const LoginScreen({super.key, this.selectedRole});
 
   @override
@@ -26,11 +28,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLogin = true;
   bool _isLoading = false;
+  String _registrationRole = 'farmer';
 
   @override
   Widget build(BuildContext context) {
@@ -55,363 +58,386 @@ class _LoginScreenState extends State<LoginScreen> {
               left: -100,
               child: _buildOrb(150, Colors.white.withOpacity(0.08)),
             ),
-            
+
             SafeArea(
               child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Logo
-                      ClipOval(
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                          child: Container(
-                            width: 88,
-                            height: 88,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
-                                width: 2,
+                child: ResponsiveCenter(
+                  maxContentWidth: 540,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Logo
+                        ClipOval(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                            child: Container(
+                              width: 88,
+                              height: 88,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 2,
+                                ),
                               ),
-                            ),
-                            child: const Icon(
-                              Icons.eco_rounded,
-                              size: 44,
-                              color: Colors.white,
+                              child: const Icon(
+                                Icons.eco_rounded,
+                                size: 44,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'AgriSense AI',
-                        style: AppTheme.displayMedium.copyWith(
-                          color: Colors.white,
-                          fontSize: 28,
+                        const SizedBox(height: 16),
+                        Text(
+                          'AgriSense AI',
+                          style: AppTheme.displayMedium.copyWith(
+                            color: Colors.white,
+                            fontSize: 28,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _isLogin ? 'Welcome back!' : 'Create your account',
-                        style: AppTheme.bodyMedium.copyWith(
-                          color: Colors.white.withOpacity(0.8),
+                        const SizedBox(height: 4),
+                        Text(
+                          _isLogin ? 'Welcome back!' : 'Create your account',
+                          style: AppTheme.bodyMedium.copyWith(
+                            color: Colors.white.withOpacity(0.8),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 32),
-                      
-                      // Glass card form
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.25),
-                                width: 1.5,
+                        const SizedBox(height: 32),
+
+                        // Glass card form
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                            child: Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.25),
+                                  width: 1.5,
+                                ),
                               ),
-                            ),
-                            child: Form(
-                              key: _formKey,
-                              child: AnimatedSize(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                                child: Column(
-                                  children: [
-                                    // Toggle
-                                    Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(30),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: GestureDetector(
-                                              onTap: () => setState(() => _isLogin = true),
-                                              child: AnimatedContainer(
-                                                duration: const Duration(milliseconds: 300),
-                                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                                decoration: BoxDecoration(
-                                                  color: _isLogin
-                                                      ? Colors.white.withOpacity(0.95)
-                                                      : Colors.transparent,
-                                                  borderRadius: BorderRadius.circular(30),
-                                                ),
-                                                child: Text(
-                                                  'Login',
-                                                  textAlign: TextAlign.center,
-                                                  style: AppTheme.bodyMedium.copyWith(
-                                                    color: _isLogin
-                                                        ? AppTheme.primary
-                                                        : Colors.white.withOpacity(0.7),
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: GestureDetector(
-                                              // Admin accounts are provisioned by platform
-                                              // staff, so self-registration is hidden.
-                                              onTap: widget.selectedRole == 'admin'
-                                                  ? null
-                                                  : () => setState(() => _isLogin = false),
-                                              child: AnimatedContainer(
-                                                duration: const Duration(milliseconds: 300),
-                                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                                decoration: BoxDecoration(
-                                                  color: !_isLogin
-                                                      ? Colors.white.withOpacity(0.95)
-                                                      : Colors.transparent,
-                                                  borderRadius: BorderRadius.circular(30),
-                                                ),
-                                                child: Text(
-                                                  widget.selectedRole == 'admin'
-                                                      ? 'Login'
-                                                      : 'Register',
-                                                  textAlign: TextAlign.center,
-                                                  style: AppTheme.bodyMedium.copyWith(
-                                                    color: !_isLogin
-                                                        ? AppTheme.primary
-                                                        : Colors.white.withOpacity(0.7),
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    
-                                    // Register-only fields
-                                    if (!_isLogin) ...[
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: _buildGlassTextField(
-                                              controller: _firstNameController,
-                                              hint: 'First Name',
-                                              icon: Icons.person_outline_rounded,
-                                              validator: (v) => v!.isEmpty ? 'Required' : null,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: _buildGlassTextField(
-                                              controller: _lastNameController,
-                                              hint: 'Last Name',
-                                              icon: Icons.person_outline_rounded,
-                                              validator: (v) => v!.isEmpty ? 'Required' : null,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      _buildGlassTextField(
-                                        controller: _emailController,
-                                        hint: 'Email',
-                                        icon: Icons.email_outlined,
-                                        keyboardType: TextInputType.emailAddress,
-                                        validator: (v) {
-                                          if (v!.isEmpty) return 'Required';
-                                          if (!v.contains('@')) return 'Invalid email';
-                                          return null;
-                                        },
-                                      ),
-                                      const SizedBox(height: 16),
-                                      _buildGlassTextField(
-                                        controller: _phoneController,
-                                        hint: 'Phone Number',
-                                        icon: Icons.phone_outlined,
-                                        keyboardType: TextInputType.phone,
-                                        validator: (v) => v!.isEmpty ? 'Required' : null,
-                                      ),
-                                      const SizedBox(height: 16),
-                                    ],
-                                    
-                                    // Username
-                                    _buildGlassTextField(
-                                      controller: _usernameController,
-                                      hint: 'Username',
-                                      icon: Icons.person_outline_rounded,
-                                      validator: (v) => v!.isEmpty ? 'Required' : null,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    
-                                    // Password
-                                    _buildGlassTextField(
-                                      controller: _passwordController,
-                                      hint: 'Password',
-                                      icon: Icons.lock_outline_rounded,
-                                      obscure: _obscurePassword,
-                                      suffixIcon: IconButton(
-                                        icon: Icon(
-                                          _obscurePassword
-                                              ? Icons.visibility_off_rounded
-                                              : Icons.visibility_rounded,
-                                          color: Colors.white.withOpacity(0.6),
+                              child: Form(
+                                key: _formKey,
+                                child: AnimatedSize(
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                  child: Column(
+                                    children: [
+                                      // Toggle
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(30),
                                         ),
-                                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: GestureDetector(
+                                                onTap: () => setState(
+                                                    () => _isLogin = true),
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                      milliseconds: 300),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(vertical: 12),
+                                                  decoration: BoxDecoration(
+                                                    color: _isLogin
+                                                        ? Colors.white
+                                                            .withOpacity(0.95)
+                                                        : Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            30),
+                                                  ),
+                                                  child: Text(
+                                                    'Login',
+                                                    textAlign: TextAlign.center,
+                                                    style: AppTheme.bodyMedium
+                                                        .copyWith(
+                                                      color: _isLogin
+                                                          ? AppTheme.primary
+                                                          : Colors.white
+                                                              .withOpacity(0.7),
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: GestureDetector(
+                                                // Admin accounts are provisioned by platform
+                                                // staff, so self-registration is hidden.
+                                                onTap: widget.selectedRole ==
+                                                        'admin'
+                                                    ? null
+                                                    : () => setState(
+                                                        () => _isLogin = false),
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                      milliseconds: 300),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(vertical: 12),
+                                                  decoration: BoxDecoration(
+                                                    color: !_isLogin
+                                                        ? Colors.white
+                                                            .withOpacity(0.95)
+                                                        : Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            30),
+                                                  ),
+                                                  child: Text(
+                                                    widget.selectedRole ==
+                                                            'admin'
+                                                        ? 'Login'
+                                                        : 'Register',
+                                                    textAlign: TextAlign.center,
+                                                    style: AppTheme.bodyMedium
+                                                        .copyWith(
+                                                      color: !_isLogin
+                                                          ? AppTheme.primary
+                                                          : Colors.white
+                                                              .withOpacity(0.7),
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      validator: (v) {
-                                        if (v!.isEmpty) return 'Required';
-                                        if (v.length < 6) return 'Min 6 characters';
-                                        return null;
-                                      },
-                                    ),
-                                    
-                                    // Confirm password (register only)
-                                    if (!_isLogin) ...[
-                                      const SizedBox(height: 16),
+                                      const SizedBox(height: 24),
+
+                                      // Register-only fields
+                                      if (!_isLogin) ...[
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _buildGlassTextField(
+                                                controller:
+                                                    _firstNameController,
+                                                hint: 'First Name',
+                                                icon: Icons
+                                                    .person_outline_rounded,
+                                                validator: (v) => v!.isEmpty
+                                                    ? 'Required'
+                                                    : null,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: _buildGlassTextField(
+                                                controller: _lastNameController,
+                                                hint: 'Last Name',
+                                                icon: Icons
+                                                    .person_outline_rounded,
+                                                validator: (v) => v!.isEmpty
+                                                    ? 'Required'
+                                                    : null,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildGlassTextField(
+                                          controller: _emailController,
+                                          hint: 'Email',
+                                          icon: Icons.email_outlined,
+                                          keyboardType:
+                                              TextInputType.emailAddress,
+                                          validator: (v) {
+                                            if (v!.isEmpty) return 'Required';
+                                            if (!v.contains('@'))
+                                              return 'Invalid email';
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildGlassTextField(
+                                          controller: _phoneController,
+                                          hint: 'Phone Number',
+                                          icon: Icons.phone_outlined,
+                                          keyboardType: TextInputType.phone,
+                                          validator: (v) =>
+                                              v!.isEmpty ? 'Required' : null,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildRegistrationRoleDropdown(),
+                                      ],
+
+                                      // Username
                                       _buildGlassTextField(
-                                        controller: _confirmPasswordController,
-                                        hint: 'Confirm Password',
+                                        controller: _usernameController,
+                                        hint: 'Username',
+                                        icon: Icons.person_outline_rounded,
+                                        validator: (v) =>
+                                            v!.isEmpty ? 'Required' : null,
+                                      ),
+                                      const SizedBox(height: 16),
+
+                                      // Password
+                                      _buildGlassTextField(
+                                        controller: _passwordController,
+                                        hint: 'Password',
                                         icon: Icons.lock_outline_rounded,
-                                        obscure: _obscureConfirmPassword,
+                                        obscure: _obscurePassword,
                                         suffixIcon: IconButton(
                                           icon: Icon(
-                                            _obscureConfirmPassword
+                                            _obscurePassword
                                                 ? Icons.visibility_off_rounded
                                                 : Icons.visibility_rounded,
-                                            color: Colors.white.withOpacity(0.6),
+                                            color:
+                                                Colors.white.withOpacity(0.6),
                                           ),
-                                          onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                                          onPressed: () => setState(() =>
+                                              _obscurePassword =
+                                                  !_obscurePassword),
                                         ),
                                         validator: (v) {
-                                          if (v != _passwordController.text) {
-                                            return 'Passwords do not match';
-                                          }
+                                          if (v!.isEmpty) return 'Required';
+                                          if (v.length < 6)
+                                            return 'Min 6 characters';
                                           return null;
                                         },
                                       ),
-                                    ],
-                                    
-                                    const SizedBox(height: 12),
-                                    
-                                    // Forgot password (login only)
-                                    if (_isLogin)
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: TextButton(
-                                          onPressed: _showPasswordResetDialog,
-                                          child: Text(
-                                            'Forgot Password?',
-                                            style: AppTheme.bodySmall.copyWith(
-                                              color: Colors.white.withOpacity(0.8),
+
+                                      // Confirm password (register only)
+                                      if (!_isLogin) ...[
+                                        const SizedBox(height: 16),
+                                        _buildGlassTextField(
+                                          controller:
+                                              _confirmPasswordController,
+                                          hint: 'Confirm Password',
+                                          icon: Icons.lock_outline_rounded,
+                                          obscure: _obscureConfirmPassword,
+                                          suffixIcon: IconButton(
+                                            icon: Icon(
+                                              _obscureConfirmPassword
+                                                  ? Icons.visibility_off_rounded
+                                                  : Icons.visibility_rounded,
+                                              color:
+                                                  Colors.white.withOpacity(0.6),
+                                            ),
+                                            onPressed: () => setState(() =>
+                                                _obscureConfirmPassword =
+                                                    !_obscureConfirmPassword),
+                                          ),
+                                          validator: (v) {
+                                            if (v != _passwordController.text) {
+                                              return 'Passwords do not match';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ],
+
+                                      const SizedBox(height: 12),
+
+                                      // Forgot password (login only)
+                                      if (_isLogin)
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: TextButton(
+                                            onPressed: _showPasswordResetDialog,
+                                            child: Text(
+                                              'Forgot Password?',
+                                              style:
+                                                  AppTheme.bodySmall.copyWith(
+                                                color: Colors.white
+                                                    .withOpacity(0.8),
+                                              ),
                                             ),
                                           ),
                                         ),
+                                      const SizedBox(height: 16),
+
+                                      // Submit button
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 52,
+                                        child: ElevatedButton(
+                                          onPressed:
+                                              _isLoading ? null : _handleSubmit,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            foregroundColor: AppTheme.primary,
+                                            disabledBackgroundColor:
+                                                Colors.white.withOpacity(0.5),
+                                            elevation: 0,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(30),
+                                            ),
+                                          ),
+                                          child: _isLoading
+                                              ? const SizedBox(
+                                                  width: 24,
+                                                  height: 24,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: AppTheme.primary,
+                                                  ),
+                                                )
+                                              : Text(
+                                                  _isLogin
+                                                      ? 'Login'
+                                                      : 'Create Account',
+                                                  style: AppTheme.titleMedium
+                                                      .copyWith(
+                                                    color: AppTheme.primary,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                        ),
                                       ),
-                                    const SizedBox(height: 16),
-                                    
-                                    // Submit button
-                                    SizedBox(
-                                      width: double.infinity,
-                                      height: 52,
-                                      child: ElevatedButton(
-                                        onPressed: _isLoading ? null : _handleSubmit,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.white,
-                                          foregroundColor: AppTheme.primary,
-                                          disabledBackgroundColor: Colors.white.withOpacity(0.5),
-                                          elevation: 0,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(30),
+
+                                      const SizedBox(height: 16),
+
+                                      // Role indicator
+                                      if (widget.selectedRole != null)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                Colors.white.withOpacity(0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            'Signing in as: ${widget.selectedRole!.toUpperCase()}',
+                                            style: AppTheme.bodySmall.copyWith(
+                                              color:
+                                                  Colors.white.withOpacity(0.8),
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                           ),
                                         ),
-                                        child: _isLoading
-                                            ? const SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: AppTheme.primary,
-                                                ),
-                                              )
-                                            : Text(
-                                                _isLogin ? 'Login' : 'Create Account',
-                                                style: AppTheme.titleMedium.copyWith(
-                                                  color: AppTheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                      ),
-                                    ),
-                                    
-                                    const SizedBox(height: 16),
-                                    
-                                    // Role indicator
-                                    if (widget.selectedRole != null)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: Text(
-                                          'Signing in as: ${widget.selectedRole!.toUpperCase()}',
-                                          style: AppTheme.bodySmall.copyWith(
-                                            color: Colors.white.withOpacity(0.8),
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Demo credentials hint
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.15),
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Demo Credentials',
-                              style: AppTheme.bodySmall.copyWith(
-                                color: Colors.white.withOpacity(0.9),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Farmer: farmer1 / password123\nDealer: dealer1 / password123\nAdmin: admin1 / password123',
-                              style: AppTheme.bodySmall.copyWith(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: 11,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -419,6 +445,52 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildRegistrationRoleDropdown() {
+    return DropdownButtonFormField<String>(
+      initialValue: _registrationRole,
+      dropdownColor: AppTheme.primaryDark,
+      iconEnabledColor: Colors.white.withOpacity(0.8),
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: 'Register as',
+        labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+        prefixIcon: Icon(
+          Icons.badge_outlined,
+          color: Colors.white.withOpacity(0.8),
+        ),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.08),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Colors.white, width: 2),
+        ),
+      ),
+      items: const [
+        DropdownMenuItem(
+          value: 'farmer',
+          child: Text('Farmer'),
+        ),
+        DropdownMenuItem(
+          value: 'dealer',
+          child: Text('Dealer'),
+        ),
+      ],
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _registrationRole = value);
+        }
+      },
     );
   }
 
@@ -444,7 +516,8 @@ class _LoginScreenState extends State<LoginScreen> {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: Colors.white.withOpacity(0.1),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
@@ -483,12 +556,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() => _isLoading = true);
-    
+
     try {
       final auth = context.read<AuthProvider>();
-      
+
       if (_isLogin) {
         // Login through the auth provider so the app-wide session is set.
         await auth.login(_usernameController.text, _passwordController.text);
@@ -506,14 +579,14 @@ class _LoginScreenState extends State<LoginScreen> {
           lastName: _lastNameController.text,
           email: _emailController.text,
           phoneNumber: _phoneController.text,
-          role: widget.selectedRole ?? 'farmer',
+          role: _registrationRole,
         );
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                widget.selectedRole == 'dealer'
+                _registrationRole == 'dealer'
                     ? 'Account created! Your dealer profile is pending admin verification.'
                     : 'Account created! Please login.',
               ),
@@ -614,7 +687,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Password reset! You can now log in.'),
+                              content:
+                                  Text('Password reset! You can now log in.'),
                               backgroundColor: AppTheme.success,
                             ),
                           );
@@ -649,7 +723,7 @@ class _LoginScreenState extends State<LoginScreen> {
       default:
         dashboard = const FarmerDashboard();
     }
-    
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => dashboard),
     );
