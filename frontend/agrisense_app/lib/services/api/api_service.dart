@@ -666,6 +666,15 @@ class ApiService {
     throw ApiException(_messageFrom(response, fallback: 'Failed to process payment'));
   }
 
+  Future<Map<String, dynamic>> verifyPayment(int paymentId) async {
+    final response = await _send((h) => http.get(
+          Uri.parse('$baseUrl/payments/$paymentId/verify/'),
+          headers: h,
+        ));
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw ApiException(_messageFrom(response, fallback: 'Failed to verify payment'));
+  }
+
   // ── Weather ───────────────────────────────────────────
   Future<Map<String, dynamic>> getWeather({double? lat, double? lon, String? location}) async {
     // The weather endpoint requires authentication (it is rate-limited and

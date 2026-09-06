@@ -1048,9 +1048,18 @@ def get_engine_info():
 
 DEFAULT_SUPPORTED_CROPS = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa', 'Potato', 'Rice']
 
+# Preferred display order for the crop selector (most common/important first).
+# Crops not in this list are appended alphabetically after.
+PREFERRED_CROP_ORDER = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa', 'Potato', 'Rice']
+
 
 def get_available_crops():
-    """Crops supported by the active model, or by the heuristic knowledge base."""
+    """Crops supported by the active model, or by the heuristic knowledge base.
+
+    Returns crops in a stable preferred order (Tomato first) so the mobile
+    crop selector always starts at the most common crop rather than whichever
+    happens to be first alphabetically.
+    """
     try:
         engine = get_engine()
     except AIEngineError:
@@ -1060,14 +1069,18 @@ def get_available_crops():
 
     from diagnosis.models import Disease
     db_crops = list(Disease.objects.values_list(
-        'crop_name', flat=True).distinct().order_by('crop_name'))
-    
-    crops = list(dict.fromkeys(
+        'crop_name', flat=True).distinct())
+
+    # Merge all sources without duplicates (case-sensitive dedupe via dict.fromkeys).
+    all_crops = list(dict.fromkeys(
         [crop for crop in db_crops if crop] +
         list(FALLBACK_DISEASE_DATABASE.keys()) +
         DEFAULT_SUPPORTED_CROPS
     ))
-    return crops
+
+    # Sort by preferred order; unknown crops go to the end alphabetically.
+    preferred_index = {name: i for i, name in enumerate(PREFERRED_CROP_ORDER)}
+    return sorted(all_crops, key=lambda c: (preferred_index.get(c, len(PREFERRED_CROP_ORDER)), c))
 
 
 def get_disease_info(disease_name):

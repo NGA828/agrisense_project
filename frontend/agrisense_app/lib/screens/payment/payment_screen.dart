@@ -26,7 +26,8 @@ class PaymentScreen extends StatefulWidget {
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
 
-class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProviderStateMixin {
+class _PaymentScreenState extends State<PaymentScreen>
+    with SingleTickerProviderStateMixin {
   String _selectedPayment = 'mtn';
   bool _isProcessing = false;
   final TextEditingController _phoneController = TextEditingController();
@@ -50,8 +51,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
 
   // Local theme fallback colors
   Color get _primaryColor => const Color(0xFF2E7D32); // Forest Green
-  Color get _mtnYellow => const Color(0xFFFFC107);    // MTN MoMo Yellow
-  Color get _orangeMoney => const Color(0xFFFF5722);  // Orange Money Orange
+  Color get _mtnYellow => const Color(0xFFFFC107); // MTN MoMo Yellow
+  Color get _orangeMoney => const Color(0xFFFF5722); // Orange Money Orange
   Color get _creditCardColor => const Color(0xFF1E241E); // Slate / Charcoal
   Color get _successColor => const Color(0xFF4CAF50);
 
@@ -78,7 +79,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     // Formatting variables
-    final unitPrice = int.tryParse(widget.unitPrice.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    final unitPrice =
+        int.tryParse(widget.unitPrice.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
     final total = _orderTotal;
     final totalFormatted = _formatAmount(total);
 
@@ -108,7 +110,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Column(
                   children: [
                     // A. Order Summary Card (Fintech Theme)
@@ -132,7 +135,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                         style: ElevatedButton.styleFrom(
                           backgroundColor: buttonColor,
                           foregroundColor: buttonTextColor,
-                          disabledBackgroundColor: buttonColor.withValues(alpha: 0.5),
+                          disabledBackgroundColor:
+                              buttonColor.withValues(alpha: 0.5),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -151,7 +155,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.lock_outline_rounded, size: 18, color: buttonTextColor),
+                                  Icon(Icons.lock_outline_rounded,
+                                      size: 18, color: buttonTextColor),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Secure Pay: $totalFormatted FCFA',
@@ -172,7 +177,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.verified_user_outlined, size: 14, color: Colors.grey.shade600),
+                        Icon(Icons.verified_user_outlined,
+                            size: 14, color: Colors.grey.shade600),
                         const SizedBox(width: 6),
                         Text(
                           'SSL Secure Connection • 256-bit Encryption',
@@ -208,7 +214,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF1E241E)),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                size: 18, color: Color(0xFF1E241E)),
           ),
           const SizedBox(width: 8),
           Column(
@@ -287,7 +294,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                   color: _primaryColor.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.receipt_long_rounded, size: 18, color: _primaryColor),
+                child: Icon(Icons.receipt_long_rounded,
+                    size: 18, color: _primaryColor),
               ),
               const SizedBox(width: 10),
               Text(
@@ -314,7 +322,9 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                 30,
                 (index) => Expanded(
                   child: Container(
-                    color: index % 2 == 0 ? Colors.grey.shade200 : Colors.transparent,
+                    color: index % 2 == 0
+                        ? Colors.grey.shade200
+                        : Colors.transparent,
                     height: 1.5,
                   ),
                 ),
@@ -356,7 +366,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.local_shipping_rounded, size: 12, color: _successColor),
+                Icon(Icons.local_shipping_rounded,
+                    size: 12, color: _successColor),
                 const SizedBox(width: 6),
                 Text(
                   'Delivery Dispatch: Fast & Free',
@@ -391,7 +402,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                       color: Colors.blue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.location_on_rounded, size: 18, color: Colors.blue),
+                    child: const Icon(Icons.location_on_rounded,
+                        size: 18, color: Colors.blue),
                   ),
                   const SizedBox(width: 10),
                   Text(
@@ -442,7 +454,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                   color: Colors.orange.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.payment_rounded, size: 18, color: Colors.orange),
+                child: const Icon(Icons.payment_rounded,
+                    size: 18, color: Colors.orange),
               ),
               const SizedBox(width: 10),
               Text(
@@ -611,7 +624,9 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                 color: isSelected ? Colors.white : const Color(0xFFF4F6F4),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? accentColor.withValues(alpha: 0.3) : Colors.transparent,
+                  color: isSelected
+                      ? accentColor.withValues(alpha: 0.3)
+                      : Colors.transparent,
                   width: 1,
                 ),
               ),
@@ -641,7 +656,9 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                     subtitle,
                     style: GoogleFonts.inter(
                       fontSize: 11,
-                      color: isSelected ? Colors.grey.shade800 : const Color(0xFF757575),
+                      color: isSelected
+                          ? Colors.grey.shade800
+                          : const Color(0xFF757575),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -714,11 +731,30 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
         _orderTotal,
       );
 
-      final result = await api.processPayment(payment['id']);
+      var result = await api.processPayment(payment['id']);
+      for (var attempt = 0;
+          attempt < 5 &&
+              (result['status'] == 'pending' ||
+                  result['status'] == 'processing');
+          attempt++) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        result = await api.verifyPayment(payment['id']);
+      }
 
       if (!mounted) return;
       if (result['status'] == 'completed') {
         _showSuccessDialog();
+      } else if (result['status'] == 'pending' ||
+          result['status'] == 'processing') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Payment request sent. Approve it on your phone; we will confirm it shortly.',
+            ),
+            backgroundColor: Color(0xFFEF6C00),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       } else {
         // The provider rejected or could not confirm the transaction.
         ScaffoldMessenger.of(context).showSnackBar(
@@ -757,7 +793,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
       builder: (context) => PopScope(
         canPop: false,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -817,7 +854,8 @@ class _PaymentScreenState extends State<PaymentScreen> with SingleTickerProvider
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
                   },
-                  icon: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 18),
+                  icon: const Icon(Icons.shopping_bag_rounded,
+                      color: Colors.white, size: 18),
                   label: Text(
                     'Continue Shopping',
                     style: GoogleFonts.poppins(

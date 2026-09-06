@@ -105,9 +105,8 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
                 'error': 'The trained diagnosis model is currently unavailable. '
                          'Please try again later.',
                 'code': 'ai_model_unavailable',
+                'detail': str(exc),
             }
-            if settings.DEBUG:
-                payload['detail'] = str(exc)
             return Response(payload, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except AIInferenceError as exc:
             logger.warning('AI inference failed: %s', exc)
@@ -115,9 +114,8 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
                 'error': 'The diagnosis model could not analyze this photo. '
                          'Try a clear, well-lit image of one affected leaf.',
                 'code': 'ai_inference_failed',
+                'detail': str(exc),
             }
-            if settings.DEBUG:
-                payload['detail'] = str(exc)
             return Response(payload, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         # Optional location binding

@@ -136,8 +136,14 @@ class MTNMoMoGateway(BaseGateway):
             raise PaymentError('MTN did not return an access token')
         return data['access_token']
 
+    @staticmethod
+    def _provider_reference(transaction_id):
+        """Return the stable UUID required by MTN for X-Reference-Id."""
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, str(transaction_id)))
+
     def request_payment(self, *, amount, phone_number, description, transaction_id):
         token = self._token()
+        provider_reference = self._provider_reference(transaction_id)
         phone = ''.join(ch for ch in str(phone_number) if ch.isdigit())
         if phone.startswith('00'):
             phone = phone[2:]
@@ -147,7 +153,7 @@ class MTNMoMoGateway(BaseGateway):
             raise PaymentError('Use a Cameroon MTN number, for example 2376XXXXXXXX')
         status, _ = self._request('POST', '/collection/v1_0/requesttopay', headers={
             'Authorization': f'Bearer {token}',
-            'X-Reference-Id': transaction_id,
+            'X-Reference-Id': provider_reference,
             'X-Target-Environment': self.environment,
             'Ocp-Apim-Subscription-Key': self.primary_key,
             'Content-Type': 'application/json',
@@ -157,15 +163,20 @@ class MTNMoMoGateway(BaseGateway):
         if status not in (200, 202):
             raise PaymentError(f'MTN rejected the payment request (HTTP {status})')
         return {'status': 'pending', 'provider': self.provider,
-                'provider_reference': transaction_id}
+                'provider_reference': provider_reference}
 
     def verify_transaction(self, transaction_id):
         token = self._token()
-        _, data = self._request('GET', f'/collection/v1_0/requesttopay/{transaction_id}', headers={
+        provider_reference = self._provider_reference(transaction_id)
+        _, data = self._request(
+            'GET',
+            f'/collection/v1_0/requesttopay/{provider_reference}',
+            headers={
             'Authorization': f'Bearer {token}',
             'X-Target-Environment': self.environment,
             'Ocp-Apim-Subscription-Key': self.primary_key,
-        })
+            },
+        )
         return {'SUCCESSFUL': 'completed', 'FAILED': 'failed'}.get(
             str(data.get('status', 'PENDING')).upper(), 'pending')
 

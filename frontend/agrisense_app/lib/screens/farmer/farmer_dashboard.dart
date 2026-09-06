@@ -105,11 +105,13 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
       body: isWide
           ? Row(
               children: [
-                NavigationRail(
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: _onItemTapped,
-                  labelType: NavigationRailLabelType.all,
-                  backgroundColor: Colors.white,
+                SafeArea(
+                  right: false,
+                  child: NavigationRail(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _onItemTapped,
+                    labelType: NavigationRailLabelType.all,
+                    backgroundColor: Colors.white,
                   indicatorColor: AppTheme.primary.withValues(alpha: 0.15),
                   selectedIconTheme: const IconThemeData(color: AppTheme.primary),
                   selectedLabelTextStyle: GoogleFonts.poppins(
@@ -155,6 +157,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                       label: Text('Profile'),
                     ),
                   ],
+                ),
                 ),
                 const VerticalDivider(thickness: 1, width: 1, color: Color(0xFFE0E0E0)),
                 Expanded(

@@ -81,9 +81,20 @@ class Responsive extends StatelessWidget {
 
 /// A wrapper widget that caps content width on wide screens (tablet/desktop)
 /// and centers it with comfortable responsive padding.
+/// A wrapper widget that caps content width on wide screens (tablet/desktop)
+/// and centers it with comfortable responsive padding.
+///
+/// - On mobile (< 600px): no extra padding is added beyond what [padding] specifies.
+/// - On wide screens: centers the child within [maxContentWidth] with balanced margins.
+/// - Pass `padding: EdgeInsets.zero` to suppress all internal padding (useful when
+///   the child manages its own padding, e.g. a scrollable ListView).
 class ResponsiveCenter extends StatelessWidget {
   final Widget child;
   final double maxContentWidth;
+
+  /// Explicit padding override. When null, responsive horizontal padding is
+  /// added automatically on wide screens only. Pass EdgeInsets.zero to opt out
+  /// of all padding (the child is responsible for its own internal spacing).
   final EdgeInsetsGeometry? padding;
 
   const ResponsiveCenter({
@@ -96,14 +107,27 @@ class ResponsiveCenter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
-    EdgeInsets resolvedPadding;
+    final isWide = width >= Responsive.mobileMax;
 
+    // If an explicit padding was supplied (including EdgeInsets.zero), honour it
+    // exactly and do not add any extra padding of our own.
     if (padding != null) {
-      resolvedPadding = padding!.resolve(Directionality.of(context));
-    } else {
-      resolvedPadding = EdgeInsets.symmetric(
-        horizontal: width >= Responsive.mobileMax ? 24.0 : 16.0,
-        vertical: 12.0,
+      final resolvedPadding = padding!.resolve(Directionality.of(context));
+      final hasNoPadding = resolvedPadding == EdgeInsets.zero;
+      return Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxContentWidth),
+          child: hasNoPadding ? child : Padding(padding: resolvedPadding, child: child),
+        ),
+      );
+    }
+
+    // Default: only apply horizontal padding on wide screens to avoid double-
+    // padding on phones (the child's own horizontal padding is already correct).
+    if (!isWide) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxContentWidth),
+        child: child,
       );
     }
 
@@ -111,7 +135,7 @@ class ResponsiveCenter extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxContentWidth),
         child: Padding(
-          padding: resolvedPadding,
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: child,
         ),
       ),

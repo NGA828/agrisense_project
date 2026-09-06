@@ -21,6 +21,14 @@ class _CameraScreenState extends State<CameraScreen>
   bool _isScanning = false;
   String _selectedCrop = 'Tomato';
   List<String> _crops = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa'];
+  // Preferred crop order mirrors the backend's PREFERRED_CROP_ORDER so the
+  // local default list is always in the right order even before the server
+  // responds.
+  static const _preferredOrder = [
+    'Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa', 'Potato', 'Rice',
+  ];
+
+  final ScrollController _cropScrollController = ScrollController();
 
   late final AnimationController _scanPulseController;
   late final AnimationController _scanRotateController;
@@ -71,10 +79,34 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   void _applyCrops(List<String> crops) {
+    // Sort by preferred order so the selector always starts with the most
+    // common crops regardless of what order the server returns them in.
+    final preferredIndex = {for (var i = 0; i < _preferredOrder.length; i++) _preferredOrder[i]: i};
+    final sorted = List<String>.from(crops)
+      ..sort((a, b) {
+        final ai = preferredIndex[a] ?? _preferredOrder.length;
+        final bi = preferredIndex[b] ?? _preferredOrder.length;
+        return ai != bi ? ai.compareTo(bi) : a.compareTo(b);
+      });
     setState(() {
-      _crops = crops;
+      _crops = sorted;
+      // Keep current selection if valid, otherwise default to first crop.
       if (!_crops.contains(_selectedCrop)) _selectedCrop = _crops.first;
     });
+    // Scroll so the selected crop chip is always fully visible.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelected());
+  }
+
+  void _scrollToSelected() {
+    final idx = _crops.indexOf(_selectedCrop);
+    if (idx <= 0 || !_cropScrollController.hasClients) return;
+    // Each chip is roughly 120px wide + 8px gap; scroll to bring it into view.
+    const chipWidth = 128.0;
+    _cropScrollController.animateTo(
+      idx * chipWidth,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
@@ -82,6 +114,7 @@ class _CameraScreenState extends State<CameraScreen>
     _scanPulseController.dispose();
     _scanRotateController.dispose();
     _fadeController.dispose();
+    _cropScrollController.dispose();
     super.dispose();
   }
 
@@ -652,6 +685,7 @@ class _CameraScreenState extends State<CameraScreen>
         SizedBox(
           height: 48,
           child: ListView.separated(
+            controller: _cropScrollController,
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             itemCount: _crops.length,
@@ -667,7 +701,11 @@ class _CameraScreenState extends State<CameraScreen>
               final isSelected = crop == _selectedCrop;
 
               return GestureDetector(
-                onTap: () => setState(() => _selectedCrop = crop),
+                onTap: () {
+                  setState(() => _selectedCrop = crop);
+                  // Scroll the tapped chip into view if near an edge.
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelected());
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOutCubic,
@@ -945,12 +983,25 @@ class _CameraScreenState extends State<CameraScreen>
           ),
         );
       } else {
-        final err = provider.error;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Analysis failed: ${err ?? "unknown error"}'),
-            backgroundColor: AppTheme.error,
-            behavior: SnackBarBehavior.floating,
+        final err = provider.error ?? "unknown error";
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error_outline_rounded, color: AppTheme.error),
+                const SizedBox(width: 8),
+                Text('Analysis Failed', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18)),
+              ],
+            ),
+            content: Text(err, style: GoogleFonts.poppins(fontSize: 14)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Close', style: GoogleFonts.poppins(color: AppTheme.primary, fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
         );
       }

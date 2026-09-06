@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 
 from users.models import User
 from products.models import Product, Order
+from payments.gateway import MTNMoMoGateway
 from payments.models import Payment
 
 
@@ -34,6 +35,15 @@ class PaymentTests(APITestCase):
 
     def auth(self, user):
         self.client.force_authenticate(user=user)
+
+    def test_mtn_provider_reference_is_a_stable_uuid(self):
+        first = MTNMoMoGateway._provider_reference('TXN-EXAMPLE')
+        second = MTNMoMoGateway._provider_reference('TXN-EXAMPLE')
+        self.assertEqual(first, second)
+        self.assertRegex(
+            first,
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[4-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        )
 
     def test_create_payment_validates_amount(self):
         self.auth(self.farmer)

@@ -154,8 +154,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     order.save(update_fields=['status', 'reserved_until'])
 
         # Phase 2 — external provider call (kept outside the DB transaction).
-        gateway = get_gateway(payment.payment_method)
         try:
+            gateway = get_gateway(payment.payment_method)
             result = gateway.request_payment(
                 amount=float(payment.amount),
                 phone_number=payment.phone_number,

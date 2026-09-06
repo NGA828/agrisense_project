@@ -95,11 +95,13 @@ class _DealerDashboardState extends State<DealerDashboard> {
       body: isWide
           ? Row(
               children: [
-                NavigationRail(
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: _onItemTapped,
-                  labelType: NavigationRailLabelType.all,
-                  backgroundColor: Colors.white,
+                SafeArea(
+                  right: false,
+                  child: NavigationRail(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _onItemTapped,
+                    labelType: NavigationRailLabelType.all,
+                    backgroundColor: Colors.white,
                   indicatorColor: DealerTheme.accent.withValues(alpha: 0.15),
                   selectedIconTheme:
                       const IconThemeData(color: DealerTheme.accent),
@@ -147,6 +149,7 @@ class _DealerDashboardState extends State<DealerDashboard> {
                       label: Text('Profile'),
                     ),
                   ],
+                ),
                 ),
                 const VerticalDivider(
                     thickness: 1, width: 1, color: Color(0xFFE0E0E0)),
