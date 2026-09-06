@@ -41,8 +41,8 @@ class AuthProvider with ChangeNotifier {
   /// the farmer is not asked to log in again ("persistent session management").
   ///
   /// Keeps the splash/loading screen visible for exactly the requested minimum
-  /// of 50 seconds, even when session restoration finishes sooner.
-  static const Duration _minSplashDuration = Duration(seconds: 10);
+  /// of 2 seconds, even when session restoration finishes sooner.
+  static const Duration _minSplashDuration = Duration(seconds: 5);
 
   Future<void> restoreSession() async {
     if (!_isRestoring) {

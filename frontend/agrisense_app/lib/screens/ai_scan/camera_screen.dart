@@ -93,20 +93,6 @@ class _CameraScreenState extends State<CameraScreen>
       // Keep current selection if valid, otherwise default to first crop.
       if (!_crops.contains(_selectedCrop)) _selectedCrop = _crops.first;
     });
-    // Scroll so the selected crop chip is always fully visible.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelected());
-  }
-
-  void _scrollToSelected() {
-    final idx = _crops.indexOf(_selectedCrop);
-    if (idx <= 0 || !_cropScrollController.hasClients) return;
-    // Each chip is roughly 120px wide + 8px gap; scroll to bring it into view.
-    const chipWidth = 128.0;
-    _cropScrollController.animateTo(
-      idx * chipWidth,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
   }
 
   @override
@@ -703,8 +689,6 @@ class _CameraScreenState extends State<CameraScreen>
               return GestureDetector(
                 onTap: () {
                   setState(() => _selectedCrop = crop);
-                  // Scroll the tapped chip into view if near an edge.
-                  WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelected());
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),

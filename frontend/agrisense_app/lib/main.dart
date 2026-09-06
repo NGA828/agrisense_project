@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -64,6 +65,13 @@ class AgriSenseApp extends StatelessWidget {
           Locale('en'),
           Locale('fr'),
         ],
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          dragDevices: {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.trackpad,
+          },
+        ),
         theme: ThemeData(
           primarySwatch: Colors.green,
           primaryColor: AppTheme.primary,
