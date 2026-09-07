@@ -50,8 +50,9 @@ Expected 200 response:
 | Dealer (pending) | `dealer3` | `password123` | needs admin verification |
 | Admin | `admin1` | `password123` | full access |
 
-> **Payment simulator:** MTN/Orange sandbox succeeds when the phone number ends in
-> an **even digit** and fails on odd digits — useful for testing both flows.
+> **Payment simulator:** enabled local sandbox payments **always succeed** (any valid
+> Cameroon number, e.g. `+237 670 00 00 08`). To test the failure flow, use a number
+> ending in **0000** (e.g. `+237 670 00 00 00`) — it simulates a declined payment.
 
 ---
 

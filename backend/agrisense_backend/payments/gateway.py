@@ -74,16 +74,24 @@ class BaseGateway:
 
 
 class SandboxGateway(BaseGateway):
-    """Explicit local simulation only. Even last digit succeeds, odd fails."""
+    """Explicit local simulation only. Deterministic: every payment succeeds.
+
+    Simulated checkout must be reliable for demos and training, so the old
+    even/odd phone-digit coin flip is gone. To exercise the failure path
+    (declined payment, stock release, no dealer order), pay from a number
+    whose last four digits are 0000, e.g. +237 670 00 00 00.
+    """
 
     provider = 'sandbox'
     environment = 'simulated'
     is_test = True
+    DECLINE_SUFFIX = '0000'
 
     def request_payment(self, *, amount, phone_number, description, transaction_id,
                         provider_reference):
         phone = self.validate_phone(phone_number)
-        return {'status': 'completed' if int(phone[-1]) % 2 == 0 else 'failed',
+        declined = phone.endswith(self.DECLINE_SUFFIX)
+        return {'status': 'failed' if declined else 'completed',
                 'provider': self.provider, 'provider_reference': str(provider_reference),
                 'is_test': True}
 
@@ -275,8 +283,14 @@ def get_gateway(payment_method, *, environment=None):
     if method not in ('MTN_MOMO', 'ORANGE_MONEY'):
         raise PaymentError('Card payments are not available. Choose an enabled mobile-money method.',
                            'payment_method_unavailable')
-    if environment == 'simulated' or (not environment and settings.PAYMENT_SIMULATOR_ENABLED):
-        if not settings.DEBUG or not settings.PAYMENT_SIMULATOR_ENABLED:
+    simulator_requested = environment == 'simulated' or (
+        not environment and settings.PAYMENT_SIMULATOR_ENABLED)
+    if simulator_requested:
+        # DEBUG-only by default; PAYMENT_SIMULATOR_ALLOW_NON_DEBUG=true is the
+        # explicit, auditable opt-in for demo/staging deployments.
+        simulator_allowed = (settings.DEBUG
+                             or getattr(settings, 'PAYMENT_SIMULATOR_ALLOW_NON_DEBUG', False))
+        if not settings.PAYMENT_SIMULATOR_ENABLED or not simulator_allowed:
             raise PaymentError('Local payment simulation is disabled.', 'payment_not_configured')
         return SandboxGateway()
     if method == 'MTN_MOMO' and settings.MTN_MOMO_ENABLED:

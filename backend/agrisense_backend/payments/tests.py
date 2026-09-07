@@ -21,7 +21,7 @@ def make_user(username, role, **kwargs):
 @override_settings(DEBUG=True, PAYMENT_SIMULATOR_ENABLED=True)
 class PaymentTests(APITestCase):
     def setUp(self):
-        # Even final digit => sandbox payment succeeds; odd => fails.
+        # Simulator: any number succeeds; numbers ending 0000 simulate a decline.
         self.farmer = make_user('farmer1', 'farmer', phone_number='+237670000008')
         self.other = make_user('farmer2', 'farmer', phone_number='+237670000002')
         self.dealer = make_user('dealer1', 'dealer')
@@ -83,7 +83,7 @@ class PaymentTests(APITestCase):
         self.auth(self.farmer)
         resp = self.client.post(reverse('payment-list'), {
             'order': self.order.id, 'amount': 2000,
-            'payment_method': 'MTN_MOMO', 'phone_number': '+237670000009',  # odd => fail
+            'payment_method': 'MTN_MOMO', 'phone_number': '+237670000000',  # ends 0000 => simulated decline
         }, format='json')
         payment_id = resp.data['id']
         process = self.client.post(reverse('payment-process-payment', args=[payment_id]))
@@ -172,8 +172,8 @@ class PaymentMoneyFlowTests(APITestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 3)
 
-        # odd final digit => sandbox payment fails
-        payment_id = self.create_payment(order_id, '+237670000009')
+        # A number ending in 0000 simulates a declined payment
+        payment_id = self.create_payment(order_id, '+237670000000')
         resp = self.client.post(reverse('payment-process-payment', args=[payment_id]))
         self.assertEqual(resp.data['status'], 'failed')
 
@@ -189,11 +189,11 @@ class PaymentMoneyFlowTests(APITestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 3)
 
-        payment_id = self.create_payment(order_id, '+237670000009')
+        payment_id = self.create_payment(order_id, '+237670000000')
         resp = self.client.post(reverse('payment-process-payment', args=[payment_id]))
         self.assertEqual(resp.data['status'], 'failed')
 
-        # Retry with a working phone (even final digit): stock re-held, payment succeeds.
+        # Retry with a working phone: stock re-held, payment succeeds.
         payment_id2 = self.create_payment(order_id, '+237670000008')
         resp = self.client.post(reverse('payment-process-payment', args=[payment_id2]))
         self.assertEqual(resp.data['status'], 'completed')

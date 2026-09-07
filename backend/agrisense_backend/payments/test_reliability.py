@@ -49,6 +49,35 @@ class GatewayContractTests(SimpleTestCase):
         with self.assertRaises(PaymentError):
             get_gateway('MTN_MOMO')
 
+    @override_settings(DEBUG=False, PAYMENT_SIMULATOR_ENABLED=True,
+                       PAYMENT_SIMULATOR_ALLOW_NON_DEBUG=True)
+    def test_simulation_outside_debug_requires_explicit_opt_in(self):
+        gateway = get_gateway('MTN_MOMO')
+        self.assertEqual(gateway.provider, 'sandbox')
+        self.assertTrue(gateway.is_test)
+
+    @override_settings(DEBUG=True, PAYMENT_SIMULATOR_ENABLED=True)
+    def test_simulator_succeeds_deterministically(self):
+        """Demos must not flip-flop: a normal number always completes."""
+        gateway = get_gateway('MTN_MOMO')
+        for phone in ('+237670000001', '+237 699 88 77 33', '670000008'):
+            result = gateway.request_payment(
+                amount=1000, phone_number=phone, description='test',
+                transaction_id='TXN-TEST', provider_reference=uuid.uuid4())
+            self.assertEqual(result['status'], 'completed', phone)
+            self.assertTrue(result['is_test'])
+            self.assertEqual(result['provider'], 'sandbox')
+
+    @override_settings(DEBUG=True, PAYMENT_SIMULATOR_ENABLED=True)
+    def test_simulator_decline_test_number(self):
+        """The documented ...0000 number simulates a provider decline."""
+        gateway = get_gateway('MTN_MOMO')
+        result = gateway.request_payment(
+            amount=1000, phone_number='+237670000000', description='test',
+            transaction_id='TXN-TEST', provider_reference=uuid.uuid4())
+        self.assertEqual(result['status'], 'failed')
+        self.assertTrue(result['is_test'])
+
     def test_phone_validation_and_normalization(self):
         self.assertEqual(normalize_phone('+237 670 000 008'), '237670000008')
         self.assertEqual(normalize_phone('670000008'), '237670000008')
@@ -306,7 +335,7 @@ class PaymentReliabilityTests(APITestCase):
 
     def test_failed_payment_and_cancelling_it_restore_stock_only_once(self):
         order = self.reserve()
-        payment = self.attempt(order, phone='670000009')
+        payment = self.attempt(order, phone='670000000')
         self.assertEqual(self.process(payment).data['status'], 'failed')
         finalize_payment_failed(payment.pk)
         self.client.post(reverse('order-cancel', args=[order.pk]))
@@ -317,7 +346,7 @@ class PaymentReliabilityTests(APITestCase):
 
     def test_failed_retry_gets_new_reference_and_rechecks_stock(self):
         order = self.reserve()
-        failed = self.attempt(order, phone='670000009')
+        failed = self.attempt(order, phone='670000000')
         self.process(failed)
         retry = self.attempt(order)
         self.assertNotEqual(failed.provider_reference, retry.provider_reference)
@@ -379,7 +408,7 @@ class PaymentReliabilityTests(APITestCase):
 
     def test_failed_retry_cannot_charge_for_a_withdrawn_product(self):
         order = self.reserve()
-        failed = self.attempt(order, phone='670000009')
+        failed = self.attempt(order, phone='670000000')
         self.process(failed)
         self.product.is_available = False
         self.product.save(update_fields=['is_available'])

@@ -116,6 +116,14 @@ def check_weather_config(app_configs, **kwargs):
                 hint='Use openrouter/free, or verify a free vision model with check_ai_model.',
                 id='agrisense.W011',
             ))
+    elif ai_engine in ('groq', 'groq-vision'):
+        if not getattr(settings, 'GROQ_API_KEY', ''):
+            errors.append(Warning(
+                'AI_ENGINE requests Groq but GROQ_API_KEY is empty.',
+                hint='Create a free key at https://console.groq.com/keys and set it '
+                     'only in the backend environment.',
+                id='agrisense.W015',
+            ))
     return errors
 
 
@@ -124,10 +132,20 @@ def check_payment_configuration(app_configs, **kwargs):
     from payments.gateway import payment_methods
     warnings = []
     if settings.PAYMENT_SIMULATOR_ENABLED and not settings.DEBUG:
-        warnings.append(Warning(
-            'Payment simulation is enabled but DEBUG is off; simulation will be refused.',
-            hint='Use a separate test environment, or configure MTN for real collection.',
-            id='agrisense.W012'))
+        if getattr(settings, 'PAYMENT_SIMULATOR_ALLOW_NON_DEBUG', False):
+            warnings.append(Warning(
+                'Payment simulation is EXPLICITLY enabled outside DEBUG: simulated '
+                'payments will be recorded as TEST payments (no money moves).',
+                hint='Never treat simulated payments as live sales. Disable '
+                     'PAYMENT_SIMULATOR_ALLOW_NON_DEBUG and configure MTN for real collection.',
+                id='agrisense.W016'))
+        else:
+            warnings.append(Warning(
+                'Payment simulation is enabled but DEBUG is off; simulation will be refused.',
+                hint='Use a separate test environment, set '
+                     'PAYMENT_SIMULATOR_ALLOW_NON_DEBUG=true for an explicit demo '
+                     'deployment, or configure MTN for real collection.',
+                id='agrisense.W012'))
     if not any(m['available'] for m in payment_methods()):
         warnings.append(Warning(
             'No payment gateway is configured; checkout is disabled.',

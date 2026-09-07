@@ -308,7 +308,12 @@ PLATFORM_COMMISSION_RATE = float(os.getenv('PLATFORM_COMMISSION_RATE', '0.0'))
 PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', 'dev-webhook-secret')
 
 # Real collection is opt-in. Missing credentials must NEVER trigger fake success.
-PAYMENT_SIMULATOR_ENABLED = _env_bool('PAYMENT_SIMULATOR_ENABLED', False)
+# The simulator is the deliberate dev/demo path: it is on by default in DEBUG
+# (set PAYMENT_SIMULATOR_ENABLED=false to disable) and succeeds deterministically.
+# Outside DEBUG it stays off unless PAYMENT_SIMULATOR_ALLOW_NON_DEBUG=true —
+# an explicit, auditable opt-in for demo deployments that never moves money.
+PAYMENT_SIMULATOR_ENABLED = _env_bool('PAYMENT_SIMULATOR_ENABLED', DEBUG)
+PAYMENT_SIMULATOR_ALLOW_NON_DEBUG = _env_bool('PAYMENT_SIMULATOR_ALLOW_NON_DEBUG', False)
 PAYMENT_PROVIDER_TIMEOUT_SECONDS = float(os.getenv('PAYMENT_PROVIDER_TIMEOUT_SECONDS', '12'))
 PREMIUM_PRICE_PER_MONTH = os.getenv('PREMIUM_PRICE_PER_MONTH', '1000')
 MTN_MOMO_ENABLED = _env_bool('MTN_MOMO_ENABLED', False)
@@ -396,7 +401,9 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # ── Plant-pathology inference ────────────────────────────────────────────
-# OpenRouter vision is primary. The remote model may only select diseases from
+# AI_ENGINE selects the backend: groq (free tier, recommended), openrouter,
+# ollama (self-hosted), tensorflow (local artifact), rules (demo only).
+# The remote model may only select diseases from
 # the admin-reviewed Disease rows supplied in its strict response schema;
 # treatments are always resolved locally. TensorFlow remains an offline option.
 AI_ENGINE = os.getenv('AI_ENGINE', 'openrouter').strip().lower()
@@ -428,6 +435,27 @@ OPENROUTER_MAX_CONFIDENCE = float(
     os.getenv('OPENROUTER_MAX_CONFIDENCE', '95'))
 OPENROUTER_APP_URL = os.getenv('OPENROUTER_APP_URL', '').strip()
 OPENROUTER_APP_TITLE = os.getenv('OPENROUTER_APP_TITLE', 'AgriSense AI').strip()
+
+# ── Groq free-tier vision (AI_ENGINE=groq) ───────────────────────────────
+# Recommended free option: create a key at https://console.groq.com/keys (no
+# credit card). Groq's free tier allows roughly 30 requests/minute and a
+# per-model daily quota (model dependent; comfortably above 50 scans/day).
+# The same reviewed-disease allow-list and crop-identity guards apply; the
+# API is OpenAI-compatible, so no other integration changes are needed.
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '').strip()
+GROQ_MODEL = os.getenv(
+    'GROQ_MODEL', 'meta-llama/llama-4-scout-17b-16e-instruct').strip()
+GROQ_FALLBACK_MODELS = [
+    model.strip() for model in os.getenv(
+        'GROQ_FALLBACK_MODELS',
+        'meta-llama/llama-4-maverick-17b-128e-instruct').split(',') if model.strip()
+]
+GROQ_BASE_URL = os.getenv(
+    'GROQ_BASE_URL', 'https://api.groq.com/openai/v1').strip().rstrip('/')
+GROQ_TIMEOUT_SECONDS = float(os.getenv('GROQ_TIMEOUT_SECONDS', '25'))
+GROQ_MAX_TOKENS = int(os.getenv('GROQ_MAX_TOKENS', '1024'))
+GROQ_IMAGE_MAX_DIMENSION = int(os.getenv('GROQ_IMAGE_MAX_DIMENSION', '1024'))
+GROQ_IMAGE_QUALITY = int(os.getenv('GROQ_IMAGE_QUALITY', '82'))
 
 # Validate the subject independently of the selected-crop disease allow-list.
 AI_CROP_CONFIDENCE_THRESHOLD = float(os.getenv('AI_CROP_CONFIDENCE_THRESHOLD', '80'))

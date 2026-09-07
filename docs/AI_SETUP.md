@@ -16,14 +16,52 @@
 
 | Option | Model cost | Daily capacity | Trade-off |
 |---|---|---|---|
-| OpenRouter free router | Zero-priced endpoints only by default | Shared provider/account quota | Simplest setup; free availability and latency vary |
+| **Groq free tier** (recommended) | Zero — free API key, no credit card | ~30 requests/min and a per-model daily quota per key (commonly 1,000–14,400 requests/day; far above 50 scans/day) | Shared free quotas can throttle at peak times; a fallback model is configured automatically |
+| OpenRouter free router | Zero-priced endpoints only by default | Shared provider/account quota (often ~50/day on the basic free tier) | Simple setup; free availability and latency vary |
 | Private Ollama vision model | No hosted API per-scan fee | No provider daily request cap; the app has no daily cap | You provide suitable hardware, electricity/hosting and model maintenance |
 
 The basic OpenRouter free tier is commonly limited to **50 requests/day across the account**, not 50 successful scans for every farmer. Other users, unsuccessful calls and upstream availability can reduce the number of useful results. Switching free models/keys is not a way to create extra account quota. Check the current [provider limits](https://openrouter.ai/docs/api_reference/limits) before deployment.
 
-If **at least 50 fresh analyses/day without buying API credits** is a firm requirement, use the private Ollama option and size/test the machine for your workload. It removes the hosted-model quota, not hardware failures or recognition uncertainty. There is intentionally no automatic paid fallback or automatic retry loop that spends more requests.
+The **Groq free tier** is tracked per API key and per model, resets daily, and needs no credit card; check your live quotas at [console.groq.com/settings/limits](https://console.groq.com/settings/limits). Groq serves inference on dedicated LPU hardware, so scans usually return in a few seconds. If **at least 50 fresh analyses/day without buying API credits** is a firm requirement, Groq is the simplest way to satisfy it; the private Ollama option removes provider quotas entirely if you have the hardware. There is intentionally no automatic paid fallback or automatic retry loop that spends more requests.
 
-## Option A — OpenRouter, easiest to start
+## Option A — Groq free tier, recommended
+
+1. Create a free API key (no credit card) at <https://console.groq.com/keys>.
+2. Keep the key only in `backend/agrisense_backend/.env` (or your hosting secret manager). Do not put it in Flutter, Git, screenshots, or chat.
+3. Set:
+
+```dotenv
+AI_ENGINE=groq
+GROQ_API_KEY=replace-privately
+GROQ_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+GROQ_FALLBACK_MODELS=meta-llama/llama-4-maverick-17b-128e-instruct
+GROQ_TIMEOUT_SECONDS=25
+GROQ_MAX_TOKENS=1024
+GROQ_IMAGE_MAX_DIMENSION=1024
+GROQ_IMAGE_QUALITY=82
+AI_CROP_CONFIDENCE_THRESHOLD=80
+AI_REQUIRE_TRAINED_MODEL=true
+AI_ALLOW_RULE_FALLBACK=false
+AI_ANALYSIS_CACHE_SECONDS=600
+THROTTLE_AI_RATE=20/min
+```
+
+4. Restart Django, then verify the key and models **without submitting a scan**:
+
+```bash
+cd backend/agrisense_backend
+python manage.py check_ai_model --check-auth
+python manage.py check_ai_model --list-free
+```
+
+Notes:
+
+- Groq's API is OpenAI-compatible, so the engine reuses the same guarded pipeline: the model may only name diseases reviewed for the selected crop, the crop in the photo must match the farmer's selection, and non-crop photos are refused with `not_a_crop`/`crop_mismatch` (nothing is saved).
+- Because Groq has no server-side model router, the configured fallback models are tried **client-side, once each**, only on transport/model-level errors (429/5xx/model unavailable). A rejected key never retries.
+- Free-tier rate limits are per key and per model: at ~30 requests/minute you can serve bursts of farmers, and the per-model daily quota (model dependent) is far above 50 scans/day. The app-level throttle is `THROTTLE_AI_RATE` (20/min per user by default) and identical re-scans within `AI_ANALYSIS_CACHE_SECONDS` reuse the previous result instead of spending quota.
+- When the quota is exhausted the app answers `429` with `Retry-After`; it never fabricates a diagnosis instead.
+
+## Option B — OpenRouter, easiest to start
 
 Keep the key only in `backend/agrisense_backend/.env` (or your hosting secret manager). Do not put it in Flutter, Git, screenshots, or chat.
 
@@ -56,7 +94,7 @@ python manage.py check_ai_model --check-auth
 
 The second command checks credentials and catalog capability **without submitting a scan**. It cannot guarantee remaining free requests or a successful future diagnosis. Restart Django after changing the environment.
 
-## Option B — Private Ollama, no daily provider quota
+## Option C — Private Ollama, no daily provider quota
 
 1. Install [Ollama](https://ollama.com/) on the inference machine.
 2. Download a **vision-capable** local model, for example `ollama pull gemma3:4b`.
@@ -84,7 +122,7 @@ docker compose --env-file backend/agrisense_backend/.env exec backend python man
 
 Weights stay in the `ollama_models` Docker volume, not Git. No weights are downloaded by Django or included in this patch. A downloaded model and adequate runtime resources are still required. Pin and validate an Ollama image/model version for production.
 
-## Required for BOTH options: reviewed crop data
+## Required for ALL options: reviewed crop data
 
 ```bash
 python manage.py migrate
@@ -92,7 +130,7 @@ python manage.py migrate
 
 Add/review `Disease` records in Django admin or the app's content-management screen for every crop you intend to offer. On an **isolated development database only**, `python manage.py seed_data` supplies demo crop data **and demo accounts with known passwords**. Never run that command on a public production database as a shortcut.
 
-An empty knowledge base intentionally exposes no crops. Do not turn on the colour-rule demo to conceal missing data or provider failures. The optional legacy TensorFlow closed-set classifier is not an open-world non-crop detector; prefer the guarded OpenRouter/Ollama paths for this requirement.
+An empty knowledge base intentionally exposes no crops. Do not turn on the colour-rule demo to conceal missing data or provider failures. The optional legacy TensorFlow closed-set classifier is not an open-world non-crop detector; prefer the guarded Groq/OpenRouter/Ollama paths for this requirement.
 
 ## Production and troubleshooting
 
