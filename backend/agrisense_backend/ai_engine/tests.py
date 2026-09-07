@@ -233,13 +233,7 @@ class OpenRouterEngineTests(TestCase):
         self.assertNotIn('Reviewed Maize Rust', serialized)
         # Treatments are deliberately never sent to or accepted from the model.
         self.assertNotIn('Local reviewed medication', serialized)
-        allowed = payload['response_format']['json_schema']['schema'] \
-            ['properties']['disease_name']['enum']
-        self.assertEqual(
-            allowed,
-            ['Healthy', 'Inconclusive', 'NotACrop', 'CropMismatch',
-             'Reviewed Tomato Blight'],
-        )
+        self.assertEqual(payload['response_format'], {'type': 'json_object'})
         self.assertTrue(request['headers']['Authorization'].startswith('Bearer '))
         image_url = payload['messages'][1]['content'][1]['image_url']['url']
         self.assertTrue(image_url.startswith('data:image/jpeg;base64,'))
@@ -365,8 +359,7 @@ class OpenRouterEngineTests(TestCase):
         self.engine().analyze(png_bytes(), 'Tomato')
         payload = self.requests[0][1]['json']
         self.assertNotIn('require_parameters', payload['provider'])
-        self.assertEqual(payload['response_format']['type'], 'json_schema')
-        self.assertTrue(payload['response_format']['json_schema']['strict'])
+        self.assertEqual(payload['response_format'], {'type': 'json_object'})
 
     def test_reasoning_is_excluded_so_content_contains_diagnosis(self):
         self.engine().analyze(png_bytes(), 'Tomato')

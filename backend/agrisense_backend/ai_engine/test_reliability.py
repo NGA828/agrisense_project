@@ -68,6 +68,12 @@ class VisionReliabilityTests(TestCase):
         self.assertEqual(kwargs['timeout'], (5, 25))
         self.assertEqual(post.call_count, 1)
 
+    def test_json_wrapped_in_provider_prose_is_parsed(self):
+        payload = json.dumps(classification())
+        parsed = OpenRouterVisionClient._parse_content(
+            f'Here is the result:\n{payload}\n')
+        self.assertEqual(parsed['disease_name'], 'Tomato Blight')
+
     def test_non_crop_overrides_an_otherwise_valid_disease_result(self):
         with self.assertRaises(AIImageRejected) as caught:
             self.engine(classification(image_type='not_crop')).analyze(photo(), 'Tomato')
