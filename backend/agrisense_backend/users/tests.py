@@ -1,10 +1,9 @@
 import struct
 import zlib
-from datetime import timedelta
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from django.utils import timezone
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -192,6 +191,7 @@ class UserManagementTests(APITestCase):
         pending.refresh_from_db()
         self.assertTrue(pending.is_verified)
 
+    @override_settings(DEBUG=True, PAYMENT_SIMULATOR_ENABLED=True)
     def test_upgrade_premium_creates_payment(self):
         self.auth(self.dealer)
         resp = self.client.post(reverse('user-upgrade-premium', args=[self.dealer.id]),

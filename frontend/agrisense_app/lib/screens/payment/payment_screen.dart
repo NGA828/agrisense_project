@@ -1,9 +1,15 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api/api_service.dart';
 
 class PaymentScreen extends StatefulWidget {
   final int? orderId;
+  final int? productId;
+  final int? paymentId;
+  final String? paymentStatus;
+  final ApiService? api;
   final String productName;
   final String unitPrice;
   final int quantity;
@@ -16,6 +22,10 @@ class PaymentScreen extends StatefulWidget {
   const PaymentScreen({
     super.key,
     this.orderId,
+    this.productId,
+    this.paymentId,
+    this.paymentStatus,
+    this.api,
     required this.productName,
     required this.unitPrice,
     required this.quantity,
@@ -30,16 +40,74 @@ class _PaymentScreenState extends State<PaymentScreen>
     with SingleTickerProviderStateMixin {
   String _selectedPayment = 'mtn';
   bool _isProcessing = false;
+  bool _loadingMethods = true;
+  bool _isTestPayment = false;
+  bool _successShown = false;
+  String? _methodsError;
+  String? _paymentMessage;
+  String _paymentState = 'not_started';
+  int? _orderId;
+  int? _paymentId;
+  double? _serverTotal;
+  late final ApiService _api;
+  late final String _checkoutKey;
+  Map<String, Map<String, dynamic>> _methods = {};
+
+  bool get _hasAttempt => _paymentId != null;
+  String get _methodId => _selectedPayment == 'orange' ? 'ORANGE_MONEY' : 'MTN_MOMO';
+  bool get _methodAvailable => _methods[_methodId]?['available'] == true;
+  bool get _canPay => !_isProcessing && (_hasAttempt ||
+      (!_loadingMethods && _methodAvailable && (widget.productId != null || _orderId != null)));
   final TextEditingController _phoneController = TextEditingController();
   late final AnimationController _animController;
 
   @override
   void initState() {
     super.initState();
+    _api = widget.api ?? ApiService();
+    _orderId = widget.orderId;
+    _paymentId = widget.paymentId;
+    _paymentState = widget.paymentStatus ?? 'not_started';
+    _serverTotal = widget.totalAmount;
+    _checkoutKey = _newCheckoutKey();
+    _loadMethods();
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+  }
+
+  static String _newCheckoutKey() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-'
+        '${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
+  Future<void> _loadMethods() async {
+    setState(() { _loadingMethods = true; _methodsError = null; });
+    try {
+      final response = await _api.getPaymentMethods();
+      if (!mounted) return;
+      final methods = <String, Map<String, dynamic>>{};
+      for (final item in (response['methods'] as List? ?? [])) {
+        final method = Map<String, dynamic>.from(item as Map);
+        methods[method['id'].toString()] = method;
+      }
+      setState(() {
+        _methods = methods;
+        if (!_methodAvailable && methods['ORANGE_MONEY']?['available'] == true) {
+          _selectedPayment = 'orange';
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _methodsError = 'Could not load payment options. Check your connection.');
+    } finally {
+      if (mounted) setState(() => _loadingMethods = false);
+    }
   }
 
   @override
@@ -53,34 +121,30 @@ class _PaymentScreenState extends State<PaymentScreen>
   Color get _primaryColor => const Color(0xFF2E7D32); // Forest Green
   Color get _mtnYellow => const Color(0xFFFFC107); // MTN MoMo Yellow
   Color get _orangeMoney => const Color(0xFFFF5722); // Orange Money Orange
-  Color get _creditCardColor => const Color(0xFF1E241E); // Slate / Charcoal
   Color get _successColor => const Color(0xFF4CAF50);
 
   /// Amount to charge: the server-computed order total when the order was
   /// created online (authoritative — the backend rejects any other amount),
-  /// otherwise unitPrice × quantity as an offline fallback.
+  /// otherwise unitPrice × quantity is an estimate until the server reserves it.
   double get _orderTotal {
-    final serverTotal = widget.totalAmount;
+    final serverTotal = _serverTotal;
     if (serverTotal != null) return serverTotal;
     final money = widget.unitPrice.replaceAll(RegExp(r'[,\s]'), '');
     final unit = double.tryParse(money) ?? 0;
     return unit * widget.quantity;
   }
 
-  /// Format a numeric FCFA amount as a whole number with thousands separators.
+  /// Keep the amount shown to the farmer identical to the amount requested.
   String _formatAmount(double value) {
-    final whole = value.round().toString();
-    return whole.replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]},',
-    );
+    final parts = value.toStringAsFixed(value == value.truncateToDouble() ? 0 : 2).split('.');
+    final grouped = parts[0].replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    return parts.length == 1 ? grouped : '$grouped.${parts[1]}';
   }
 
   @override
   Widget build(BuildContext context) {
     // Formatting variables
-    final unitPrice =
-        int.tryParse(widget.unitPrice.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
     final total = _orderTotal;
     final totalFormatted = _formatAmount(total);
 
@@ -115,7 +179,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                 child: Column(
                   children: [
                     // A. Order Summary Card (Fintech Theme)
-                    _buildOrderSummaryCard(unitPrice, totalFormatted),
+                    _buildOrderSummaryCard(totalFormatted),
                     const SizedBox(height: 16),
 
                     // B. Delivery Address Details
@@ -126,12 +190,22 @@ class _PaymentScreenState extends State<PaymentScreen>
                     _buildPaymentMethodsCard(),
                     const SizedBox(height: 24),
 
+                    if (_paymentMessage != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: const Color(0xFFFFF3E0),
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Text(_paymentMessage!),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     // D. Primary Action Button
                     SizedBox(
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
-                        onPressed: _isProcessing ? null : _processPayment,
+                        onPressed: _canPay ? _processPayment : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: buttonColor,
                           foregroundColor: buttonTextColor,
@@ -159,7 +233,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                                       size: 18, color: buttonTextColor),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Secure Pay: $totalFormatted FCFA',
+                                    _hasAttempt ? 'Check payment status' : 'Pay: $totalFormatted FCFA',
                                     style: GoogleFonts.poppins(
                                       fontSize: 15.5,
                                       fontWeight: FontWeight.bold,
@@ -281,7 +355,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   // Premium Fintech styled Summary Card
-  Widget _buildOrderSummaryCard(int unitPrice, String totalFormatted) {
+  Widget _buildOrderSummaryCard(String totalFormatted) {
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -311,7 +385,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           const SizedBox(height: 14),
 
           // Detail Row
-          _buildSummaryRow(widget.productName, '${widget.unitPrice} FCFA'),
+          _buildSummaryRow(widget.productName, '${_formatAmount(_orderTotal / widget.quantity)} FCFA / unit'),
           _buildSummaryRow('Quantity Ordered', 'x${widget.quantity}'),
 
           // Dashed Separator
@@ -386,61 +460,14 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   // Delivery Address section
-  Widget _buildDeliveryAddressCard() {
-    return _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.location_on_rounded,
-                        size: 18, color: Colors.blue),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Delivery Location',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: const Color(0xFF1E241E),
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                'Change',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: _primaryColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Rue 1.056, Quartier Bastos, Yaoundé, Cameroon',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: const Color(0xFF555F55),
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildDeliveryAddressCard() => _buildCard(
+    child: const Row(children: [
+      Icon(Icons.local_shipping_outlined), SizedBox(width: 12),
+      Expanded(child: Text('Arrange delivery with the dealer. The dealer receives '
+          'your order only after payment is confirmed.')),
+    ]),
+  );
 
-  // Interactive Payment Options Builder
   Widget _buildPaymentMethodsCard() {
     return _buildCard(
       child: Column(
@@ -474,7 +501,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           _buildPaymentOption(
             id: 'mtn',
             title: 'MTN Mobile Money',
-            subtitle: 'Pay instantly via MoMo Wallet',
+            subtitle: _methods['MTN_MOMO']?['message']?.toString() ?? 'Checking availability…',
             bgColor: const Color(0xFFFFFDE7),
             textColor: Colors.black,
             icon: Icons.phone_android_rounded,
@@ -486,7 +513,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           _buildPaymentOption(
             id: 'orange',
             title: 'Orange Money',
-            subtitle: 'Secure Orange Money checkout',
+            subtitle: _methods['ORANGE_MONEY']?['message']?.toString() ?? 'Not available',
             bgColor: const Color(0xFFFBE9E7),
             textColor: Colors.black,
             icon: Icons.phonelink_ring_rounded,
@@ -494,20 +521,21 @@ class _PaymentScreenState extends State<PaymentScreen>
           ),
           const SizedBox(height: 10),
 
-          // Visa / Credit Card
-          _buildPaymentOption(
-            id: 'card',
-            title: 'Credit Card',
-            subtitle: 'Visa • Mastercard **** 4242',
-            bgColor: const Color(0xFFECEFF1),
-            textColor: Colors.black,
-            icon: Icons.credit_card_rounded,
-            accentColor: _creditCardColor,
-          ),
-          if (_selectedPayment != 'card') ...[
+          if (_loadingMethods) const LinearProgressIndicator(),
+          if (_methodsError != null) ...[
+            Text(_methodsError!),
+            TextButton(onPressed: _isProcessing ? null : _loadMethods,
+                child: const Text('Reload payment options')),
+          ],
+          if (_methods[_methodId]?['is_test'] == true)
+            const Padding(padding: EdgeInsets.symmetric(vertical: 10),
+                child: Text('TEST MODE — no real money will be transferred.',
+                    style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.bold))),
+          if (!_hasAttempt) ...[
             const SizedBox(height: 14),
             TextField(
               controller: _phoneController,
+              enabled: !_isProcessing && !_hasAttempt,
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
                 labelText: 'Mobile money number',
@@ -523,7 +551,7 @@ class _PaymentScreenState extends State<PaymentScreen>
             ),
             const SizedBox(height: 4),
             Text(
-              'Payment is sent to this mobile money number',
+              'Approve the collection on your phone. Never share your MoMo PIN.',
               style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
             ),
           ],
@@ -591,9 +619,11 @@ class _PaymentScreenState extends State<PaymentScreen>
     required Color accentColor,
   }) {
     final isSelected = _selectedPayment == id;
+    final method = id == 'orange' ? 'ORANGE_MONEY' : 'MTN_MOMO';
+    final enabled = !_isProcessing && !_hasAttempt && _methods[method]?['available'] == true;
 
     return GestureDetector(
-      onTap: () => setState(() => _selectedPayment = id),
+      onTap: enabled ? () => setState(() => _selectedPayment = id) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.all(14),
@@ -692,96 +722,106 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
   }
 
-  // Payment execution flow
-  void _processPayment() async {
-    if (widget.orderId == null) {
-      _showSuccessDialog();
+  // Reserve/create only when the user actually presses Pay. A lost response
+  // is retried with the same checkout token/attempt, never a second charge.
+  Future<void> _processPayment() async {
+    if (_isProcessing) return;
+    if (!_hasAttempt && widget.productId == null && _orderId == null) {
+      setState(() => _paymentMessage = 'This product is offline. Connect to the marketplace before paying.');
       return;
     }
-
-    setState(() => _isProcessing = true);
-    try {
-      final api = ApiService();
-
-      // Map dynamic naming for backend API expectations
-      final apiPaymentType = _selectedPayment == 'mtn'
-          ? 'MTN_MOMO'
-          : _selectedPayment == 'orange'
-              ? 'ORANGE_MONEY'
-              : 'CARD';
-
-      final phone = _phoneController.text.trim();
-      if (apiPaymentType != 'CARD' && phone.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please enter your mobile money number'),
-              backgroundColor: Color(0xFFC62828),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+    final phone = _phoneController.text.trim();
+    if (!_hasAttempt && (phone.isEmpty || !_methodAvailable)) {
+      setState(() => _paymentMessage = 'Choose an available payment method and enter your mobile money number.');
+      return;
+    }
+    if (!_hasAttempt) {
+      final digits = phone.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^00'), '');
+      final valid = RegExp(r'^(?:237)?6[0-9]{8}$').hasMatch(digits) ||
+          (_methods[_methodId]?['environment'] == 'sandbox' && RegExp(r'^4673312345[0-4]$').hasMatch(digits));
+      if (!valid) {
+        setState(() => _paymentMessage = 'Enter a valid Cameroon mobile number, for example +237 6XX XX XX XX.');
         return;
       }
-
-      final payment = await api.createPayment(
-        widget.orderId!,
-        apiPaymentType,
-        phone.isEmpty ? '+237600000000' : phone,
-        _orderTotal,
-      );
-
-      var result = await api.processPayment(payment['id']);
-      for (var attempt = 0;
-          attempt < 5 &&
-              (result['status'] == 'pending' ||
-                  result['status'] == 'processing');
-          attempt++) {
-        await Future<void>.delayed(const Duration(seconds: 3));
-        result = await api.verifyPayment(payment['id']);
-      }
-
-      if (!mounted) return;
-      if (result['status'] == 'completed') {
-        _showSuccessDialog();
-      } else if (result['status'] == 'pending' ||
-          result['status'] == 'processing') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Payment request sent. Approve it on your phone; we will confirm it shortly.',
-            ),
-            backgroundColor: Color(0xFFEF6C00),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+    }
+    setState(() { _isProcessing = true; _paymentMessage = null; });
+    try {
+      Map<String, dynamic> result;
+      if (_hasAttempt) {
+        result = await _api.verifyPayment(_paymentId!);
+        if (!mounted) return;
+        if (result['status'] == 'pending') {
+          result = await _api.processPayment(_paymentId!, expectedAmount: _orderTotal);
+        }
       } else {
-        // The provider rejected or could not confirm the transaction.
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Payment ${result['status'] ?? 'failed'}. Please check your mobile money '
-              'number and try again, or choose another payment method.',
-            ),
-            backgroundColor: const Color(0xFFC62828),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (_orderId == null) {
+          final displayedTotal = _orderTotal;
+          final order = await _api.createOrder(widget.productId!, widget.quantity,
+              checkoutKey: _checkoutKey, paymentMethod: _methodId);
+          _orderId = order['id'] as int;
+          _serverTotal = double.tryParse(order['total_price'].toString());
+          if (_serverTotal == null || !_serverTotal!.isFinite || _serverTotal! <= 0) {
+            throw ApiException('The server returned an invalid order amount. Contact support.');
+          }
+          if ((_serverTotal! - displayedTotal).abs() > 0.005) {
+            if (mounted) setState(() => _paymentMessage = 'The current total is '
+                '${_formatAmount(_serverTotal!)} FCFA. Review the updated price and '
+                'press Pay again to confirm. No payment request has been sent.');
+            return;
+          }
+        }
+        if (!mounted) return;
+        final payment = await _api.createPayment(_orderId!, _methodId, phone, _orderTotal);
+        _paymentId = payment['id'] as int;
+        _paymentState = payment['status']?.toString() ?? 'pending';
+        _isTestPayment = payment['is_test'] == true;
+        if (!mounted) return;
+        // Mark as unresolved locally BEFORE awaiting the external collection.
+        result = _paymentState == 'pending'
+            ? await _api.processPayment(_paymentId!, expectedAmount: _orderTotal) : payment;
+      }
+      if (!mounted) return;
+      _applyPaymentResult(result);
+      for (var attempt = 0; attempt < 10 && _paymentState == 'processing'; attempt++) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        if (!mounted) return;
+        result = await _api.verifyPayment(_paymentId!);
+        if (!mounted) return;
+        _applyPaymentResult(result);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Payment failed: $e'),
-            backgroundColor: const Color(0xFFC62828),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        setState(() => _paymentMessage = e is ApiException && e.code == 'invalid_payment_transition'
+            ? e.message
+            : _hasAttempt
+            ? 'Confirmation is not available yet. Use Check payment status; do not '
+                'pay again. You can also return here from My Orders.'
+            : e is ApiException ? e.message
+            : 'Could not connect to checkout. No payment was confirmed. Please retry.');
       }
     } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  void _applyPaymentResult(Map<String, dynamic> result) {
+    final state = result['status']?.toString() ?? 'processing';
+    setState(() {
+      _paymentState = state;
+      _isTestPayment = result['is_test'] == true;
+      _paymentMessage = result['message']?.toString() ?? result['last_error']?.toString();
+      if (_paymentMessage == null || _paymentMessage!.isEmpty) {
+        _paymentMessage = state == 'processing'
+            ? 'Approve on your phone. Awaiting confirmation; do not pay again.'
+            : state == 'review_required'
+                ? 'Funds received, but this order needs support review. Do not pay again.'
+                : 'Payment status: $state';
       }
+      if (state == 'failed') _paymentId = null; // definitive rejection only
+    });
+    if (state == 'completed' && !_successShown) {
+      _successShown = true;
+      _showSuccessDialog();
     }
   }
 
@@ -823,7 +863,7 @@ class _PaymentScreenState extends State<PaymentScreen>
 
               // Title Header
               Text(
-                'Payment Confirmed!',
+                _isTestPayment ? 'Test payment confirmed' : 'Payment Confirmed!',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
@@ -834,7 +874,9 @@ class _PaymentScreenState extends State<PaymentScreen>
 
               // Sub-summary info
               Text(
-                'Your payment has been secure-processed. Your order will be dispatched to Bastos, Yaoundé shortly.',
+                _isTestPayment
+                    ? 'This was a test. No money was transferred. Do not fulfil this as a live sale.'
+                    : 'Your payment is confirmed and the dealer has received your order. Track it in My Orders.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 13,

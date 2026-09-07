@@ -113,7 +113,28 @@ def check_weather_config(app_configs, **kwargs):
         if not getattr(settings, 'OPENROUTER_MODEL', ''):
             errors.append(Warning(
                 'OPENROUTER_MODEL is empty.',
-                hint='Set a vision model such as google/gemma-4-26b-a4b-it:free.',
+                hint='Use openrouter/free, or verify a free vision model with check_ai_model.',
                 id='agrisense.W011',
             ))
     return errors
+
+
+@register()
+def check_payment_configuration(app_configs, **kwargs):
+    from payments.gateway import payment_methods
+    warnings = []
+    if settings.PAYMENT_SIMULATOR_ENABLED and not settings.DEBUG:
+        warnings.append(Warning(
+            'Payment simulation is enabled but DEBUG is off; simulation will be refused.',
+            hint='Use a separate test environment, or configure MTN for real collection.',
+            id='agrisense.W012'))
+    if not any(m['available'] for m in payment_methods()):
+        warnings.append(Warning(
+            'No payment gateway is configured; checkout is disabled.',
+            hint='Run manage.py check_payments and follow docs/PAYMENTS_SETUP.md.',
+            id='agrisense.W013'))
+    if settings.CACHE_BACKEND != 'redis' and not settings.DEBUG:
+        warnings.append(Warning(
+            'Use a shared Redis cache for production AI deduplication and throttling.',
+            hint='Set CACHE_BACKEND=redis and REDIS_CACHE_URL.', id='agrisense.W014'))
+    return warnings

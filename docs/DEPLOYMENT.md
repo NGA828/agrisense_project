@@ -18,7 +18,7 @@ mysql -u root -p -e "GRANT ALL PRIVILEGES ON agrisense_db.* TO 'agrisense_user'@
 export DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3
 
 python manage.py migrate
-python manage.py seed_data          # demo users, products, diseases, orders...
+python manage.py seed_data          # ISOLATED DEV ONLY: creates known demo passwords
 python manage.py createsuperuser    # optional extra admin
 python manage.py runserver
 ```
@@ -32,15 +32,17 @@ flutter pub get
 # Android emulator: host machine is reachable at 10.0.2.2
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api
 
-# iOS simulator / desktop / web
+# iOS simulator / desktop
 flutter run --dart-define=API_BASE_URL=http://localhost:8000/api
 
 # Physical device (same Wi-Fi):
 flutter run --dart-define=API_BASE_URL=http://192.168.x.x:8000/api
 ```
 
-The default `API_BASE_URL` already adapts per platform (`10.0.2.2` on Android,
-`localhost` elsewhere) so plain `flutter run` also works on emulators.
+The default `API_BASE_URL` uses `10.0.2.2` on Android emulators, localhost on
+iOS simulator/desktop, and the **browser origin on web**. Web needs a reverse
+proxy for `/api/`, `/media/`, `/ws/`, or an explicit reachable HTTPS API URL
+with CORS/WebSocket origins configured. A remote browser must not call localhost.
 
 > **Splash screen note:** the splash is driven by `AuthProvider.restoreSession()`,
 > which holds the splash for a minimum ~2.2 s so the logo animation always
@@ -63,10 +65,12 @@ The default `API_BASE_URL` already adapts per platform (`10.0.2.2` on Android,
 ## 2. Production stack (Docker)
 
 ```bash
-cp backend/agrisense_backend/.env.example .env   # fill in secrets
-docker compose up -d --build
-docker compose exec backend python manage.py migrate
-docker compose exec backend python manage.py seed_data
+cp backend/agrisense_backend/.env.example backend/agrisense_backend/.env
+# Privately set production secrets, DEBUG=False, allowed hosts/origins and providers.
+docker compose --env-file backend/agrisense_backend/.env up -d --build
+# The backend entrypoint applies migrations. Create your own admin account:
+docker compose --env-file backend/agrisense_backend/.env exec backend python manage.py createsuperuser
+# Add reviewed Disease records via admin; do NOT seed demo accounts on a public server.
 ```
 
 - API + WebSockets: `http://<host>:8000`
@@ -82,10 +86,11 @@ docker compose exec backend python manage.py seed_data
 - [ ] Restrict `/admin/` (VPN / IP allow-list).
 - [ ] Run `python manage.py expire_premiums` daily (cron) so expired dealer
       subscriptions lose their search boost.
-- [ ] Run `python manage.py release_stale_reservations` every few minutes (cron /
+- [ ] Run `python manage.py reconcile_payments` every few minutes (cron /
       Celery beat) so abandoned unpaid orders free their reserved stock.
 - [ ] Set a strong `PAYMENT_WEBHOOK_SECRET` and configure provider callbacks to
-      `POST /api/payments/webhook/` (HMAC-signed) for real MTN/Orange money flows.
+      `POST /api/payments/mtn/callback/` for native MTN hints; see [payment setup](PAYMENTS_SETUP.md).
+      Live completion always requires an authenticated provider status query.
 - [ ] Set `ORDER_RESERVATION_MINUTES` and, once monetising, `PLATFORM_COMMISSION_RATE`.
 - [ ] For true push notifications, set `PUSH_PROVIDER=fcm` and `FCM_CREDENTIALS_PATH`
       to a Firebase service-account JSON; the app registers device tokens via
@@ -99,7 +104,7 @@ docker compose exec backend python manage.py seed_data
 - [ ] Set `PAYMENT_WEBHOOK_SECRET` to a long random value and configure provider callbacks.
 - [ ] Optional: set `SENTRY_DSN` for error tracking; keep `JSON_LOGS=true` and a sane
       `LOG_LEVEL` for structured, request-id-tagged logging.
-- [ ] CI (`.github/workflows/ci.yml`) runs backend checks + tests and `flutter analyze`/test.
+- [ ] Run backend tests on SQLite and MySQL, migration/asset checks, and Flutter analysis/tests/build. CI is deferred in this update.
 - [ ] For phone OTP, set `SMS_PROVIDER` (noop logs the code / debug returns it;
       africastalking / twilio for real delivery) and enable
       `OTP_REQUIRED_FOR_REGISTRATION` / `OTP_REQUIRED_FOR_PASSWORD_RESET` when ready.
@@ -114,9 +119,8 @@ docker compose exec backend python manage.py seed_data
 - [ ] (Phase F, optional) Wire an IoT/MQTT bridge to `POST /api/sensors/{id}/ingest/` and a
       USSD/SMS gateway to `POST /api/ussd/`. Run `load_tests/` (Locust/k6) against staging
       before scaling out workers.
-- [ ] Configure real MTN MoMo / Orange Money credentials and set
-      `MTN_MOMO_ENABLED`/`ORANGE_MONEY_ENABLED`; provide the callback host for
-      webhook-style payment verification.
+- [ ] Configure approved MTN Collection credentials and `MTN_MOMO_ENABLED`.
+      Orange/card adapters are not implemented; never substitute test simulation.
 - [ ] Add `OPENWEATHER_API_KEY` for live forecasts.
 - [ ] Point the Flutter app at the production `API_BASE_URL` via
       `--dart-define` at build time (do not ship debug URLs).
@@ -130,34 +134,31 @@ when running more than one ASGI worker.
 
 ## 4. Payments
 
-The default `SandboxGateway` simulates MTN MoMo / Orange Money deterministically:
-phone numbers ending in an even digit succeed, odd digits fail. Replace it via
-`payments/gateway.py` by implementing `MTNMoMoGateway`/`OrangeMoneyGateway`
-(`request_payment`, `verify_transaction`) — credentials come from the
-environment, and `get_gateway()` returns the live adapter only when the
-corresponding `*_ENABLED=true` flag is set, so switching providers is a config
-change, not a code change.
+Follow [PAYMENTS_SETUP.md](PAYMENTS_SETUP.md), including the historical-data audit.
+Gateways default to disabled. The local simulator requires an explicit flag and
+DEBUG; neither it nor MTN sandbox moves funds. Live Cameroon Collection requires
+approved merchant credentials and the `mtncameroon` target. Only provider-verified
+payments publish a dealer order. Keep worker/beat running for reconciliation.
+Ledger entries are not real refunds or dealer wallet payouts.
 
 ## 5. AI engine
 
-- Primary: `AI_ENGINE=openrouter` with backend-only `OPENROUTER_API_KEY` and
-  `OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free`.
-- The request schema and a second server-side check restrict classification to
-  `Healthy`, `Inconclusive`, or exact admin-reviewed `Disease` rows for the
-  selected crop. No treatment fields are sent to or accepted from the model.
-- Photos are resized and re-encoded without EXIF before private base64 upload.
-  The privacy notice must disclose third-party image processing.
-- Missing credentials, network/quota errors, malformed output and unreviewed
-  labels fail closed. Keep `AI_ALLOW_RULE_FALLBACK=false` in production.
-- Optional offline mode: `AI_ENGINE=tensorflow`, validated Keras artifact and
-  exact class manifest; build Docker with `INSTALL_AI=true`.
-- Every diagnosis stores engine, actual routed model, raw label and alternatives.
-  See `backend/agrisense_backend/ai_engine/README.md` for full configuration.
+Follow [AI_SETUP.md](AI_SETUP.md). The default is `openrouter/free`, restricted to
+zero-priced vision endpoints and reviewed crop-specific diseases. Non-crop,
+mismatched and uncertain identities are rejected before saving a diagnosis.
+There is no silent rule-based or paid fallback on a provider error.
 
-## 6. Tests & CI
+A hosted free account's quota is shared and is not a guarantee of 50 successful
+daily scans. `AI_ENGINE=ollama` with a private vision model removes the provider
+daily quota but requires adequate tested hardware. Use the `local-ai` Compose
+profile and `OLLAMA_BASE_URL=http://ollama:11434` for the included private service.
+Always disclose the selected mode's photo-processing behavior to users.
+
+## 6. Manual validation (CI deferred)
 
 ```bash
 cd backend/agrisense_backend
+python -m pip install -r requirements-dev.txt
 DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3 python manage.py test
 ```
 
@@ -165,4 +166,24 @@ The 200+ test suite covers auth/RBAC, JWT rotation + blacklist, registration
 hardening, orders/stock integrity, payments, chat permissions, disease-DB
 authorization, restricted OpenRouter requests/responses, local inference and
 health checks.
-`flutter analyze` should be run in CI for the frontend.
+No GitHub Actions workflow is included in this update. CI was deferred with
+user approval because the publishing connection cannot write workflow files.
+Run these additional checks manually (from the repository root):
+
+```bash
+# Use an isolated test configuration/database, not live provider credentials.
+(cd backend/agrisense_backend && python manage.py makemigrations --check --dry-run --noinput)
+python tools/build_offline_db.py --check
+(cd frontend/agrisense_app && flutter pub get && flutter analyze --no-fatal-infos && flutter test && flutter build web --release)
+```
+
+Repeat the backend suite against an isolated MySQL database using the documented
+`DB_ENGINE`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST` and `DB_PORT` settings.
+Do not run tests against the application database or enable real collections.
+
+Validation for this change: 331 backend tests passed on SQLite with mocked
+providers; migration consistency and the bundled database check passed.
+Flutter analysis/tests/build, MySQL, Docker and real Redis integration checks
+have not run. Real-photo accuracy, latency, 50 successful daily analyses and
+MTN sandbox/live collection also remain unverified. Test/model credentials are
+not included, and no application database migration or deployment was performed.

@@ -17,7 +17,7 @@ import '../../models/product.dart';
 /// - Base URL is overridable at build time with
 ///   `--dart-define=API_BASE_URL=http://192.168.1.10:8000/api`
 /// - Defaults adapt per platform: Android emulators reach the host via
-///   10.0.2.2, everything else uses localhost.
+///   10.0.2.2, web uses its own origin, desktop/iOS use localhost.
 /// - On HTTP 401 the client transparently refreshes the JWT (using the stored
 ///   refresh token) and retries the original request once.
 class ApiService {
@@ -27,6 +27,7 @@ class ApiService {
     if (_definedBaseUrl.isNotEmpty) return _definedBaseUrl;
     // Android emulator can't see `localhost` of the host machine.
     if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8000/api';
+    if (kIsWeb) return '${Uri.base.origin}/api';
     return 'http://localhost:8000/api';
   }
 
@@ -219,6 +220,7 @@ class ApiService {
   Future<http.Response> _send(
     Future<http.Response> Function(Map<String, String> headers) request, {
     bool isMultipart = false,
+    Duration timeout = const Duration(seconds: 30),
   }) async {
     Future<http.Response> attempt(Map<String, String> headers) => request(headers);
 
@@ -226,7 +228,7 @@ class ApiService {
     if (isMultipart) {
       headers = Map.of(headers)..remove('Content-Type');
     }
-    var response = await attempt(headers).timeout(const Duration(seconds: 30));
+    var response = await attempt(headers).timeout(timeout);
 
     final isLoginRequest = (response.request?.url?.path ?? '').endsWith('/auth/login/');
     if (response.statusCode == 401 && !isLoginRequest) {
@@ -234,7 +236,7 @@ class ApiService {
       if (refreshed) {
         headers = await _authHeaders;
         if (isMultipart) headers = Map.of(headers)..remove('Content-Type');
-        response = await attempt(headers).timeout(const Duration(seconds: 30));
+        response = await attempt(headers).timeout(timeout);
       }
     }
     return response;
@@ -400,17 +402,30 @@ class ApiService {
   // ── Diagnosis ─────────────────────────────────────────
   Future<Diagnosis> analyzePlantImageBytes(
       Uint8List imageBytes, String fileName, String cropType) async {
-    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/diagnosis/analyze/'));
-    final token = await _storage.read(key: 'access_token');
-    if (token != null) request.headers['Authorization'] = 'Bearer $token';
-    request.files.add(http.MultipartFile.fromBytes('image', imageBytes, filename: fileName));
-    request.fields['crop_type'] = cropType;
-    // Free cloud-vision endpoints can queue briefly; keep the client timeout
-    // above the backend's configured OpenRouter timeout (60s by default).
-    final streamed = await request.send().timeout(const Duration(seconds: 90));
-    final response = await http.Response.fromStream(streamed);
-    if (response.statusCode == 201) return Diagnosis.fromJson(jsonDecode(response.body));
-    throw ApiException(_messageFrom(response, fallback: 'Analysis failed'));
+    final response = await _send((headers) async {
+      // A MultipartRequest is single-use. Rebuild it for a JWT refresh retry,
+      // preserving the exact photo and the crop captured when scanning began.
+      final request = http.MultipartRequest(
+          'POST', Uri.parse('$baseUrl/diagnosis/analyze/'));
+      request.headers.addAll(headers);
+      request.files.add(http.MultipartFile.fromBytes(
+          'image', imageBytes, filename: fileName));
+      request.fields['crop_type'] = cropType;
+      return http.Response.fromStream(await request.send());
+    }, isMultipart: true, timeout: const Duration(seconds: 45));
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final diagnosis = Diagnosis.fromJson(jsonDecode(response.body));
+      if (diagnosis.cropType.trim().toLowerCase() != cropType.trim().toLowerCase()) {
+        throw ApiException('The result did not match your selected crop. No result '
+            'will be shown. Please retry.', code: 'crop_mismatch');
+      }
+      return diagnosis;
+    }
+    String? code;
+    try {
+      code = (jsonDecode(response.body) as Map<String, dynamic>)['code']?.toString();
+    } catch (_) {}
+    throw ApiException(_messageFrom(response, fallback: 'Analysis is temporarily unavailable.'), code: code);
   }
 
   Future<List<Diagnosis>> getDiagnosisHistory() async {
@@ -553,13 +568,19 @@ class ApiService {
   }
 
   // ── Orders ────────────────────────────────────────────
-  Future<Map<String, dynamic>> createOrder(int productId, int quantity) async {
+  Future<Map<String, dynamic>> createOrder(int productId, int quantity, {
+    String? checkoutKey,
+    String? paymentMethod,
+  }) async {
     final response = await _send((h) => http.post(
           Uri.parse('$baseUrl/orders/'),
           headers: h,
-          body: jsonEncode({'product': productId, 'quantity': quantity}),
+          body: jsonEncode({'product': productId, 'quantity': quantity,
+            if (checkoutKey != null) 'checkout_key': checkoutKey,
+            if (paymentMethod != null) 'payment_method': paymentMethod,
+          }),
         ));
-    if (response.statusCode == 201) return jsonDecode(response.body);
+    if ((response.statusCode == 201 || response.statusCode == 200)) return jsonDecode(response.body);
     throw ApiException(_messageFrom(response, fallback: 'Failed to create order'));
   }
 
@@ -640,6 +661,21 @@ class ApiService {
     return {};
   }
 
+  Future<void> cancelOrder(int orderId) async {
+    final response = await _send((h) => http.post(
+        Uri.parse('$baseUrl/orders/$orderId/cancel/'), headers: h));
+    if (response.statusCode != 200) {
+      throw ApiException(_messageFrom(response, fallback: 'Could not cancel reservation.'));
+    }
+  }
+
+  Future<Map<String, dynamic>> getPaymentMethods() async {
+    final response = await _send((h) => http.get(
+        Uri.parse('$baseUrl/payments/methods/'), headers: h));
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw ApiException(_messageFrom(response, fallback: 'Payment options could not be loaded.'));
+  }
+
   // ── Payments ──────────────────────────────────────────
   Future<Map<String, dynamic>> createPayment(
       int orderId, String method, String phoneNumber, double amount) async {
@@ -653,17 +689,23 @@ class ApiService {
             'amount': amount,
           }),
         ));
-    if (response.statusCode == 201) return jsonDecode(response.body);
+    if ((response.statusCode == 201 || response.statusCode == 200)) return jsonDecode(response.body);
     throw ApiException(_messageFrom(response, fallback: 'Failed to create payment'));
   }
 
-  Future<Map<String, dynamic>> processPayment(int paymentId) async {
+  Future<Map<String, dynamic>> processPayment(int paymentId, {double? expectedAmount}) async {
     final response = await _send((h) => http.post(
           Uri.parse('$baseUrl/payments/$paymentId/process_payment/'),
           headers: h,
-        ));
+          body: jsonEncode({if (expectedAmount != null) 'expected_amount': expectedAmount.toStringAsFixed(2)}),
+        ), timeout: const Duration(seconds: 40));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to process payment'));
+    String? code;
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map) code = body['code']?.toString();
+    } catch (_) {}
+    throw ApiException(_messageFrom(response, fallback: 'Failed to process payment'), code: code);
   }
 
   Future<Map<String, dynamic>> verifyPayment(int paymentId) async {
@@ -1066,7 +1108,8 @@ class ApiService {
 
 class ApiException implements Exception {
   final String message;
-  ApiException(this.message);
+  final String? code;
+  ApiException(this.message, {this.code});
   @override
   String toString() => message;
 }

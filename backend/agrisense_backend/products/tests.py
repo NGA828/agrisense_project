@@ -202,7 +202,7 @@ class OrderTests(APITestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_dealer_updates_status_and_cancel_restores_stock(self):
+    def test_dealer_cannot_see_or_cancel_unpaid_checkout(self):
         self.auth(self.farmer)
         order = self.client.post(reverse('order-list'), {
             'product': self.product.id_product, 'quantity': 2,
@@ -210,6 +210,11 @@ class OrderTests(APITestCase):
         self.auth(self.dealer)
         resp = self.client.post(reverse('order-update-status', args=[order['id']]),
                                 {'status': 'cancelled'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 3)
+        self.auth(self.farmer)
+        resp = self.client.post(reverse('order-cancel', args=[order['id']]))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 5)
@@ -230,10 +235,10 @@ class OrderTests(APITestCase):
         }, format='json')
         resp = self.client.get(reverse('order-order-history'))
         self.assertEqual(len(resp.data), 1)
-        # Dealer sees the same order (it belongs to their product).
+        # Unpaid checkout attempts must not appear in the dealer's orders.
         self.auth(self.dealer)
         resp = self.client.get(reverse('order-order-history'))
-        self.assertEqual(len(resp.data), 1)
+        self.assertEqual(len(resp.data), 0)
 
 
 class OrderLifecycleTests(APITestCase):
@@ -337,7 +342,7 @@ class OrderLifecycleTests(APITestCase):
         self.auth(self.dealer)
         resp = self.client.post(reverse('order-update-status', args=[order_id]),
                                 {'status': 'shipped'}, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_status_cannot_regress(self):
         order_id = self.place_order(1)

@@ -1,5 +1,7 @@
 # Bundling a Pre-Populated Database Inside the AgriSense APK
 
+> **Current validation note:** CI is deferred; this update includes no GitHub Actions workflow. References below to completed CI or automatic checks are historical plans, not evidence that CI has run. Use the manual checks and outstanding-validation list in [DEPLOYMENT.md](DEPLOYMENT.md#6-manual-validation-ci-deferred).
+
 **Question answered:** *is it possible to have a file that handles the database in the mobile
 application, such that when I install the APK the database file is installed too and the app
 functions with it?*

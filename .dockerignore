@@ -1,0 +1,13 @@
+.git
+**/.env*
+!**/.env.example
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/*.sqlite3
+**/node_modules
+frontend
+backend/agrisense_backend/media
+backend/agrisense_backend/ai_models
+backend/agrisense_backend/staticfiles

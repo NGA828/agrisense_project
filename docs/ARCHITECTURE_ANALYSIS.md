@@ -1,5 +1,7 @@
 # AgriSense AI — Architecture Analysis, Gap Analysis & Production Readiness Report
 
+> **Current validation note:** CI is deferred; this update includes no GitHub Actions workflow. References below to completed CI or automatic checks are historical plans, not evidence that CI has run. Use the manual checks and outstanding-validation list in [DEPLOYMENT.md](DEPLOYMENT.md#6-manual-validation-ci-deferred).
+
 **Prepared by:** Senior Full-Stack Software Architect
 **Scope:** Full-stack audit of the AgriSense AI monorepo (`backend/` Django + `frontend/` Flutter)
 **Date:** 2026-07-31

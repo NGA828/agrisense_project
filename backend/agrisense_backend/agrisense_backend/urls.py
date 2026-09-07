@@ -13,7 +13,7 @@ from products.views import ProductViewSet, OrderViewSet, ReviewViewSet, ProductR
 from sensors.views import SensorDeviceViewSet
 from ussd.views import ussd_handler
 from chat.views import ChatRoomViewSet
-from payments.views import PaymentViewSet, payment_webhook
+from payments.views import PaymentViewSet, payment_webhook, payment_mtn_callback
 from weather.views import get_weather
 from announcements.views import AnnouncementViewSet, NotificationViewSet
 from realtime.views import register_push_token, unregister_push_token
@@ -55,6 +55,7 @@ urlpatterns = [
     path('api/admin/regional/', admin_regional_analytics, name='admin_regional_analytics'),
     path('api/admin/outbreaks/', admin_outbreaks, name='admin_outbreaks'),
     # Payment provider webhook (HMAC-signed, idempotent)
+    path('api/payments/mtn/callback/', payment_mtn_callback, name='payment_mtn_callback'),
     path('api/payments/webhook/', payment_webhook, name='payment_webhook'),
     # Push-token registration (FCM/APNs device tokens)
     path('api/push/register/', register_push_token, name='register_push_token'),

@@ -124,6 +124,7 @@ class Order(models.Model):
     quantity = models.IntegerField(default=1)
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    checkout_key = models.UUIDField(null=True, blank=True, editable=False)
     shipping_address = models.TextField(blank=True, default='')
     payment_method = models.CharField(max_length=50, blank=True, default='')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
@@ -138,12 +139,15 @@ class Order(models.Model):
 
     def is_reservation_active(self):
         from django.utils import timezone
-        return self.status == 'pending' and self.reserved_until is not None
+        return (self.status == 'pending' and self.reserved_until is not None
+                and self.reserved_until > timezone.now())
 
     def hold_stock(self):
         """Re-reserve the product stock for this order (call within a lock)."""
         from django.utils import timezone
         product = self.product
+        if not product.is_available:
+            raise ValueError('This product is no longer available.')
         if product.stock_quantity < self.quantity:
             raise ValueError(f'Insufficient stock. Only {product.stock_quantity} left.')
         product.stock_quantity -= self.quantity
@@ -157,6 +161,8 @@ class Order(models.Model):
 
     def release_stock(self):
         """Return the reserved stock to the product (call within a lock)."""
+        if self.status in self.STOCK_RELEASED_STATUSES:
+            return
         product = self.product
         product.stock_quantity += self.quantity
         if product.stock_quantity > 0:
@@ -175,6 +181,7 @@ class Order(models.Model):
         db_table = 'order'
         ordering = ['-created_at']
         constraints = [
+            models.UniqueConstraint(fields=['farmer', 'checkout_key'], name='uniq_farmer_checkout'),
             models.CheckConstraint(check=models.Q(quantity__gte=1), name='order_quantity_positive'),
             models.CheckConstraint(check=models.Q(total_price__gte=0), name='order_total_non_negative'),
         ]

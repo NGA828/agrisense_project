@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../services/api/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../farmer/farmer_widgets.dart';
+import '../payment/payment_screen.dart';
 
 /// Farmer order history: track purchases and deliveries with live status.
 class OrderHistoryScreen extends StatefulWidget {
@@ -57,6 +58,8 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   Color _statusColor(String status) {
     return switch (status) {
       'pending' => AppTheme.warning,
+      'payment_failed' => AppTheme.error,
+      'expired' => AppTheme.textMuted,
       'confirmed' => AppTheme.info,
       'shipped' => AppTheme.primary,
       'delivered' => AppTheme.success,
@@ -68,6 +71,8 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   IconData _statusIcon(String status) {
     return switch (status) {
       'pending' => Icons.hourglass_empty_rounded,
+      'payment_failed' => Icons.error_outline,
+      'expired' => Icons.timer_off_outlined,
       'confirmed' => Icons.check_circle_outline_rounded,
       'shipped' => Icons.local_shipping_rounded,
       'delivered' => Icons.check_circle_rounded,
@@ -128,9 +133,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                 child: Row(
                   children: [
                     'All', 'Pending', 'Confirmed', 'Shipped', 'Delivered',
-                    'Cancelled'
+                    'Cancelled', 'Payment failed', 'Expired'
                   ].map((t) {
-                    final f = t.toLowerCase();
+                    final f = t.toLowerCase().replaceAll(' ', '_');
                     final selected = _statusFilter == f;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
@@ -232,6 +237,8 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
     final paid = paymentStatus == 'paid' || paymentStatus == 'completed';
     final total = order['total_price'] ?? 0;
     final productName = order['product_name'] ?? 'Product';
+    final latest = order['latest_payment'] as Map?;
+    final awaitingPayment = latest?['status'] == 'processing' || latest?['status'] == 'review_required';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -326,6 +333,41 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
               ]),
             ],
           ),
+          if (!paid && (status == 'pending' || status == 'payment_failed')) ...[
+            const SizedBox(height: 10),
+            Text(awaitingPayment
+                ? 'Payment is awaiting confirmation. Do not pay again.'
+                : 'Unpaid reservation — not yet sent to the dealer.',
+                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            TextButton.icon(
+              icon: const Icon(Icons.payments_outlined),
+              label: Text(awaitingPayment ? 'Check payment status' : 'Continue payment'),
+              onPressed: () async {
+                final quantity = order['quantity'] as int? ?? 1;
+                final amount = double.tryParse(total.toString()) ?? 0;
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentScreen(
+                  orderId: order['id'] as int,
+                  paymentId: latest != null && latest['status'] != 'failed'
+                      ? latest['id'] as int? : null,
+                  paymentStatus: latest?['status']?.toString(),
+                  productName: productName.toString(), quantity: quantity,
+                  unitPrice: (amount / quantity).toString(), totalAmount: amount,
+                )));
+                if (mounted) _loadOrders();
+              },
+            ),
+            if (!awaitingPayment) TextButton(
+              onPressed: () async {
+                try {
+                  await ApiService().cancelOrder(order['id'] as int);
+                  if (mounted) _loadOrders();
+                } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                }
+              },
+              child: const Text('Cancel reservation'),
+            ),
+          ],
         ],
       ),
     );

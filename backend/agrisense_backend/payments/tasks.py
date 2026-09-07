@@ -1,44 +1,26 @@
-"""Celery tasks for the payments app."""
-
+"""Reconcile without confusing an unavailable provider with a rejected charge."""
+import logging
 from datetime import timedelta
-
 from celery import shared_task
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task
-def reconcile_payments_task(max_age_minutes=120):
-    """Reconcile in-flight payments against their provider.
-
-    Finds payments stuck in ``pending``/``processing`` older than
-    ``max_age_minutes`` and asks the gateway for the final state. This catches
-    cases where a webhook or polling callback was missed. For the sandbox
-    gateway (which finalizes synchronously) there is nothing to reconcile, so
-    this is a no-op until a real provider is configured.
-    """
+def reconcile_payments_task(max_age_minutes=1):
     from django.utils import timezone
-
     from .models import Payment
-    from .gateway import get_gateway
-    from .services import complete_payment, finalize_payment_failed
+    from .services import reconcile_payment, FINAL_STATUSES
 
     cutoff = timezone.now() - timedelta(minutes=max_age_minutes)
-    stale = Payment.objects.filter(
-        status__in=('pending', 'processing'), updated_at__lt=cutoff,
-    ).select_related('order')
-
+    pending = Payment.objects.filter(status='processing', updated_at__lte=cutoff)
     reconciled = 0
-    for payment in stale:
-        gateway = get_gateway(payment.payment_method)
-        if gateway.provider == 'sandbox':
-            continue  # nothing external to reconcile
+    for pk in pending.values_list('pk', flat=True).iterator():
         try:
-            provider_status = gateway.verify_transaction(payment.transaction_id)
+            if reconcile_payment(pk).status in FINAL_STATUSES:
+                reconciled += 1
         except Exception:
-            continue
-        if provider_status == 'completed' and payment.status != 'completed':
-            complete_payment(payment.pk)
-            reconciled += 1
-        elif provider_status == 'failed' and payment.status not in ('completed', 'refunded'):
-            finalize_payment_failed(payment.pk)
-            reconciled += 1
+            # A broken/misconfigured provider must not stop all other payments
+            # from reconciling, and must never mark this attempt failed.
+            logger.exception('Could not reconcile payment id=%s', pk)
     return reconciled

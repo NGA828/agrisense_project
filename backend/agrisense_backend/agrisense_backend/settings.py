@@ -182,7 +182,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # DRF Throttle rates (environment overridable for load tests)
 THROTTLE_AUTH_RATE = os.getenv('THROTTLE_AUTH_RATE', '10/min')
-THROTTLE_AI_RATE = os.getenv('THROTTLE_AI_RATE', '30/min')
+THROTTLE_AI_RATE = os.getenv('THROTTLE_AI_RATE', '20/min')
 THROTTLE_ANON_RATE = os.getenv('THROTTLE_ANON_RATE', '60/min')
 THROTTLE_USER_RATE = os.getenv('THROTTLE_USER_RATE', '120/min')
 THROTTLE_WEATHER_RATE = os.getenv('THROTTLE_WEATHER_RATE', '30/min')
@@ -198,6 +198,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'EXCEPTION_HANDLER': 'agrisense_backend.api_errors.exception_handler',
     'DEFAULT_THROTTLE_CLASSES': (
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
@@ -306,6 +307,18 @@ PLATFORM_COMMISSION_RATE = float(os.getenv('PLATFORM_COMMISSION_RATE', '0.0'))
 # provider and never shipped in source.
 PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', 'dev-webhook-secret')
 
+# Real collection is opt-in. Missing credentials must NEVER trigger fake success.
+PAYMENT_SIMULATOR_ENABLED = _env_bool('PAYMENT_SIMULATOR_ENABLED', False)
+PAYMENT_PROVIDER_TIMEOUT_SECONDS = float(os.getenv('PAYMENT_PROVIDER_TIMEOUT_SECONDS', '12'))
+PREMIUM_PRICE_PER_MONTH = os.getenv('PREMIUM_PRICE_PER_MONTH', '1000')
+MTN_MOMO_ENABLED = _env_bool('MTN_MOMO_ENABLED', False)
+MTN_MOMO_API_KEY = os.getenv('MTN_MOMO_API_KEY', '').strip()
+MTN_MOMO_API_USER = os.getenv('MTN_MOMO_API_USER', '').strip()
+MTN_MOMO_PRIMARY_KEY = os.getenv('MTN_MOMO_PRIMARY_KEY', '').strip()
+MTN_MOMO_ENVIRONMENT = os.getenv('MTN_MOMO_ENVIRONMENT', 'sandbox').strip()
+MTN_MOMO_BASE_URL = os.getenv('MTN_MOMO_BASE_URL', '').strip()
+MTN_MOMO_CALLBACK_URL = os.getenv('MTN_MOMO_CALLBACK_URL', '').strip()
+
 # ── Realtime / push (Phase B) ───────────────────────────────────────────
 # Push provider: 'noop' (default) | 'fcm'. Real pushes require FCM credentials.
 PUSH_PROVIDER = os.getenv('PUSH_PROVIDER', 'noop')
@@ -327,7 +340,11 @@ if CACHE_BACKEND == 'redis':
         'default': {
             'BACKEND': 'django_redis.cache.RedisCache',
             'LOCATION': os.getenv('REDIS_CACHE_URL', 'redis://127.0.0.1:6379/2'),
-            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SOCKET_CONNECT_TIMEOUT': 2,
+                'SOCKET_TIMEOUT': 2,
+            },
             'KEY_PREFIX': 'agrisense',
             'TIMEOUT': 300,
         }
@@ -362,7 +379,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'reconcile-payments': {
         'task': 'payments.tasks.reconcile_payments_task',
-        'schedule': 900.0,  # every 15 minutes
+        'schedule': 60.0,  # every minute; missed callbacks should not strand checkout
     },
     'cleanup-weather': {
         'task': 'weather.tasks.cleanup_weather_task',
@@ -384,32 +401,14 @@ CELERY_BEAT_SCHEDULE = {
 # treatments are always resolved locally. TensorFlow remains an offline option.
 AI_ENGINE = os.getenv('AI_ENGINE', 'openrouter').strip().lower()
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '').strip()
-# The diagnosis client needs three things from a model: image input, strict
-# JSON-schema structured outputs, and a provider actually serving it. Very few
-# free models satisfy all three — verify with `manage.py check_ai_model` before
-# changing this. Gemma 4 26B is served by Google AI Studio (~99.9% uptime),
-# is free, accepts images, and natively supports structured outputs. NOTE:
-# free OpenRouter models are retired regularly (dots-3-note-preview:free is
-# scheduled for removal 2026-09-30) — when diagnoses suddenly all fail, run
-# `python manage.py check_ai_model --list-free` and refresh these ids.
-OPENROUTER_MODEL = os.getenv(
-    'OPENROUTER_MODEL', 'google/gemma-4-26b-a4b-it:free').strip()
-# Comma-separated models tried, in order, when the primary is rate-limited
-# (free tiers are 20 req/min and 50-1000 req/day), down, or moderation-blocked.
-# Sent as OpenRouter's `models` array so failover happens server-side in one
-# round trip instead of costing the farmer a second upload.
+# The free router selects currently available vision/structured-output models;
+# it avoids pinning every deployment to short-lived, retired free model slugs.
+OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'openrouter/free').strip()
 OPENROUTER_FALLBACK_MODELS = [
-    model.strip()
-    for model in os.getenv(
-        'OPENROUTER_FALLBACK_MODELS',
-        'meta-llama/llama-4-scout:free,'
-        'mistralai/mistral-small-3.1-24b-instruct:free,'
-        'dots-studio/dots-3-note-preview:free').split(',')
-    if model.strip()
+    model.strip() for model in os.getenv(
+        'OPENROUTER_FALLBACK_MODELS', 'openrouter/free').split(',') if model.strip()
 ]
-# Completion budget shared by the final JSON and any hidden reasoning tokens.
-# Small caps make reasoning models return an empty body and fail every scan.
-OPENROUTER_MAX_TOKENS = int(os.getenv('OPENROUTER_MAX_TOKENS', '2000'))
+OPENROUTER_MAX_TOKENS = int(os.getenv('OPENROUTER_MAX_TOKENS', '1024'))
 OPENROUTER_BASE_URL = os.getenv(
     'OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1').strip()
 # Spend guard: refuse to call any model that is not ':free', and pin the
@@ -417,10 +416,10 @@ OPENROUTER_BASE_URL = os.getenv(
 # paid models deliberately with OPENROUTER_ALLOW_PAID_MODELS=true.
 OPENROUTER_FREE_ONLY = not _env_bool('OPENROUTER_ALLOW_PAID_MODELS', False)
 OPENROUTER_TIMEOUT_SECONDS = float(
-    os.getenv('OPENROUTER_TIMEOUT_SECONDS', '60'))
+    os.getenv('OPENROUTER_TIMEOUT_SECONDS', '25'))
 OPENROUTER_IMAGE_MAX_DIMENSION = int(
-    os.getenv('OPENROUTER_IMAGE_MAX_DIMENSION', '1280'))
-OPENROUTER_IMAGE_QUALITY = int(os.getenv('OPENROUTER_IMAGE_QUALITY', '88'))
+    os.getenv('OPENROUTER_IMAGE_MAX_DIMENSION', '1024'))
+OPENROUTER_IMAGE_QUALITY = int(os.getenv('OPENROUTER_IMAGE_QUALITY', '82'))
 OPENROUTER_CONFIDENCE_THRESHOLD = float(
     os.getenv('OPENROUTER_CONFIDENCE_THRESHOLD', '70'))
 # A general vision model's self-reported certainty is not calibrated pathology
@@ -429,6 +428,19 @@ OPENROUTER_MAX_CONFIDENCE = float(
     os.getenv('OPENROUTER_MAX_CONFIDENCE', '95'))
 OPENROUTER_APP_URL = os.getenv('OPENROUTER_APP_URL', '').strip()
 OPENROUTER_APP_TITLE = os.getenv('OPENROUTER_APP_TITLE', 'AgriSense AI').strip()
+
+# Validate the subject independently of the selected-crop disease allow-list.
+AI_CROP_CONFIDENCE_THRESHOLD = float(os.getenv('AI_CROP_CONFIDENCE_THRESHOLD', '80'))
+AI_MAX_UPLOAD_BYTES = int(os.getenv('AI_MAX_UPLOAD_BYTES', str(10 * 1024 * 1024)))
+# Same user's identical image + crop + knowledge-base/config revision: reuse a
+# recent diagnosis instead of spending another provider request. Redis in prod.
+AI_ANALYSIS_CACHE_SECONDS = int(os.getenv('AI_ANALYSIS_CACHE_SECONDS', '600'))
+
+# Optional self-hosted vision model: no API quota or per-scan model fee.
+# Keep this service private; only Django, never the browser, calls Ollama.
+OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma3:4b').strip()
+OLLAMA_TIMEOUT_SECONDS = float(os.getenv('OLLAMA_TIMEOUT_SECONDS', '25'))
 
 # Optional local TensorFlow engine settings.
 AI_MODEL_PATH = os.getenv('AI_MODEL_PATH', '').strip()

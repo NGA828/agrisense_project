@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/diagnosis_provider.dart';
 import '../../services/api/api_service.dart';
-import '../../services/local/offline_database.dart';
 import '../diagnosis/diagnosis_result_screen.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -19,8 +18,10 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen>
     with TickerProviderStateMixin {
   bool _isScanning = false;
-  String _selectedCrop = 'Tomato';
-  List<String> _crops = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa'];
+  String? _selectedCrop;
+  List<String> _crops = [];
+  bool _loadingCrops = true;
+  String? _cropError;
   // Preferred crop order mirrors the backend's PREFERRED_CROP_ORDER so the
   // local default list is always in the right order even before the server
   // responds.
@@ -56,25 +57,24 @@ class _CameraScreenState extends State<CameraScreen>
     _loadSupportedCrops();
   }
 
-  /// Pull the crop list from the server's knowledge base; when offline fall
-  /// back to the pre-populated SQLite database shipped inside the APK, and only
-  /// then to the hard-coded defaults.
+  /// Only the server knows which crops the active model has reviewed data for.
+  /// Offline knowledge-base browsing is separate; do not advertise unsupported
+  /// online scans or silently switch a farmer's selection to Tomato.
   Future<void> _loadSupportedCrops() async {
+    setState(() { _loadingCrops = true; _cropError = null; });
     try {
       final crops = await ApiService().getSupportedCrops();
-      if (mounted && crops.isNotEmpty) {
-        _applyCrops(crops.cast<String>());
-        return;
+      if (!mounted) return;
+      _applyCrops(crops.cast<String>());
+      if (crops.isEmpty) {
+        setState(() => _cropError = 'No crops are ready for analysis. Contact the administrator.');
       }
     } catch (_) {
-      // Fall through to the bundled database.
-    }
-
-    try {
-      final offline = await OfflineDatabase.instance.supportedCrops();
-      if (mounted && offline.isNotEmpty) _applyCrops(offline);
-    } catch (_) {
-      // Hard-coded default list remains in use.
+      if (mounted) {
+        setState(() => _cropError = 'Connect to the server to load available crops.');
+      }
+    } finally {
+      if (mounted) setState(() => _loadingCrops = false);
     }
   }
 
@@ -90,8 +90,8 @@ class _CameraScreenState extends State<CameraScreen>
       });
     setState(() {
       _crops = sorted;
-      // Keep current selection if valid, otherwise default to first crop.
-      if (!_crops.contains(_selectedCrop)) _selectedCrop = _crops.first;
+      // Never silently change the selected crop.
+      if (!_crops.contains(_selectedCrop)) _selectedCrop = null;
     });
   }
 
@@ -136,7 +136,7 @@ class _CameraScreenState extends State<CameraScreen>
                       // ── Instructions ──
                       _buildInstructions(),
                       const SizedBox(height: 12),
-                      _buildCloudAiNotice(),
+                      _buildAiPrivacyNotice(),
                       const SizedBox(height: 24),
 
                       // ── Crop Selector ──
@@ -613,7 +613,7 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  Widget _buildCloudAiNotice() {
+  Widget _buildAiPrivacyNotice() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -629,9 +629,9 @@ class _CameraScreenState extends State<CameraScreen>
           SizedBox(width: 9),
           Expanded(
             child: Text(
-              'Cloud AI analysis: your photo is sent over an encrypted '
-              'connection to the configured third-party AI provider. Treatment '
-              'information always comes from AgriSense’s reviewed database.',
+              'Online crop screening: your photo goes to the AgriSense server and, '
+              'when cloud AI is enabled, its AI provider. Treatments come from '
+              'reviewed data. AI can be wrong; confirm treatment with an agronomist.',
               style: TextStyle(
                 color: Color(0xFF0D47A1),
                 fontSize: 10.5,
@@ -667,6 +667,15 @@ class _CameraScreenState extends State<CameraScreen>
             color: AppTheme.textPrimary,
           ),
         ),
+        if (_loadingCrops) const LinearProgressIndicator(),
+        if (_cropError != null) ...[
+          Text(_cropError!, style: const TextStyle(color: AppTheme.error)),
+          TextButton(onPressed: _isScanning ? null : _loadSupportedCrops,
+              child: const Text('Reload crops')),
+        ],
+        Text(_isScanning ? 'Checking your $_selectedCrop photo…'
+            : _selectedCrop == null ? 'Choose your crop before taking a photo.'
+            : 'Only $_selectedCrop will be analysed.'),
         const SizedBox(height: 12),
         SizedBox(
           height: 48,
@@ -687,7 +696,7 @@ class _CameraScreenState extends State<CameraScreen>
               final isSelected = crop == _selectedCrop;
 
               return GestureDetector(
-                onTap: () {
+                onTap: _isScanning ? null : () {
                   setState(() => _selectedCrop = crop);
                 },
                 child: AnimatedContainer(
@@ -778,7 +787,7 @@ class _CameraScreenState extends State<CameraScreen>
             ],
           ),
           child: ElevatedButton.icon(
-            onPressed: _isScanning ? null : _captureImage,
+            onPressed: _isScanning || _loadingCrops || _selectedCrop == null || _cropError != null ? null : _captureImage,
             icon: const Icon(Icons.camera_alt_rounded,
                 color: Colors.white, size: 22),
             label: Text(
@@ -808,7 +817,7 @@ class _CameraScreenState extends State<CameraScreen>
             borderRadius: BorderRadius.circular(16),
           ),
           child: OutlinedButton.icon(
-            onPressed: _isScanning ? null : _pickImage,
+            onPressed: _isScanning || _loadingCrops || _selectedCrop == null || _cropError != null ? null : _pickImage,
             icon: Icon(Icons.photo_library_rounded,
                 color: AppTheme.primary, size: 22),
             label: Text(
@@ -933,64 +942,53 @@ class _CameraScreenState extends State<CameraScreen>
   // ─────────────────────────────────────────────
   //  IMAGE HANDLING
   // ─────────────────────────────────────────────
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      _analyzeImage(bytes, pickedFile.name);
-    }
-  }
+  Future<void> _pickImage() => _chooseAndAnalyze(ImageSource.gallery);
+  Future<void> _captureImage() => _chooseAndAnalyze(ImageSource.camera);
 
-  Future<void> _captureImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.camera);
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      _analyzeImage(bytes, pickedFile.name);
-    }
-  }
-
-  void _analyzeImage(List<int> imageBytes, String fileName) async {
+  Future<void> _chooseAndAnalyze(ImageSource source) async {
+    final crop = _selectedCrop; // freeze BEFORE camera/gallery or network awaits
+    if (_isScanning || crop == null) return;
     setState(() => _isScanning = true);
-    final provider = context.read<DiagnosisProvider>();
-    await provider.analyzeImage(
-        Uint8List.fromList(imageBytes), fileName, _selectedCrop);
-    if (mounted) {
-      setState(() => _isScanning = false);
-      final diagnosis = provider.currentDiagnosis;
+    try {
+      final pickedFile = await ImagePicker().pickImage(
+        source: source, maxWidth: 1024, maxHeight: 1024, imageQuality: 82,
+        requestFullMetadata: false,
+      );
+      if (pickedFile == null || !mounted) return;
+      final bytes = await pickedFile.readAsBytes();
+      if (!mounted) return;
+      final provider = context.read<DiagnosisProvider>();
+      final diagnosis = await provider.analyzeImage(
+          Uint8List.fromList(bytes), pickedFile.name, crop);
+      if (!mounted) return;
       if (diagnosis != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DiagnosisResultScreen(diagnosis: diagnosis),
-          ),
-        );
+        await Navigator.push(context, MaterialPageRoute(
+          builder: (_) => DiagnosisResultScreen(diagnosis: diagnosis),
+        ));
       } else {
-        final err = provider.error ?? "unknown error";
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.error_outline_rounded, color: AppTheme.error),
-                const SizedBox(width: 8),
-                Text('Analysis Failed', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18)),
-              ],
-            ),
-            content: Text(err, style: GoogleFonts.poppins(fontSize: 14)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Close', style: GoogleFonts.poppins(color: AppTheme.primary, fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-        );
+        final rejected = {'not_a_crop', 'crop_mismatch', 'crop_uncertain', 'invalid_image'}
+            .contains(provider.errorCode);
+        await _showAnalysisMessage(rejected ? 'Check your photo' : 'Analysis unavailable',
+            provider.error ?? 'Please try again shortly.');
       }
+    } catch (_) {
+      if (mounted) {
+        await _showAnalysisMessage('Could not open photo',
+            'Check camera/photo permissions and try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
     }
   }
+
+  Future<void> _showAnalysisMessage(String title, String message) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title), content: Text(message),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+    ),
+  );
+
 }
 
 // ─────────────────────────────────────────────
