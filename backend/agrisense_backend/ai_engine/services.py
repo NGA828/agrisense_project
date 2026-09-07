@@ -491,7 +491,7 @@ class OpenRouterEngine(PlantPathologyEngine):
             raise AIImageRejected(
                 'This photo does not appear to show a crop plant. Upload a clear '
                 'photo of a real leaf, stem, or fruit.', 'not_a_crop')
-        identity_threshold = getattr(settings, 'AI_CROP_CONFIDENCE_THRESHOLD', 80)
+        identity_threshold = getattr(settings, 'AI_CROP_CONFIDENCE_THRESHOLD', 65)
         if (prediction.image_type != 'crop'
                 or crop_key(prediction.detected_crop) in ('', 'unknown', 'uncertain')
                 or prediction.crop_confidence < identity_threshold):
@@ -833,7 +833,7 @@ class TensorFlowEngine(PlantPathologyEngine):
             overall = max(self._classes, key=lambda item: probabilities[item.index])
             if (crop_key(overall.crop_type) != crop_key(crop_type)
                     and probabilities[overall.index] * 100 >= getattr(
-                        settings, 'AI_CROP_CONFIDENCE_THRESHOLD', 80)):
+                        settings, 'AI_CROP_CONFIDENCE_THRESHOLD', 65)):
                 raise AIImageRejected(
                     f'The model identified {overall.crop_type}, not {crop_type}. '
                     'Check the selected crop and photo.', 'crop_mismatch', overall.crop_type)

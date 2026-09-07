@@ -458,7 +458,10 @@ GROQ_IMAGE_MAX_DIMENSION = int(os.getenv('GROQ_IMAGE_MAX_DIMENSION', '1024'))
 GROQ_IMAGE_QUALITY = int(os.getenv('GROQ_IMAGE_QUALITY', '82'))
 
 # Validate the subject independently of the selected-crop disease allow-list.
-AI_CROP_CONFIDENCE_THRESHOLD = float(os.getenv('AI_CROP_CONFIDENCE_THRESHOLD', '80'))
+# Hosted vision confidence is not calibrated like a classifier probability.
+# Keep a meaningful identity floor without rejecting usable crop photos when
+# the selected crop is still identified correctly.
+AI_CROP_CONFIDENCE_THRESHOLD = float(os.getenv('AI_CROP_CONFIDENCE_THRESHOLD', '65'))
 AI_MAX_UPLOAD_BYTES = int(os.getenv('AI_MAX_UPLOAD_BYTES', str(10 * 1024 * 1024)))
 # Same user's identical image + crop + knowledge-base/config revision: reuse a
 # recent diagnosis instead of spending another provider request. Redis in prod.
