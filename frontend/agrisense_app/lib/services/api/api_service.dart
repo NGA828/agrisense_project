@@ -27,7 +27,21 @@ class ApiService {
     if (_definedBaseUrl.isNotEmpty) return _definedBaseUrl;
     // Android emulator can't see `localhost` of the host machine.
     if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8000/api';
-    if (kIsWeb) return '${Uri.base.origin}/api';
+    if (kIsWeb) {
+      // `flutter run -d chrome` serves the app from a temporary web server
+      // (usually another port), while Django listens on port 8000. Keep
+      // deployed builds same-origin, but route local Chrome builds to Django.
+      final host = Uri.base.host;
+      if (host == 'localhost' || host == '127.0.0.1') {
+        return Uri(
+              scheme: Uri.base.scheme,
+              host: host,
+              port: 8000,
+            ).toString().replaceFirst(RegExp(r'/$'), '') +
+            '/api';
+      }
+      return '${Uri.base.origin}/api';
+    }
     return 'http://localhost:8000/api';
   }
 
@@ -57,13 +71,13 @@ class ApiService {
   static String resolveMedia(String? path) {
     if (path == null || path.isEmpty) return '';
     if (path.startsWith('http')) return path;
-    
+
     // Ensure path has /media prefix if it doesn't already
     String cleanPath = path.startsWith('/') ? path : '/$path';
     if (!cleanPath.startsWith('/media/')) {
       cleanPath = '/media$cleanPath';
     }
-    
+
     final base = baseUrl.replaceFirst(RegExp(r'/api$'), '');
     return '$base$cleanPath';
   }
@@ -99,7 +113,8 @@ class ApiService {
           }),
         ));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to register push token'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to register push token'));
     }
   }
 
@@ -110,19 +125,21 @@ class ApiService {
           body: jsonEncode({'token': token}),
         ));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to unregister push token'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to unregister push token'));
     }
   }
 
   // ── Reviews & product reports (Phase D) ───────────────
   Future<List<dynamic>> getReviews(int productId) async {
-    final response = await _send((h) =>
-        http.get(Uri.parse('$baseUrl/reviews/?product=$productId'), headers: h));
+    final response = await _send((h) => http
+        .get(Uri.parse('$baseUrl/reviews/?product=$productId'), headers: h));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data is List ? data : (data['results'] ?? []);
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load reviews'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load reviews'));
   }
 
   Future<void> createReview({
@@ -133,10 +150,12 @@ class ApiService {
     final response = await _send((h) => http.post(
           Uri.parse('$baseUrl/reviews/'),
           headers: h,
-          body: jsonEncode({'product': productId, 'rating': rating, 'comment': comment}),
+          body: jsonEncode(
+              {'product': productId, 'rating': rating, 'comment': comment}),
         ));
     if (response.statusCode != 201) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to submit review'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to submit review'));
     }
   }
 
@@ -148,10 +167,12 @@ class ApiService {
     final response = await _send((h) => http.post(
           Uri.parse('$baseUrl/product_reports/'),
           headers: h,
-          body: jsonEncode({'product': productId, 'reason': reason, 'details': details}),
+          body: jsonEncode(
+              {'product': productId, 'reason': reason, 'details': details}),
         ));
     if (response.statusCode != 201) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to report product'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to report product'));
     }
   }
 
@@ -162,7 +183,8 @@ class ApiService {
           body: jsonEncode({'decision': decision}),
         ));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to resolve report'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to resolve report'));
     }
   }
 
@@ -174,7 +196,8 @@ class ApiService {
       final data = jsonDecode(response.body);
       return data is List ? data : (data['results'] ?? []);
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load reports'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load reports'));
   }
 
   // ── Audit log (admin) ─────────────────────────────────
@@ -185,34 +208,44 @@ class ApiService {
 
   // ── Dealer sales analytics ────────────────────────────
   Future<Map<String, dynamic>> getDealerAnalytics(String period) async {
-    final response = await _send((h) =>
-        http.get(Uri.parse('$baseUrl/dealers/analytics/?period=$period'), headers: h));
+    final response = await _send((h) => http.get(
+        Uri.parse('$baseUrl/dealers/analytics/?period=$period'),
+        headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load analytics'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load analytics'));
   }
 
   // ── Phone OTP ─────────────────────────────────────────
   Future<String?> requestOtp(String phoneNumber, String purpose) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/otp/send/'),
-      headers: _headers,
-      body: jsonEncode({'phone_number': phoneNumber, 'purpose': purpose}),
-    ).timeout(const Duration(seconds: 15));
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/otp/send/'),
+          headers: _headers,
+          body: jsonEncode({'phone_number': phoneNumber, 'purpose': purpose}),
+        )
+        .timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['debug_code'] as String?;
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to send verification code'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to send verification code'));
   }
 
-  Future<void> verifyOtp(String phoneNumber, String purpose, String code) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/otp/verify/'),
-      headers: _headers,
-      body: jsonEncode({'phone_number': phoneNumber, 'purpose': purpose, 'code': code}),
-    ).timeout(const Duration(seconds: 15));
+  Future<void> verifyOtp(
+      String phoneNumber, String purpose, String code) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/otp/verify/'),
+          headers: _headers,
+          body: jsonEncode(
+              {'phone_number': phoneNumber, 'purpose': purpose, 'code': code}),
+        )
+        .timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Verification failed'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Verification failed'));
     }
   }
 
@@ -222,7 +255,8 @@ class ApiService {
     bool isMultipart = false,
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    Future<http.Response> attempt(Map<String, String> headers) => request(headers);
+    Future<http.Response> attempt(Map<String, String> headers) =>
+        request(headers);
 
     var headers = await _authHeaders;
     if (isMultipart) {
@@ -230,7 +264,8 @@ class ApiService {
     }
     var response = await attempt(headers).timeout(timeout);
 
-    final isLoginRequest = (response.request?.url?.path ?? '').endsWith('/auth/login/');
+    final isLoginRequest =
+        (response.request?.url?.path ?? '').endsWith('/auth/login/');
     if (response.statusCode == 401 && !isLoginRequest) {
       final refreshed = await _tryRefreshToken();
       if (refreshed) {
@@ -246,11 +281,13 @@ class ApiService {
     final refresh = await _storage.read(key: 'refresh_token');
     if (refresh == null) return false;
     try {
-      final resp = await http.post(
-        Uri.parse('$baseUrl/auth/refresh/'),
-        headers: _headers,
-        body: jsonEncode({'refresh': refresh}),
-      ).timeout(const Duration(seconds: 10));
+      final resp = await http
+          .post(
+            Uri.parse('$baseUrl/auth/refresh/'),
+            headers: _headers,
+            body: jsonEncode({'refresh': refresh}),
+          )
+          .timeout(const Duration(seconds: 10));
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
         final access = data is Map ? data['access'] : null;
@@ -283,11 +320,13 @@ class ApiService {
 
   // ── Auth ──────────────────────────────────────────────
   Future<Map<String, dynamic>> login(String username, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/login/'),
-      headers: _headers,
-      body: jsonEncode({'username': username, 'password': password}),
-    ).timeout(const Duration(seconds: 15));
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/login/'),
+          headers: _headers,
+          body: jsonEncode({'username': username, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final access = data is Map ? data['access'] : null;
@@ -311,21 +350,24 @@ class ApiService {
     required String phoneNumber,
     required String role,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/register/'),
-      headers: _headers,
-      body: jsonEncode({
-        'username': username,
-        'password': password,
-        'first_name': firstName,
-        'last_name': lastName,
-        'email': email,
-        'phone_number': phoneNumber,
-        'role': role,
-      }),
-    ).timeout(const Duration(seconds: 15));
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/register/'),
+          headers: _headers,
+          body: jsonEncode({
+            'username': username,
+            'password': password,
+            'first_name': firstName,
+            'last_name': lastName,
+            'email': email,
+            'phone_number': phoneNumber,
+            'role': role,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
     if (response.statusCode != 201) {
-      throw ApiException(_messageFrom(response, fallback: 'Registration failed'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Registration failed'));
     }
   }
 
@@ -334,23 +376,28 @@ class ApiService {
     required String phoneNumber,
     required String newPassword,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/password_reset/'),
-      headers: _headers,
-      body: jsonEncode({
-        'username': username,
-        'phone_number': phoneNumber,
-        'new_password': newPassword,
-      }),
-    ).timeout(const Duration(seconds: 15));
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/password_reset/'),
+          headers: _headers,
+          body: jsonEncode({
+            'username': username,
+            'phone_number': phoneNumber,
+            'new_password': newPassword,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Password reset failed'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Password reset failed'));
     }
   }
 
   Future<User> getCurrentUser() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/users/me/'), headers: h));
-    if (response.statusCode == 200) return User.fromJson(jsonDecode(response.body));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/users/me/'), headers: h));
+    if (response.statusCode == 200)
+      return User.fromJson(jsonDecode(response.body));
     throw ApiException(_messageFrom(response, fallback: 'Failed to load user'));
   }
 
@@ -361,7 +408,8 @@ class ApiService {
     XFile? profilePhoto,
   }) async {
     if (profilePhoto != null) {
-      var request = http.MultipartRequest('PATCH', Uri.parse('$baseUrl/users/me/'));
+      var request =
+          http.MultipartRequest('PATCH', Uri.parse('$baseUrl/users/me/'));
       final token = await _storage.read(key: 'access_token');
       if (token != null) request.headers['Authorization'] = 'Bearer $token';
       if (firstName != null) request.fields['first_name'] = firstName;
@@ -369,13 +417,16 @@ class ApiService {
       if (phoneNumber != null) request.fields['phone_number'] = phoneNumber;
       final bytes = await profilePhoto.readAsBytes();
       request.files.add(http.MultipartFile.fromBytes(
-        'profile_photo', bytes,
+        'profile_photo',
+        bytes,
         filename: profilePhoto.name,
       ));
-      final streamed = await request.send().timeout(const Duration(seconds: 45));
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode != 200) {
-        throw ApiException(_messageFrom(response, fallback: 'Failed to update profile'));
+        throw ApiException(
+            _messageFrom(response, fallback: 'Failed to update profile'));
       }
     } else {
       final body = <String, dynamic>{
@@ -389,7 +440,8 @@ class ApiService {
             body: jsonEncode(body),
           ));
       if (response.statusCode != 200) {
-        throw ApiException(_messageFrom(response, fallback: 'Failed to update profile'));
+        throw ApiException(
+            _messageFrom(response, fallback: 'Failed to update profile'));
       }
     }
   }
@@ -408,60 +460,84 @@ class ApiService {
       final request = http.MultipartRequest(
           'POST', Uri.parse('$baseUrl/diagnosis/analyze/'));
       request.headers.addAll(headers);
-      request.files.add(http.MultipartFile.fromBytes(
-          'image', imageBytes, filename: fileName));
+      request.files.add(http.MultipartFile.fromBytes('image', imageBytes,
+          filename: fileName));
       request.fields['crop_type'] = cropType;
       return http.Response.fromStream(await request.send());
     }, isMultipart: true, timeout: const Duration(seconds: 45));
     if (response.statusCode == 200 || response.statusCode == 201) {
       final diagnosis = Diagnosis.fromJson(jsonDecode(response.body));
-      if (diagnosis.cropType.trim().toLowerCase() != cropType.trim().toLowerCase()) {
-        throw ApiException('The result did not match your selected crop. No result '
-            'will be shown. Please retry.', code: 'crop_mismatch');
+      if (diagnosis.cropType.trim().toLowerCase() !=
+          cropType.trim().toLowerCase()) {
+        throw ApiException(
+            'The result did not match your selected crop. No result '
+            'will be shown. Please retry.',
+            code: 'crop_mismatch');
       }
       return diagnosis;
     }
     String? code;
     try {
-      code = (jsonDecode(response.body) as Map<String, dynamic>)['code']?.toString();
+      code = (jsonDecode(response.body) as Map<String, dynamic>)['code']
+          ?.toString();
     } catch (_) {}
-    throw ApiException(_messageFrom(response, fallback: 'Analysis is temporarily unavailable.'), code: code);
+    throw ApiException(
+        _messageFrom(response,
+            fallback: 'Analysis is temporarily unavailable.'),
+        code: code);
   }
 
   Future<List<Diagnosis>> getDiagnosisHistory() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/diagnosis/history/'), headers: h));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/diagnosis/history/'), headers: h));
     if (response.statusCode == 200) {
-      return (jsonDecode(response.body) as List).map((j) => Diagnosis.fromJson(j)).toList();
+      return (jsonDecode(response.body) as List)
+          .map((j) => Diagnosis.fromJson(j))
+          .toList();
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load history'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load history'));
   }
 
   // ── Products / marketplace ────────────────────────────
-  Future<List<Product>> getMarketplaceProducts({String? category, String? search}) async {
+  Future<List<Product>> getMarketplaceProducts(
+      {String? category, String? search}) async {
     final query = <String, String>{
-      if (category != null && category.isNotEmpty && category != 'All') 'category': category,
+      if (category != null && category.isNotEmpty && category != 'All')
+        'category': category,
       if (search != null && search.isNotEmpty) 'search': search,
     };
-    final uri = Uri.parse('$baseUrl/products/marketplace/').replace(queryParameters: query.isEmpty ? null : query);
+    final uri = Uri.parse('$baseUrl/products/marketplace/')
+        .replace(queryParameters: query.isEmpty ? null : query);
     final response = await _send((h) => http.get(uri, headers: h));
     if (response.statusCode == 200) {
-      return (jsonDecode(response.body) as List).map((j) => Product.fromJson(j)).toList();
+      return (jsonDecode(response.body) as List)
+          .map((j) => Product.fromJson(j))
+          .toList();
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load products'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load products'));
   }
 
   Future<Product> getProduct(int id) async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/products/$id/'), headers: h));
-    if (response.statusCode == 200) return Product.fromJson(jsonDecode(response.body));
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load product'));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/products/$id/'), headers: h));
+    if (response.statusCode == 200)
+      return Product.fromJson(jsonDecode(response.body));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load product'));
   }
 
   Future<List<Product>> getMyProducts() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/products/my_products/'), headers: h));
+    final response = await _send((h) =>
+        http.get(Uri.parse('$baseUrl/products/my_products/'), headers: h));
     if (response.statusCode == 200) {
-      return (jsonDecode(response.body) as List).map((j) => Product.fromJson(j)).toList();
+      return (jsonDecode(response.body) as List)
+          .map((j) => Product.fromJson(j))
+          .toList();
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load your products'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load your products'));
   }
 
   Future<Map<String, dynamic>> addProduct({
@@ -474,7 +550,8 @@ class ApiService {
     bool isAvailable = true,
   }) async {
     if (imageFile != null) {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/products/'));
+      var request =
+          http.MultipartRequest('POST', Uri.parse('$baseUrl/products/'));
       final token = await _storage.read(key: 'access_token');
       if (token != null) request.headers['Authorization'] = 'Bearer $token';
       request.fields['name'] = name;
@@ -484,11 +561,14 @@ class ApiService {
       request.fields['stock_quantity'] = stockQuantity.toString();
       request.fields['is_available'] = isAvailable.toString();
       final bytes = await imageFile.readAsBytes();
-      request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: imageFile.name));
-      final streamed = await request.send().timeout(const Duration(seconds: 45));
+      request.files.add(http.MultipartFile.fromBytes('image', bytes,
+          filename: imageFile.name));
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode == 201) return jsonDecode(response.body);
-      throw ApiException(_messageFrom(response, fallback: 'Failed to add product'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to add product'));
     } else {
       final response = await _send((h) => http.post(
             Uri.parse('$baseUrl/products/'),
@@ -503,7 +583,8 @@ class ApiService {
             }),
           ));
       if (response.statusCode == 201) return jsonDecode(response.body);
-      throw ApiException(_messageFrom(response, fallback: 'Failed to add product'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to add product'));
     }
   }
 
@@ -518,7 +599,8 @@ class ApiService {
     bool? isAvailable,
   }) async {
     if (imageFile != null) {
-      var request = http.MultipartRequest('PUT', Uri.parse('$baseUrl/products/$productId/'));
+      var request = http.MultipartRequest(
+          'PUT', Uri.parse('$baseUrl/products/$productId/'));
       final token = await _storage.read(key: 'access_token');
       if (token != null) request.headers['Authorization'] = 'Bearer $token';
       request.fields['name'] = name;
@@ -526,13 +608,17 @@ class ApiService {
       request.fields['category'] = category;
       request.fields['price'] = price.toString();
       request.fields['stock_quantity'] = stockQuantity.toString();
-      if (isAvailable != null) request.fields['is_available'] = isAvailable.toString();
+      if (isAvailable != null)
+        request.fields['is_available'] = isAvailable.toString();
       final bytes = await imageFile.readAsBytes();
-      request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: imageFile.name));
-      final streamed = await request.send().timeout(const Duration(seconds: 45));
+      request.files.add(http.MultipartFile.fromBytes('image', bytes,
+          filename: imageFile.name));
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 45));
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode == 200) return jsonDecode(response.body);
-      throw ApiException(_messageFrom(response, fallback: 'Failed to update product'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to update product'));
     } else {
       final response = await _send((h) => http.put(
             Uri.parse('$baseUrl/products/$productId/'),
@@ -547,14 +633,17 @@ class ApiService {
             }),
           ));
       if (response.statusCode == 200) return jsonDecode(response.body);
-      throw ApiException(_messageFrom(response, fallback: 'Failed to update product'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to update product'));
     }
   }
 
   Future<void> deleteProduct(int productId) async {
-    final response = await _send((h) => http.delete(Uri.parse('$baseUrl/products/$productId/'), headers: h));
+    final response = await _send((h) =>
+        http.delete(Uri.parse('$baseUrl/products/$productId/'), headers: h));
     if (response.statusCode != 204) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to delete product'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to delete product'));
     }
   }
 
@@ -564,51 +653,63 @@ class ApiService {
           headers: h,
         ));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to update product'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to update product'));
   }
 
   // ── Orders ────────────────────────────────────────────
-  Future<Map<String, dynamic>> createOrder(int productId, int quantity, {
+  Future<Map<String, dynamic>> createOrder(
+    int productId,
+    int quantity, {
     String? checkoutKey,
     String? paymentMethod,
   }) async {
     final response = await _send((h) => http.post(
           Uri.parse('$baseUrl/orders/'),
           headers: h,
-          body: jsonEncode({'product': productId, 'quantity': quantity,
+          body: jsonEncode({
+            'product': productId,
+            'quantity': quantity,
             if (checkoutKey != null) 'checkout_key': checkoutKey,
             if (paymentMethod != null) 'payment_method': paymentMethod,
           }),
         ));
-    if ((response.statusCode == 201 || response.statusCode == 200)) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to create order'));
+    if ((response.statusCode == 201 || response.statusCode == 200))
+      return jsonDecode(response.body);
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to create order'));
   }
 
   Future<List<dynamic>> getOrders() async {
     return _fetchAllPages('/orders/');
   }
 
-  Future<Map<String, dynamic>> updateOrderStatus(int orderId, String status) async {
+  Future<Map<String, dynamic>> updateOrderStatus(
+      int orderId, String status) async {
     final response = await _send((h) => http.post(
           Uri.parse('$baseUrl/orders/$orderId/update_status/'),
           headers: h,
           body: jsonEncode({'status': status}),
         ));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to update order'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to update order'));
   }
 
   // ── Chat (REST fallback) ──────────────────────────────
   Future<List<dynamic>> getChatRooms() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/chat/'), headers: h));
+    final response =
+        await _send((h) => http.get(Uri.parse('$baseUrl/chat/'), headers: h));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data is List ? data : (data['results'] ?? []);
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load chats'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load chats'));
   }
 
-  Future<Map<String, dynamic>> createChatRoom({int? dealerId, int? farmerId}) async {
+  Future<Map<String, dynamic>> createChatRoom(
+      {int? dealerId, int? farmerId}) async {
     final body = <String, dynamic>{};
     if (dealerId != null) body['dealer'] = dealerId;
     if (farmerId != null) body['farmer'] = farmerId;
@@ -620,13 +721,16 @@ class ApiService {
     if (response.statusCode == 200 || response.statusCode == 201) {
       return jsonDecode(response.body);
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to start chat'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to start chat'));
   }
 
   Future<List<dynamic>> getChatMessages(int roomId) async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/chat/$roomId/messages/'), headers: h));
+    final response = await _send((h) =>
+        http.get(Uri.parse('$baseUrl/chat/$roomId/messages/'), headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load messages'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load messages'));
   }
 
   Future<Map<String, dynamic>> sendMessage(int roomId, String content) async {
@@ -636,44 +740,52 @@ class ApiService {
           body: jsonEncode({'content': content}),
         ));
     if (response.statusCode == 201) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to send message'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to send message'));
   }
 
   Future<Map<String, dynamic>> sendImageMessage(int roomId, XFile image) async {
-    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/chat/$roomId/send_message/'));
+    var request = http.MultipartRequest(
+        'POST', Uri.parse('$baseUrl/chat/$roomId/send_message/'));
     final token = await _storage.read(key: 'access_token');
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
     final imgBytes = await image.readAsBytes();
-    request.files.add(http.MultipartFile.fromBytes('image', imgBytes, filename: image.name));
+    request.files.add(
+        http.MultipartFile.fromBytes('image', imgBytes, filename: image.name));
     final streamed = await request.send().timeout(const Duration(seconds: 45));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode == 201) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to send image'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to send image'));
   }
 
   Future<void> markChatRead(int roomId) async {
-    await _send((h) => http.post(Uri.parse('$baseUrl/chat/$roomId/mark_read/'), headers: h));
+    await _send((h) =>
+        http.post(Uri.parse('$baseUrl/chat/$roomId/mark_read/'), headers: h));
   }
 
   Future<Map<String, dynamic>> getUnreadChatCounts() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/chat/unread_counts/'), headers: h));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/chat/unread_counts/'), headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
     return {};
   }
 
   Future<void> cancelOrder(int orderId) async {
-    final response = await _send((h) => http.post(
-        Uri.parse('$baseUrl/orders/$orderId/cancel/'), headers: h));
+    final response = await _send((h) =>
+        http.post(Uri.parse('$baseUrl/orders/$orderId/cancel/'), headers: h));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Could not cancel reservation.'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Could not cancel reservation.'));
     }
   }
 
   Future<Map<String, dynamic>> getPaymentMethods() async {
-    final response = await _send((h) => http.get(
-        Uri.parse('$baseUrl/payments/methods/'), headers: h));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/payments/methods/'), headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Payment options could not be loaded.'));
+    throw ApiException(_messageFrom(response,
+        fallback: 'Payment options could not be loaded.'));
   }
 
   // ── Payments ──────────────────────────────────────────
@@ -689,23 +801,33 @@ class ApiService {
             'amount': amount,
           }),
         ));
-    if ((response.statusCode == 201 || response.statusCode == 200)) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to create payment'));
+    if ((response.statusCode == 201 || response.statusCode == 200))
+      return jsonDecode(response.body);
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to create payment'));
   }
 
-  Future<Map<String, dynamic>> processPayment(int paymentId, {double? expectedAmount}) async {
-    final response = await _send((h) => http.post(
-          Uri.parse('$baseUrl/payments/$paymentId/process_payment/'),
-          headers: h,
-          body: jsonEncode({if (expectedAmount != null) 'expected_amount': expectedAmount.toStringAsFixed(2)}),
-        ), timeout: const Duration(seconds: 40));
+  Future<Map<String, dynamic>> processPayment(int paymentId,
+      {double? expectedAmount}) async {
+    final response = await _send(
+        (h) => http.post(
+              Uri.parse('$baseUrl/payments/$paymentId/process_payment/'),
+              headers: h,
+              body: jsonEncode({
+                if (expectedAmount != null)
+                  'expected_amount': expectedAmount.toStringAsFixed(2)
+              }),
+            ),
+        timeout: const Duration(seconds: 40));
     if (response.statusCode == 200) return jsonDecode(response.body);
     String? code;
     try {
       final body = jsonDecode(response.body);
       if (body is Map) code = body['code']?.toString();
     } catch (_) {}
-    throw ApiException(_messageFrom(response, fallback: 'Failed to process payment'), code: code);
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to process payment'),
+        code: code);
   }
 
   Future<Map<String, dynamic>> verifyPayment(int paymentId) async {
@@ -714,11 +836,13 @@ class ApiService {
           headers: h,
         ));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to verify payment'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to verify payment'));
   }
 
   // ── Weather ───────────────────────────────────────────
-  Future<Map<String, dynamic>> getWeather({double? lat, double? lon, String? location}) async {
+  Future<Map<String, dynamic>> getWeather(
+      {double? lat, double? lon, String? location}) async {
     // The weather endpoint requires authentication (it is rate-limited and
     // cached server-side). It must go through `_send` so the JWT is attached
     // (and transparently refreshed on 401) — using `_headers` (no token) here
@@ -733,21 +857,26 @@ class ApiService {
           }),
         )).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load weather'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load weather'));
   }
 
   // ── Users / Admin ─────────────────────────────────────
   Future<Map<String, dynamic>> getAdminStats() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/admin/stats/'), headers: h));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/admin/stats/'), headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load admin stats'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load admin stats'));
   }
 
   Future<Map<String, dynamic>> getAdminAnalytics(String period) async {
-    final response = await _send((h) =>
-        http.get(Uri.parse('$baseUrl/admin/analytics/?period=$period'), headers: h));
+    final response = await _send((h) => http.get(
+        Uri.parse('$baseUrl/admin/analytics/?period=$period'),
+        headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load analytics'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load analytics'));
   }
 
   Future<Map<String, dynamic>> getHealth() async {
@@ -783,7 +912,8 @@ class ApiService {
           }),
         ));
     if (response.statusCode == 201) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to register sensor'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to register sensor'));
   }
 
   Future<void> ingestReading(int sensorId, double value, {String? unit}) async {
@@ -793,25 +923,31 @@ class ApiService {
           body: jsonEncode({'value': value, if (unit != null) 'unit': unit}),
         ));
     if (response.statusCode != 201) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to send reading'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to send reading'));
     }
   }
 
-  Future<Map<String, dynamic>> getIrrigationAdvice(int sensorId, {String? crop}) async {
+  Future<Map<String, dynamic>> getIrrigationAdvice(int sensorId,
+      {String? crop}) async {
     final query = crop != null ? '?crop=$crop' : '';
-    final response = await _send((h) =>
-        http.get(Uri.parse('$baseUrl/sensors/$sensorId/irrigation_advice/$query'), headers: h));
+    final response = await _send((h) => http.get(
+        Uri.parse('$baseUrl/sensors/$sensorId/irrigation_advice/$query'),
+        headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load irrigation advice'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load irrigation advice'));
   }
 
   Future<List<dynamic>> getMySensors() async {
-    final response = await _send((h) => http.get(Uri.parse('$baseUrl/sensors/'), headers: h));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/sensors/'), headers: h));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data is List ? data : (data['results'] ?? []);
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load sensors'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load sensors'));
   }
 
   // ── Outbreak alerts (Phase F, innovation #4) ──────────
@@ -824,7 +960,8 @@ class ApiService {
         .replace(queryParameters: params.isEmpty ? null : params);
     final response = await _send((h) => http.get(uri, headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load outbreaks'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load outbreaks'));
   }
 
   /// Fetch a paginated endpoint page by page until every record is collected.
@@ -835,8 +972,8 @@ class ApiService {
     var page = 1;
     while (true) {
       final sep = path.contains('?') ? '&' : '?';
-      final response = await _send(
-          (h) => http.get(Uri.parse('$baseUrl$path${sep}page=$page'), headers: h));
+      final response = await _send((h) =>
+          http.get(Uri.parse('$baseUrl$path${sep}page=$page'), headers: h));
       if (response.statusCode != 200) {
         throw ApiException(
             _messageFrom(response, fallback: 'Failed to load data'));
@@ -859,7 +996,8 @@ class ApiService {
     final response = await _send((h) =>
         http.post(Uri.parse('$baseUrl/users/$userId/suspend/'), headers: h));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to suspend user'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to suspend user'));
     }
   }
 
@@ -867,15 +1005,17 @@ class ApiService {
     final response = await _send((h) =>
         http.post(Uri.parse('$baseUrl/users/$userId/activate/'), headers: h));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to activate user'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to activate user'));
     }
   }
 
   Future<void> deleteUser(int userId) async {
-    final response = await _send((h) =>
-        http.delete(Uri.parse('$baseUrl/users/$userId/'), headers: h));
+    final response = await _send(
+        (h) => http.delete(Uri.parse('$baseUrl/users/$userId/'), headers: h));
     if (response.statusCode != 204) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to delete user'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to delete user'));
     }
   }
 
@@ -883,7 +1023,8 @@ class ApiService {
     final response = await _send((h) =>
         http.get(Uri.parse('$baseUrl/users/dealer_requests/'), headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load dealer requests'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load dealer requests'));
   }
 
   Future<void> verifyDealer(int userId, bool approve) async {
@@ -893,7 +1034,8 @@ class ApiService {
           body: jsonEncode({'approve': approve}),
         ));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to verify dealer'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to verify dealer'));
     }
   }
 
@@ -907,11 +1049,13 @@ class ApiService {
           headers: h,
           body: jsonEncode({
             'duration_months': durationMonths,
-            if (phoneNumber != null && phoneNumber.isNotEmpty) 'phone_number': phoneNumber,
+            if (phoneNumber != null && phoneNumber.isNotEmpty)
+              'phone_number': phoneNumber,
           }),
         ));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to upgrade to premium'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to upgrade to premium'));
   }
 
   // ── Disease knowledge base (admin) ────────────────────
@@ -919,7 +1063,8 @@ class ApiService {
     final response = await _send((h) =>
         http.get(Uri.parse('$baseUrl/diseases/list_diseases/'), headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load diseases'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load diseases'));
   }
 
   Future<List<dynamic>> getSupportedCrops() async {
@@ -960,7 +1105,8 @@ class ApiService {
           }),
         ));
     if (response.statusCode != 201) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to add disease'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to add disease'));
     }
   }
 
@@ -997,7 +1143,8 @@ class ApiService {
           body: jsonEncode(body),
         ));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to update disease'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to update disease'));
     }
   }
 
@@ -1005,7 +1152,8 @@ class ApiService {
     final response = await _send((h) =>
         http.delete(Uri.parse('$baseUrl/diseases/$diseaseId/'), headers: h));
     if (response.statusCode != 204) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to delete disease'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to delete disease'));
     }
   }
 
@@ -1014,7 +1162,8 @@ class ApiService {
     final response = await _send((h) =>
         http.get(Uri.parse('$baseUrl/announcements/active/'), headers: h));
     if (response.statusCode == 200) return jsonDecode(response.body);
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load announcements'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load announcements'));
   }
 
   Future<List<dynamic>> getAllAnnouncements() async {
@@ -1036,15 +1185,18 @@ class ApiService {
           }),
         ));
     if (response.statusCode != 201) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to create announcement'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to create announcement'));
     }
   }
 
   Future<void> deleteAnnouncement(int announcementId) async {
-    final response = await _send((h) =>
-        http.delete(Uri.parse('$baseUrl/announcements/$announcementId/'), headers: h));
+    final response = await _send((h) => http.delete(
+        Uri.parse('$baseUrl/announcements/$announcementId/'),
+        headers: h));
     if (response.statusCode != 204) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to delete announcement'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to delete announcement'));
     }
   }
 
@@ -1054,39 +1206,44 @@ class ApiService {
           headers: h,
         ));
     if (response.statusCode != 200) {
-      throw ApiException(_messageFrom(response, fallback: 'Failed to update announcement'));
+      throw ApiException(
+          _messageFrom(response, fallback: 'Failed to update announcement'));
     }
   }
 
   Future<List<dynamic>> getNotifications() async {
-    final response = await _send((h) =>
-        http.get(Uri.parse('$baseUrl/notifications/'), headers: h));
+    final response = await _send(
+        (h) => http.get(Uri.parse('$baseUrl/notifications/'), headers: h));
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data is List ? data : (data['results'] ?? []);
     }
-    throw ApiException(_messageFrom(response, fallback: 'Failed to load notifications'));
+    throw ApiException(
+        _messageFrom(response, fallback: 'Failed to load notifications'));
   }
 
   Future<int> getUnreadNotificationCount() async {
-    final response = await _send((h) =>
-        http.get(Uri.parse('$baseUrl/notifications/unread_count/'), headers: h));
-    if (response.statusCode == 200) return jsonDecode(response.body)['count'] ?? 0;
+    final response = await _send((h) => http
+        .get(Uri.parse('$baseUrl/notifications/unread_count/'), headers: h));
+    if (response.statusCode == 200)
+      return jsonDecode(response.body)['count'] ?? 0;
     return 0;
   }
 
   Future<void> markNotificationRead(int notificationId) async {
     await _send((h) => http.post(
-        Uri.parse('$baseUrl/notifications/$notificationId/mark_read/'), headers: h));
+        Uri.parse('$baseUrl/notifications/$notificationId/mark_read/'),
+        headers: h));
   }
 
   Future<void> markAllNotificationsRead() async {
-    await _send((h) => http.post(
-        Uri.parse('$baseUrl/notifications/mark_all_read/'), headers: h));
+    await _send((h) => http
+        .post(Uri.parse('$baseUrl/notifications/mark_all_read/'), headers: h));
   }
 
   /// Extract a readable error message from a response body.
-  static String _messageFrom(http.Response response, {required String fallback}) {
+  static String _messageFrom(http.Response response,
+      {required String fallback}) {
     try {
       final data = jsonDecode(response.body);
       if (data is Map) {

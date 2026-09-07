@@ -63,6 +63,7 @@ class FarmerHeader extends StatelessWidget {
   final Widget? leading;
   final List<Widget> trailing;
   final bool showBack;
+  final VoidCallback? onBack;
 
   const FarmerHeader({
     super.key,
@@ -71,6 +72,7 @@ class FarmerHeader extends StatelessWidget {
     this.leading,
     this.trailing = const [],
     this.showBack = false,
+    this.onBack,
   });
 
   @override
@@ -86,7 +88,7 @@ class FarmerHeader extends StatelessWidget {
             children: [
               if (showBack) ...[
                 IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: onBack ?? () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back_ios_new_rounded,
                       color: Colors.white, size: 20),
                 ),

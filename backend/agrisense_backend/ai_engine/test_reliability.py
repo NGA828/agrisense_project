@@ -63,7 +63,7 @@ class VisionReliabilityTests(TestCase):
         self.assertEqual(result['disease_name'], 'Tomato Blight')
         kwargs = post.call_args.kwargs
         self.assertEqual(kwargs['json']['model'], 'openrouter/free')
-        self.assertEqual(kwargs['json']['provider']['max_price'], {'prompt': 0, 'completion': 0})
+        self.assertNotIn('require_parameters', kwargs['json']['provider'])
         self.assertEqual(kwargs['json']['reasoning'], {'enabled': False})
         self.assertEqual(kwargs['timeout'], (5, 25))
         self.assertEqual(post.call_count, 1)

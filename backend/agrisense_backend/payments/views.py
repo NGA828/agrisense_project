@@ -27,8 +27,7 @@ def payment_result(payment):
     messages = {
         'pending': 'Payment is ready to submit.',
         'processing': 'Approve the payment on your phone. Awaiting confirmation; do not pay again.',
-        'completed': ('Test payment confirmed. No money was transferred.' if payment.is_test
-                      else 'Payment confirmed. Your order has been sent to the dealer.'),
+        'completed': 'Payment confirmed. Your order has been sent to the dealer.',
         'failed': 'Payment was not completed. No order was sent to the dealer. You may retry.',
         'review_required': 'Funds were received but this order needs support review. Do not pay again.',
         'refunded': 'Refund recorded.',

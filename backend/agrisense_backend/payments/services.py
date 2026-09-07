@@ -84,7 +84,7 @@ def complete_payment(payment_id):
         user.premium_expiry = base + timedelta(days=30 * _premium_months(payment.description))
         user.save(update_fields=['is_premium', 'premium_expiry'])
         ledger.record_premium_income(payment, reference=f'premium:{user.pk}')
-        _notify(user, 'Premium activated' + (' [TEST]' if payment.is_test else ''),
+        _notify(user, 'Premium activated',
                 f'Your premium subscription is active until {user.premium_expiry:%d %b %Y}.',
                 ntype='premium')
     elif order is not None:
@@ -98,12 +98,11 @@ def complete_payment(payment_id):
         order.status = 'confirmed'
         order.reserved_until = None
         order.save(update_fields=['payment_status', 'payment_method', 'status', 'reserved_until', 'updated_at'])
-        label = ' [TEST — no money transferred]' if payment.is_test else ''
-        _notify(payment.user, 'Payment confirmed' + label,
+        _notify(payment.user, 'Payment confirmed',
                 f'Payment for order #{order.pk} was confirmed. The dealer has been notified.',
                 ntype='payment', reference_id=order.pk)
         # This is the ONLY new-order notification, after verified payment.
-        _notify(order.product.dealer, 'New paid order' + label,
+        _notify(order.product.dealer, 'New paid order',
                 f'{payment.user.first_name or payment.user.username} paid '
                 f'{payment.amount:.2f} FCFA for {order.quantity} x {order.product.name} '
                 f'(order #{order.pk}).', ntype='order', reference_id=order.pk)
@@ -264,8 +263,8 @@ def refund_payment(payment_id):
         order.status = 'cancelled'
         order.save(update_fields=['payment_status', 'status', 'reserved_until', 'updated_at'])
         _stock_changed(order.product)
-        _notify(order.product.dealer, 'Test order refunded', f'Order #{order.pk} was refunded.',
+        _notify(order.product.dealer, 'Order refunded', f'Order #{order.pk} was refunded.',
                 ntype='payment', reference_id=order.pk)
-    _notify(payment.user, 'Test refund recorded', 'This was a test payment. No money was transferred.',
+    _notify(payment.user, 'Refund recorded', 'Your payment refund has been recorded.',
             ntype='payment', reference_id=order.pk)
     return payment

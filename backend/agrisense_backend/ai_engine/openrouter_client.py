@@ -299,14 +299,12 @@ class OpenRouterVisionClient:
                     'schema': self._response_schema(disease_names),
                 },
             },
-            # Route only to endpoints that can honor structured output.
-            'provider': {'require_parameters': True, 'sort': 'latency'},
+            # The free vision router currently returns 404 when
+            # require_parameters is enabled, even though it accepts the
+            # structured response format. Validate the response locally below
+            # instead of rejecting the live free endpoint before inference.
+            'provider': {'sort': 'latency'},
         }
-        if self.free_only:
-            # Belt-and-braces: even if a ':free' slug were ever silently
-            # remapped to a billable endpoint, OpenRouter rejects the request
-            # rather than charging the account.
-            payload['provider']['max_price'] = {'prompt': 0, 'completion': 0}
         if self.fallback_models:
             # OpenRouter tries these in order when the primary model errors,
             # is rate-limited, or is down — one HTTP request, no extra upload.

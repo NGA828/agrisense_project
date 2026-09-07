@@ -9,7 +9,9 @@ import '../../services/api/api_service.dart';
 import '../diagnosis/diagnosis_result_screen.dart';
 
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+  final VoidCallback? onBack;
+
+  const CameraScreen({super.key, this.onBack});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -26,7 +28,13 @@ class _CameraScreenState extends State<CameraScreen>
   // local default list is always in the right order even before the server
   // responds.
   static const _preferredOrder = [
-    'Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa', 'Potato', 'Rice',
+    'Tomato',
+    'Maize',
+    'Cassava',
+    'Pepper',
+    'Cocoa',
+    'Potato',
+    'Rice',
   ];
 
   final ScrollController _cropScrollController = ScrollController();
@@ -61,17 +69,22 @@ class _CameraScreenState extends State<CameraScreen>
   /// Offline knowledge-base browsing is separate; do not advertise unsupported
   /// online scans or silently switch a farmer's selection to Tomato.
   Future<void> _loadSupportedCrops() async {
-    setState(() { _loadingCrops = true; _cropError = null; });
+    setState(() {
+      _loadingCrops = true;
+      _cropError = null;
+    });
     try {
       final crops = await ApiService().getSupportedCrops();
       if (!mounted) return;
       _applyCrops(crops.cast<String>());
       if (crops.isEmpty) {
-        setState(() => _cropError = 'No crops are ready for analysis. Contact the administrator.');
+        setState(() => _cropError =
+            'No crops are ready for analysis. Contact the administrator.');
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _cropError = 'Connect to the server to load available crops.');
+        setState(() =>
+            _cropError = 'Connect to the server to load available crops.');
       }
     } finally {
       if (mounted) setState(() => _loadingCrops = false);
@@ -81,7 +94,9 @@ class _CameraScreenState extends State<CameraScreen>
   void _applyCrops(List<String> crops) {
     // Sort by preferred order so the selector always starts with the most
     // common crops regardless of what order the server returns them in.
-    final preferredIndex = {for (var i = 0; i < _preferredOrder.length; i++) _preferredOrder[i]: i};
+    final preferredIndex = {
+      for (var i = 0; i < _preferredOrder.length; i++) _preferredOrder[i]: i
+    };
     final sorted = List<String>.from(crops)
       ..sort((a, b) {
         final ai = preferredIndex[a] ?? _preferredOrder.length;
@@ -106,56 +121,62 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F3),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Header ──
-            _buildHeader(),
+    return PopScope(
+      canPop: widget.onBack == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) widget.onBack?.call();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F7F3),
+        body: SafeArea(
+          child: Column(
+            children: [
+              // ── Header ──
+              _buildHeader(),
 
-            // ── Content ──
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: FadeTransition(
-                  opacity: _fadeController,
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 24),
+              // ── Content ──
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: FadeTransition(
+                    opacity: _fadeController,
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 24),
 
-                      // ── Branding ──
-                      _buildBranding(),
-                      const SizedBox(height: 28),
+                        // ── Branding ──
+                        _buildBranding(),
+                        const SizedBox(height: 28),
 
-                      // ── Scan Circle ──
-                      _buildScanArea(),
-                      const SizedBox(height: 28),
+                        // ── Scan Circle ──
+                        _buildScanArea(),
+                        const SizedBox(height: 28),
 
-                      // ── Instructions ──
-                      _buildInstructions(),
-                      const SizedBox(height: 12),
-                      _buildAiPrivacyNotice(),
-                      const SizedBox(height: 24),
+                        // ── Instructions ──
+                        _buildInstructions(),
+                        const SizedBox(height: 12),
+                        _buildAiPrivacyNotice(),
+                        const SizedBox(height: 24),
 
-                      // ── Crop Selector ──
-                      _buildCropSelector(),
-                      const SizedBox(height: 24),
+                        // ── Crop Selector ──
+                        _buildCropSelector(),
+                        const SizedBox(height: 24),
 
-                      // ── Action Buttons ──
-                      _buildActionButtons(),
-                      const SizedBox(height: 24),
+                        // ── Action Buttons ──
+                        _buildActionButtons(),
+                        const SizedBox(height: 24),
 
-                      // ── Photo Tips ──
-                      _buildPhotoTips(),
-                      const SizedBox(height: 32),
-                    ],
+                        // ── Photo Tips ──
+                        _buildPhotoTips(),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -196,7 +217,7 @@ class _CameraScreenState extends State<CameraScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: IconButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: widget.onBack ?? () => Navigator.pop(context),
               icon: const Icon(Icons.arrow_back_ios_new_rounded,
                   color: Colors.white, size: 18),
               padding: const EdgeInsets.all(10),
@@ -382,8 +403,8 @@ class _CameraScreenState extends State<CameraScreen>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: AppTheme.primary.withOpacity(
-                        _isScanning ? 0.6 : 0.25),
+                    color:
+                        AppTheme.primary.withOpacity(_isScanning ? 0.6 : 0.25),
                     width: _isScanning ? 3 : 2,
                   ),
                 ),
@@ -433,20 +454,23 @@ class _CameraScreenState extends State<CameraScreen>
                         child: Stack(
                           children: [
                             // Top-left corner
-                            _buildCorner(Alignment.topLeft, top: true, left: true),
+                            _buildCorner(Alignment.topLeft,
+                                top: true, left: true),
                             // Top-right corner
-                            _buildCorner(Alignment.topRight, top: true, right: true),
+                            _buildCorner(Alignment.topRight,
+                                top: true, right: true),
                             // Bottom-left corner
-                            _buildCorner(Alignment.bottomLeft, bottom: true, left: true),
+                            _buildCorner(Alignment.bottomLeft,
+                                bottom: true, left: true),
                             // Bottom-right corner
-                            _buildCorner(Alignment.bottomRight, bottom: true, right: true),
+                            _buildCorner(Alignment.bottomRight,
+                                bottom: true, right: true),
                           ],
                         ),
                       ),
 
                     // ── Scanning animation overlay ──
-                    if (_isScanning)
-                      _buildScanningOverlay(),
+                    if (_isScanning) _buildScanningOverlay(),
 
                     // ── Center icon ──
                     Container(
@@ -492,7 +516,10 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Widget _buildCorner(Alignment alignment,
-      {bool top = false, bool bottom = false, bool left = false, bool right = false}) {
+      {bool top = false,
+      bool bottom = false,
+      bool left = false,
+      bool right = false}) {
     return Align(
       alignment: alignment,
       child: Container(
@@ -649,10 +676,16 @@ class _CameraScreenState extends State<CameraScreen>
   // ─────────────────────────────────────────────
   Widget _buildCropSelector() {
     final cropData = {
-      'Tomato': {'icon': Icons.local_florist_rounded, 'color': const Color(0xFFE53935)},
+      'Tomato': {
+        'icon': Icons.local_florist_rounded,
+        'color': const Color(0xFFE53935)
+      },
       'Maize': {'icon': Icons.grain_rounded, 'color': const Color(0xFFFFB300)},
       'Cassava': {'icon': Icons.eco_rounded, 'color': const Color(0xFF43A047)},
-      'Pepper': {'icon': Icons.whatshot_rounded, 'color': const Color(0xFFFF6D00)},
+      'Pepper': {
+        'icon': Icons.whatshot_rounded,
+        'color': const Color(0xFFFF6D00)
+      },
       'Cocoa': {'icon': Icons.coffee_rounded, 'color': const Color(0xFF5D4037)},
     };
 
@@ -670,12 +703,15 @@ class _CameraScreenState extends State<CameraScreen>
         if (_loadingCrops) const LinearProgressIndicator(),
         if (_cropError != null) ...[
           Text(_cropError!, style: const TextStyle(color: AppTheme.error)),
-          TextButton(onPressed: _isScanning ? null : _loadSupportedCrops,
+          TextButton(
+              onPressed: _isScanning ? null : _loadSupportedCrops,
               child: const Text('Reload crops')),
         ],
-        Text(_isScanning ? 'Checking your $_selectedCrop photo…'
-            : _selectedCrop == null ? 'Choose your crop before taking a photo.'
-            : 'Only $_selectedCrop will be analysed.'),
+        Text(_isScanning
+            ? 'Checking your $_selectedCrop photo…'
+            : _selectedCrop == null
+                ? 'Choose your crop before taking a photo.'
+                : 'Only $_selectedCrop will be analysed.'),
         const SizedBox(height: 12),
         SizedBox(
           height: 48,
@@ -689,24 +725,25 @@ class _CameraScreenState extends State<CameraScreen>
               final crop = _crops[index];
               // Trained model manifests can add crops beyond the bundled five.
               // Use a safe generic visual instead of crashing on a new label.
-              final data = cropData[crop] ?? {
-                'icon': Icons.eco_rounded,
-                'color': AppTheme.primary,
-              };
+              final data = cropData[crop] ??
+                  {
+                    'icon': Icons.eco_rounded,
+                    'color': AppTheme.primary,
+                  };
               final isSelected = crop == _selectedCrop;
 
               return GestureDetector(
-                onTap: _isScanning ? null : () {
-                  setState(() => _selectedCrop = crop);
-                },
+                onTap: _isScanning
+                    ? null
+                    : () {
+                        setState(() => _selectedCrop = crop);
+                      },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOutCubic,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
-                    color: isSelected
-                        ? data['color'] as Color
-                        : Colors.white,
+                    color: isSelected ? data['color'] as Color : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected
@@ -736,15 +773,18 @@ class _CameraScreenState extends State<CameraScreen>
                       Icon(
                         data['icon'] as IconData,
                         size: 18,
-                        color: isSelected ? Colors.white : data['color'] as Color,
+                        color:
+                            isSelected ? Colors.white : data['color'] as Color,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         crop,
                         style: GoogleFonts.poppins(
                           fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected ? Colors.white : AppTheme.textPrimary,
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
+                          color:
+                              isSelected ? Colors.white : AppTheme.textPrimary,
                         ),
                       ),
                     ],
@@ -787,7 +827,12 @@ class _CameraScreenState extends State<CameraScreen>
             ],
           ),
           child: ElevatedButton.icon(
-            onPressed: _isScanning || _loadingCrops || _selectedCrop == null || _cropError != null ? null : _captureImage,
+            onPressed: _isScanning ||
+                    _loadingCrops ||
+                    _selectedCrop == null ||
+                    _cropError != null
+                ? null
+                : _captureImage,
             icon: const Icon(Icons.camera_alt_rounded,
                 color: Colors.white, size: 22),
             label: Text(
@@ -817,7 +862,12 @@ class _CameraScreenState extends State<CameraScreen>
             borderRadius: BorderRadius.circular(16),
           ),
           child: OutlinedButton.icon(
-            onPressed: _isScanning || _loadingCrops || _selectedCrop == null || _cropError != null ? null : _pickImage,
+            onPressed: _isScanning ||
+                    _loadingCrops ||
+                    _selectedCrop == null ||
+                    _cropError != null
+                ? null
+                : _pickImage,
             icon: Icon(Icons.photo_library_rounded,
                 color: AppTheme.primary, size: 22),
             label: Text(
@@ -829,7 +879,8 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: AppTheme.primary.withOpacity(0.5), width: 2),
+              side: BorderSide(
+                  color: AppTheme.primary.withOpacity(0.5), width: 2),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -946,12 +997,16 @@ class _CameraScreenState extends State<CameraScreen>
   Future<void> _captureImage() => _chooseAndAnalyze(ImageSource.camera);
 
   Future<void> _chooseAndAnalyze(ImageSource source) async {
-    final crop = _selectedCrop; // freeze BEFORE camera/gallery or network awaits
+    final crop =
+        _selectedCrop; // freeze BEFORE camera/gallery or network awaits
     if (_isScanning || crop == null) return;
     setState(() => _isScanning = true);
     try {
       final pickedFile = await ImagePicker().pickImage(
-        source: source, maxWidth: 1024, maxHeight: 1024, imageQuality: 82,
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 82,
         requestFullMetadata: false,
       );
       if (pickedFile == null || !mounted) return;
@@ -962,13 +1017,26 @@ class _CameraScreenState extends State<CameraScreen>
           Uint8List.fromList(bytes), pickedFile.name, crop);
       if (!mounted) return;
       if (diagnosis != null) {
-        await Navigator.push(context, MaterialPageRoute(
-          builder: (_) => DiagnosisResultScreen(diagnosis: diagnosis),
-        ));
+        await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DiagnosisResultScreen(
+                diagnosis: diagnosis,
+                onBack: () {
+                  Navigator.of(context).pop();
+                  widget.onBack?.call();
+                },
+              ),
+            ));
       } else {
-        final rejected = {'not_a_crop', 'crop_mismatch', 'crop_uncertain', 'invalid_image'}
-            .contains(provider.errorCode);
-        await _showAnalysisMessage(rejected ? 'Check your photo' : 'Analysis unavailable',
+        final rejected = {
+          'not_a_crop',
+          'crop_mismatch',
+          'crop_uncertain',
+          'invalid_image'
+        }.contains(provider.errorCode);
+        await _showAnalysisMessage(
+            rejected ? 'Check your photo' : 'Analysis unavailable',
             provider.error ?? 'Please try again shortly.');
       }
     } catch (_) {
@@ -981,14 +1049,19 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  Future<void> _showAnalysisMessage(String title, String message) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title), content: Text(message),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-    ),
-  );
-
+  Future<void> _showAnalysisMessage(String title, String message) =>
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'))
+          ],
+        ),
+      );
 }
 
 // ─────────────────────────────────────────────

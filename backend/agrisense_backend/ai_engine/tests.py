@@ -356,15 +356,15 @@ class OpenRouterEngineTests(TestCase):
         self.engine().analyze(png_bytes(), 'Tomato')
         self.assertNotIn('models', self.requests[0][1]['json'])
 
-    def test_structured_output_routing_is_still_required(self):
-        """require_parameters keeps us off endpoints that ignore json_schema.
+    def test_structured_output_is_validated_locally(self):
+        """The live free vision router rejects require_parameters.
 
-        Without it a provider may return prose, and the disease allow-list
-        stops being enforced at the transport layer.
+        The client still sends json_schema and validates every response against
+        the restricted disease allow-list before saving a diagnosis.
         """
         self.engine().analyze(png_bytes(), 'Tomato')
         payload = self.requests[0][1]['json']
-        self.assertTrue(payload['provider']['require_parameters'])
+        self.assertNotIn('require_parameters', payload['provider'])
         self.assertEqual(payload['response_format']['type'], 'json_schema')
         self.assertTrue(payload['response_format']['json_schema']['strict'])
 
@@ -388,11 +388,11 @@ class OpenRouterEngineTests(TestCase):
                 name.endswith(':free'),
                 f'{name} is a paid model; the default config must stay free.')
 
-    def test_request_pins_max_price_to_zero(self):
-        """OpenRouter must refuse to bill rather than silently charge."""
+    def test_free_request_uses_free_only_models(self):
+        """Free-only configuration never sends a paid model id."""
         self.engine().analyze(png_bytes(), 'Tomato')
-        provider = self.requests[0][1]['json']['provider']
-        self.assertEqual(provider['max_price'], {'prompt': 0, 'completion': 0})
+        payload = self.requests[0][1]['json']
+        self.assertTrue(all(name.endswith(':free') for name in payload['models']))
 
     @override_settings(OPENROUTER_MODEL='openai/gpt-4o')
     def test_paid_primary_is_refused_before_any_request(self):

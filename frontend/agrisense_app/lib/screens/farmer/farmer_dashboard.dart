@@ -55,7 +55,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
       onOpenProfile: () => _onItemTapped(4),
       onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
     ),
-    const CameraScreen(),
+    CameraScreen(onBack: () => _onItemTapped(0)),
     const MarketplaceScreen(),
     const ChatListScreen(),
     const _ProfileScreen(),
@@ -112,54 +112,58 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                     onDestinationSelected: _onItemTapped,
                     labelType: NavigationRailLabelType.all,
                     backgroundColor: Colors.white,
-                  indicatorColor: AppTheme.primary.withValues(alpha: 0.15),
-                  selectedIconTheme: const IconThemeData(color: AppTheme.primary),
-                  selectedLabelTextStyle: GoogleFonts.poppins(
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
+                    indicatorColor: AppTheme.primary.withValues(alpha: 0.15),
+                    selectedIconTheme:
+                        const IconThemeData(color: AppTheme.primary),
+                    selectedLabelTextStyle: GoogleFonts.poppins(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                    unselectedLabelTextStyle: GoogleFonts.poppins(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                    ),
+                    leading: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      child: IconButton(
+                        icon: const Icon(Icons.menu_rounded,
+                            color: AppTheme.primary),
+                        onPressed: () =>
+                            _scaffoldKey.currentState?.openDrawer(),
+                      ),
+                    ),
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.home_outlined),
+                        selectedIcon: Icon(Icons.home_rounded),
+                        label: Text('Home'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.camera_alt_outlined),
+                        selectedIcon: Icon(Icons.camera_alt_rounded),
+                        label: Text('Scan'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.shopping_bag_outlined),
+                        selectedIcon: Icon(Icons.shopping_bag_rounded),
+                        label: Text('Market'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.chat_outlined),
+                        selectedIcon: Icon(Icons.chat_rounded),
+                        label: Text('Chat'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.person_outline),
+                        selectedIcon: Icon(Icons.person_rounded),
+                        label: Text('Profile'),
+                      ),
+                    ],
                   ),
-                  unselectedLabelTextStyle: GoogleFonts.poppins(
-                    color: AppTheme.textMuted,
-                    fontSize: 11,
-                  ),
-                  leading: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16.0),
-                    child: IconButton(
-                      icon: const Icon(Icons.menu_rounded, color: AppTheme.primary),
-                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                    ),
-                  ),
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home_rounded),
-                      label: Text('Home'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.camera_alt_outlined),
-                      selectedIcon: Icon(Icons.camera_alt_rounded),
-                      label: Text('Scan'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.shopping_bag_outlined),
-                      selectedIcon: Icon(Icons.shopping_bag_rounded),
-                      label: Text('Market'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.chat_outlined),
-                      selectedIcon: Icon(Icons.chat_rounded),
-                      label: Text('Chat'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.person_outline),
-                      selectedIcon: Icon(Icons.person_rounded),
-                      label: Text('Profile'),
-                    ),
-                  ],
                 ),
-                ),
-                const VerticalDivider(thickness: 1, width: 1, color: Color(0xFFE0E0E0)),
+                const VerticalDivider(
+                    thickness: 1, width: 1, color: Color(0xFFE0E0E0)),
                 Expanded(
                   child: IndexedStack(
                     index: _selectedIndex,
@@ -208,8 +212,8 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                             Icons.shopping_bag_outlined),
                         _buildNavItem(
                             3, Icons.chat_rounded, 'Chat', Icons.chat_outlined),
-                        _buildNavItem(
-                            4, Icons.person_rounded, 'Profile', Icons.person_outline),
+                        _buildNavItem(4, Icons.person_rounded, 'Profile',
+                            Icons.person_outline),
                       ],
                     ),
                   ),

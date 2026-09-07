@@ -310,8 +310,7 @@ def payment_methods():
             gateway = get_gateway(method)
             methods.append({'id': method, 'label': label, 'available': True,
                             'is_test': gateway.is_test, 'environment': gateway.environment,
-                            'message': ('TEST ONLY — no money is transferred.' if gateway.is_test
-                                        else 'Approve the payment on your phone.')})
+                            'message': 'Approve the payment on your phone.'})
         except PaymentError as exc:
             methods.append({'id': method, 'label': label, 'available': False,
                             'is_test': False, 'message': str(exc)})

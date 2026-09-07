@@ -15,8 +15,10 @@ import '../marketplace/product_detail_screen.dart';
 /// treatment plan, plus recommended marketplace products.
 class DiagnosisResultScreen extends StatefulWidget {
   final Diagnosis diagnosis;
+  final VoidCallback? onBack;
 
-  const DiagnosisResultScreen({super.key, required this.diagnosis});
+  const DiagnosisResultScreen(
+      {super.key, required this.diagnosis, this.onBack});
 
   @override
   State<DiagnosisResultScreen> createState() => _DiagnosisResultScreenState();
@@ -108,6 +110,7 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
             title: 'Diagnosis Result',
             subtitle: '${d.cropType} · ${_timeAgo(d.createdAt)}',
             showBack: true,
+            onBack: widget.onBack,
             leading:
                 const Icon(Icons.eco_rounded, color: Colors.white, size: 22),
             trailing: [
@@ -212,8 +215,7 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.science_outlined,
-              color: AppTheme.warning, size: 22),
+          const Icon(Icons.science_outlined, color: AppTheme.warning, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -249,12 +251,13 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
           Row(
             children: [
               const Text('Disease Name',
-                  style: TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 12)),
+                  style:
+                      TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
               const Spacer(),
               if (d.usesTrainedModel)
                 FarmerPill(
-                  label: d.modelVersion.isEmpty ? 'Trained model' : d.modelVersion,
+                  label:
+                      d.modelVersion.isEmpty ? 'Trained model' : d.modelVersion,
                   color: AppTheme.info,
                   icon: Icons.auto_awesome_rounded,
                 ),
@@ -304,8 +307,7 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
                                 fontSize: 15,
                                 color: _severityColor)),
                         const SizedBox(width: 8),
-                        FarmerPill(
-                            label: d.severity, color: _severityColor),
+                        FarmerPill(label: d.severity, color: _severityColor),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -331,8 +333,8 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
                           color: AppTheme.textSecondary, fontSize: 12)),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: AppTheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -371,7 +373,9 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
           ]),
           const SizedBox(height: 10),
           Text(
-            body.isEmpty ? 'Information coming from your agricultural advisor.' : body,
+            body.isEmpty
+                ? 'Information coming from your agricultural advisor.'
+                : body,
             style: const TextStyle(
                 color: AppTheme.textSecondary, fontSize: 13, height: 1.6),
           ),
@@ -399,22 +403,21 @@ class _DiagnosisResultScreenState extends State<DiagnosisResultScreen> {
             if (plan != null)
               FarmerPill(
                 label: plan.status,
-                color: plan.status == 'active'
-                    ? AppTheme.success
-                    : AppTheme.info,
+                color:
+                    plan.status == 'active' ? AppTheme.success : AppTheme.info,
               ),
           ]),
           const SizedBox(height: 12),
           if (plan != null) ...[
-            _treatmentRow(Icons.science_rounded, 'Recommended product',
-                plan.medication),
-            _treatmentRow(Icons.construction_rounded, 'How to apply',
-                plan.instructions),
+            _treatmentRow(
+                Icons.science_rounded, 'Recommended product', plan.medication),
+            _treatmentRow(
+                Icons.construction_rounded, 'How to apply', plan.instructions),
             Row(
               children: [
                 Expanded(
-                  child: _treatmentRow(Icons.calendar_today_rounded,
-                      'Duration', '${plan.duration} days'),
+                  child: _treatmentRow(Icons.calendar_today_rounded, 'Duration',
+                      '${plan.duration} days'),
                 ),
                 Expanded(
                   child: _treatmentRow(Icons.event_available_rounded,

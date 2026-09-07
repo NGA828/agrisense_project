@@ -41,7 +41,6 @@ class _PaymentScreenState extends State<PaymentScreen>
   String _selectedPayment = 'mtn';
   bool _isProcessing = false;
   bool _loadingMethods = true;
-  bool _isTestPayment = false;
   bool _successShown = false;
   String? _methodsError;
   String? _paymentMessage;
@@ -527,10 +526,6 @@ class _PaymentScreenState extends State<PaymentScreen>
             TextButton(onPressed: _isProcessing ? null : _loadMethods,
                 child: const Text('Reload payment options')),
           ],
-          if (_methods[_methodId]?['is_test'] == true)
-            const Padding(padding: EdgeInsets.symmetric(vertical: 10),
-                child: Text('TEST MODE — no real money will be transferred.',
-                    style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.bold))),
           if (!_hasAttempt) ...[
             const SizedBox(height: 14),
             TextField(
@@ -774,7 +769,6 @@ class _PaymentScreenState extends State<PaymentScreen>
         final payment = await _api.createPayment(_orderId!, _methodId, phone, _orderTotal);
         _paymentId = payment['id'] as int;
         _paymentState = payment['status']?.toString() ?? 'pending';
-        _isTestPayment = payment['is_test'] == true;
         if (!mounted) return;
         // Mark as unresolved locally BEFORE awaiting the external collection.
         result = _paymentState == 'pending'
@@ -808,7 +802,6 @@ class _PaymentScreenState extends State<PaymentScreen>
     final state = result['status']?.toString() ?? 'processing';
     setState(() {
       _paymentState = state;
-      _isTestPayment = result['is_test'] == true;
       _paymentMessage = result['message']?.toString() ?? result['last_error']?.toString();
       if (_paymentMessage == null || _paymentMessage!.isEmpty) {
         _paymentMessage = state == 'processing'
@@ -863,7 +856,7 @@ class _PaymentScreenState extends State<PaymentScreen>
 
               // Title Header
               Text(
-                _isTestPayment ? 'Test payment confirmed' : 'Payment Confirmed!',
+                'Payment Confirmed!',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
@@ -874,9 +867,7 @@ class _PaymentScreenState extends State<PaymentScreen>
 
               // Sub-summary info
               Text(
-                _isTestPayment
-                    ? 'This was a test. No money was transferred. Do not fulfil this as a live sale.'
-                    : 'Your payment is confirmed and the dealer has received your order. Track it in My Orders.',
+                'Your payment is confirmed and the dealer has received your order. Track it in My Orders.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 13,

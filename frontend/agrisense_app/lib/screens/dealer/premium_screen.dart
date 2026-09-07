@@ -20,7 +20,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
   int? _paymentId;
   int _selectedMonths = 1;
   bool _loadingMethod = true;
-  bool _isTestPayment = false;
   bool _needsPriceConfirmation = false;
   String? _methodError;
   Map<String, dynamic> _method = {};
@@ -55,7 +54,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
         _method = method;
         if (_paymentId == null) {
           premiumPricePerMonth = price;
-          _isTestPayment = method['is_test'] == true;
         }
       });
     } catch (_) {
@@ -118,7 +116,6 @@ class _PremiumScreenState extends State<PremiumScreen> {
         setState(() {
           _selectedMonths = (result['duration_months'] as num?)?.toInt() ?? _selectedMonths;
           premiumPricePerMonth = amount / _selectedMonths;
-          _isTestPayment = result['is_test'] == true;
         });
         if (result['payment_status'] == 'pending' && (amount - displayedTotal).abs() > 0.005) {
           _needsPriceConfirmation = true;
@@ -139,9 +136,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
       if (payment['status'] == 'completed') {
         await context.read<AuthProvider>().loadCurrentUser();
         if (!mounted) return;
-        _showResult(payment['is_test'] == true
-            ? 'Test premium activation — no money was transferred.'
-            : 'Premium activated!', isSuccess: true);
+        _showResult('Premium activated!', isSuccess: true);
       } else {
         if (payment['status'] == 'failed') {
           _paymentId = null;
@@ -357,11 +352,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                           style: const TextStyle(color: AppTheme.error)),
                       TextButton(onPressed: _isUpgrading ? null : _loadMethod,
                           child: const Text('Reload payment options')),
-                    ])
-                  else if (_isTestPayment)
-                    const Padding(padding: EdgeInsets.only(bottom: 12), child: Text(
-                        'TEST PAYMENT ONLY — no real money will be transferred.',
-                        style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w700))),
+                    ]),
                   // ── Summary + CTA ──
                   Container(
                     width: double.infinity,
