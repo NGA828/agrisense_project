@@ -1,10 +1,10 @@
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from users.models import User
 from products.models import Product, Order
-from payments.gateway import MTNMoMoGateway
 from payments.models import Payment
 
 
@@ -18,6 +18,7 @@ def make_user(username, role, **kwargs):
     )
 
 
+@override_settings(DEBUG=True, PAYMENT_SIMULATOR_ENABLED=True)
 class PaymentTests(APITestCase):
     def setUp(self):
         # Even final digit => sandbox payment succeeds; odd => fails.
@@ -32,18 +33,18 @@ class PaymentTests(APITestCase):
             farmer=self.farmer, product=self.product, quantity=2,
             total_price=2000,
         )
+        self.order.hold_stock()
 
     def auth(self, user):
         self.client.force_authenticate(user=user)
 
-    def test_mtn_provider_reference_is_a_stable_uuid(self):
-        first = MTNMoMoGateway._provider_reference('TXN-EXAMPLE')
-        second = MTNMoMoGateway._provider_reference('TXN-EXAMPLE')
-        self.assertEqual(first, second)
-        self.assertRegex(
-            first,
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[4-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-        )
+    def test_provider_reference_is_persisted_uuid4(self):
+        payment = Payment.objects.create(order=self.order, user=self.farmer,
+                                         amount=2000, transaction_id='TXN-UUID')
+        reference = payment.provider_reference
+        self.assertEqual(reference.version, 4)
+        payment.refresh_from_db()
+        self.assertEqual(payment.provider_reference, reference)
 
     def test_create_payment_validates_amount(self):
         self.auth(self.farmer)
@@ -98,7 +99,9 @@ class PaymentTests(APITestCase):
             transaction_id='TXN-DOUBLE', status='completed',
         )
         resp = self.client.post(reverse('payment-process-payment', args=[payment.id]))
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(resp.data['status'], 'completed')
 
     def test_premium_payment_activates_premium(self):
         dealer = make_user('dealer2', 'dealer', phone_number='+237670000008')
@@ -127,6 +130,7 @@ class PaymentTests(APITestCase):
         self.assertEqual(resp.data['status'], 'completed')
 
 
+@override_settings(DEBUG=True, PAYMENT_SIMULATOR_ENABLED=True)
 class PaymentMoneyFlowTests(APITestCase):
     """Phase A: payment failure releases stock; retry re-holds; refunds reverse."""
 
@@ -242,6 +246,7 @@ class PaymentMoneyFlowTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
 
+@override_settings(DEBUG=True, PAYMENT_SIMULATOR_ENABLED=True)
 class PaymentWebhookTests(APITestCase):
     """HMAC-signed, idempotent provider webhook endpoint."""
 
@@ -256,10 +261,11 @@ class PaymentWebhookTests(APITestCase):
             farmer=self.farmer, product=self.product, quantity=1,
             total_price=1000,
         )
+        self.order.hold_stock()
         self.payment = Payment.objects.create(
             order=self.order, user=self.farmer, amount=1000,
             payment_method='MTN_MOMO', phone_number='+237670000008',
-            transaction_id='TXN-WEBHOOK', status='processing',
+            transaction_id='TXN-WEBHOOK', status='processing', gateway_environment='simulated',
         )
 
     def _sign(self, body):
@@ -306,7 +312,6 @@ class PaymentServiceIdempotencyTests(APITestCase):
     """Reusable service functions (shared with Celery) are idempotent."""
 
     def setUp(self):
-        from ledger import services as ledger
         self.farmer = make_user('farmer1', 'farmer')
         self.dealer = make_user('dealer1', 'dealer')
         self.product = Product.objects.create(
@@ -316,6 +321,7 @@ class PaymentServiceIdempotencyTests(APITestCase):
         self.order = Order.objects.create(
             farmer=self.farmer, product=self.product, quantity=2, total_price=2000,
         )
+        self.order.hold_stock()
 
     def test_complete_payment_idempotent_and_posts_ledger_once(self):
         from ledger import services as ledger

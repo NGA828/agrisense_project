@@ -36,6 +36,8 @@ def _push_stock(product):
 
 def _release_order_stock_locked(order, product):
     """Return reserved stock to the product (assumes a row lock is held)."""
+    if order.status in Order.STOCK_RELEASED_STATUSES or order.reserved_until is None:
+        return
     product.stock_quantity += order.quantity
     if product.stock_quantity > 0:
         product.is_available = True
@@ -91,10 +93,15 @@ class ProductViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         return self.update(request, *args, partial=True, **kwargs)
 
+    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         product = self.get_object()
         if product.dealer_id != request.user.id and request.user.role != 'admin':
             return Response({'error': 'Not authorized'}, status=status.HTTP_403_FORBIDDEN)
+        product = Product.objects.select_for_update().get(pk=product.pk)
+        if Order.objects.filter(product=product).exists():
+            return Response({'error': 'This product has checkout/order history and cannot be deleted. '
+                                      'Disable its availability instead.'}, status=409)
         return super().destroy(request, *args, **kwargs)
 
     # ── Marketplace ───────────────────────────────────────────────────
@@ -107,7 +114,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         2. then featured products,
         3. then newest.
         """
-        from django.db.models import BooleanField, Case, Q, Value, When
+        from django.db.models import BooleanField, Case, Value, When
         from django.utils import timezone
 
         # Premium boost respects the subscription window (unexpired premium;
@@ -165,6 +172,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 class OrderViewSet(viewsets.ModelViewSet):
+    http_method_names = ['get', 'post', 'head', 'options']
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -172,10 +180,10 @@ class OrderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.role == 'farmer':
-            return Order.objects.filter(farmer=user).select_related('product', 'farmer').order_by('-created_at')
+            return Order.objects.filter(farmer=user).select_related('product', 'farmer').prefetch_related('payments').order_by('-created_at')
         elif user.role == 'dealer':
-            return Order.objects.filter(product__dealer=user).select_related('product', 'farmer').order_by('-created_at')
-        return Order.objects.all().select_related('product', 'farmer').order_by('-created_at')
+            return Order.objects.filter(product__dealer=user, payment_status__in=('paid', 'refunded')).select_related('product', 'farmer').prefetch_related('payments').order_by('-created_at')
+        return Order.objects.all().select_related('product', 'farmer').prefetch_related('payments').order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         """Farmer places an order. Stock is decremented atomically."""
@@ -194,7 +202,35 @@ class OrderViewSet(viewsets.ModelViewSet):
         if quantity > 50:
             return Response({'error': 'Maximum 50 units per order'}, status=status.HTTP_400_BAD_REQUEST)
 
+        import uuid
+        raw_key = request.data.get('checkout_key')
+        try:
+            checkout_key = uuid.UUID(str(raw_key)) if raw_key else None
+        except ValueError:
+            return Response({'error': 'checkout_key must be a UUID.'}, status=400)
+        # If a method is supplied, refuse unavailable gateways before reserving
+        # stock. Old clients may still reserve without selecting a method.
+        method = str(request.data.get('payment_method') or '').upper()
+        if method:
+            from payments.gateway import get_gateway, PaymentError
+            try:
+                get_gateway(method)
+            except PaymentError as exc:
+                return Response({'error': str(exc), 'code': exc.code}, status=400)
+
         with transaction.atomic():
+            # One checkout token reserves stock once, including concurrent taps
+            # and retries after a lost response. The token is bound to its buyer.
+            from users.models import User
+            User.objects.select_for_update().get(pk=request.user.pk)
+            if checkout_key:
+                previous = Order.objects.filter(farmer=request.user, checkout_key=checkout_key).first()
+                if previous:
+                    if (previous.farmer_id != request.user.pk
+                            or previous.product_id != product_id or previous.quantity != quantity):
+                        return Response({'error': 'Checkout token already used for another order.'}, status=409)
+                    return Response(self.get_serializer(previous).data, status=200)
+
             product = Product.objects.select_for_update().filter(id_product=product_id).first()
             if not product:
                 return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -217,21 +253,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 quantity=quantity,
                 total_price=total_price,
                 shipping_address=str(request.data.get('shipping_address') or ''),
-                payment_method=str(request.data.get('payment_method') or ''),
+                payment_method=method, checkout_key=checkout_key,
                 reserved_until=timezone.now() + timezone.timedelta(
                     minutes=settings.ORDER_RESERVATION_MINUTES),
             )
 
-        # Real-time order notification for the dealer (surfaced in-app).
-        from announcements.models import notify_user
-        notify_user(
-            product.dealer,
-            'New order received 🎉',
-            f'{request.user.first_name or request.user.username} ordered {quantity} x '
-            f'{product.name} ({total_price:.2f} FCFA).',
-            type='order',
-            reference_id=order.id,
-        )
+        # A reservation is NOT a sale. No dealer order/notification before
+        # verified payment; complete_payment is the sole new-order notifier.
         # Live stock push so the marketplace + dealer inventory update instantly.
         _push_stock(product)
 
@@ -266,6 +294,10 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             order = Order.objects.select_for_update().get(id=order.id)
+            if order.payment_status != 'unpaid' or order.payments.filter(
+                    status__in=('processing', 'review_required')).exists():
+                return Response({'error': 'Payment confirmation is in progress. Do not cancel '
+                                          'or pay again until its final status is known.'}, status=409)
             if order.status not in Order.CANCEL_NO_REFUND_STATUSES:
                 return Response(
                     {'error': f'Order is {order.status} and cannot be cancelled.'},
@@ -277,15 +309,9 @@ class OrderViewSet(viewsets.ModelViewSet):
             order.save(update_fields=['status', 'reserved_until'])
 
         from announcements.models import notify_user
-        dealer = order.product.dealer
         if order.farmer_id != request.user.id:
             notify_user(order.farmer, 'Order cancelled',
                         f'Your order of {order.product.name} was cancelled.',
-                        type='order_status', reference_id=order.id)
-        if dealer.id != request.user.id:
-            notify_user(dealer, 'Order cancelled',
-                        f'Order #{order.id} of {order.product.name} was cancelled '
-                        f'and stock released.',
                         type='order_status', reference_id=order.id)
         _push_stock(product)
 
@@ -332,6 +358,9 @@ class OrderViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST)
 
             if new_status == 'cancelled':
+                if order.payments.filter(status__in=('processing', 'review_required')).exists():
+                    return Response({'error': 'Awaiting payment confirmation; cancellation is blocked.'}, status=409)
+
                 # Cancellation of an unpaid order restores stock.
                 if order.payment_status == 'paid':
                     return Response(

@@ -26,6 +26,7 @@ through an ordered pipeline:
 
 import hashlib
 import logging
+import json
 import math
 import threading
 from datetime import datetime, timedelta
@@ -184,9 +185,29 @@ class AIEngineError(RuntimeError):
 class AIEngineUnavailable(AIEngineError):
     """The configured trained model cannot currently serve inference."""
 
+    def __init__(self, message, *, code='ai_model_unavailable', retry_after=None):
+        super().__init__(message)
+        self.code = code
+        self.retry_after = retry_after
+
 
 class AIInferenceError(AIEngineError):
     """A configured model failed while processing an image."""
+
+
+class AIImageRejected(AIInferenceError):
+    """A valid image file is not a confidently identified, selected crop."""
+
+    def __init__(self, message, code, detected_crop=''):
+        super().__init__(message)
+        self.code = code
+        self.detected_crop = detected_crop
+
+
+def crop_key(crop):
+    name = ' '.join(str(crop).strip().casefold().split())
+    return {'corn': 'maize', 'corn (maize)': 'maize', 'cacao': 'cocoa',
+            'bell pepper': 'pepper'}.get(name, name)
 
 
 class PlantPathologyEngine:
@@ -273,15 +294,16 @@ class RuleBasedEngine(PlantPathologyEngine):
         return mean_green > 0.55 and lesion < 0.10
 
     def analyze(self, image, crop_type):
+        diseases = self._candidates(crop_type)
+        if not diseases:
+            raise AIInferenceError(f'No disease data exists for {crop_type!r}.')
         features, ok = self._extract_features(image)
+        if not ok:
+            raise AIInferenceError('Upload a valid crop photo.')
 
         # Healthy outcome first: a healthy leaf is not a disease.
         if self._looks_healthy(features):
             return self._build_healthy_result(ok)
-
-        diseases = self._candidates(crop_type)
-        if not diseases:
-            diseases = self._candidates('Tomato')
 
         scored = [(self._score(features, d['disease_name']), d) for d in diseases]
         scored.sort(key=lambda pair: pair[0], reverse=True)
@@ -342,50 +364,6 @@ class RuleBasedEngine(PlantPathologyEngine):
             'model_version': 'v2.0-rules',
             'image_parsed': ok,
             'low_confidence': True,
-        }
-
-    @staticmethod
-    def _build_not_a_crop_result(ok):
-        return {
-            'is_healthy': False,
-            'disease_name': 'NotACrop',
-            'confidence': Decimal('0'),
-            'severity': 'invalid',
-            'symptoms': 'This image does not appear to contain a crop plant.',
-            'causes': 'The uploaded image shows a non-agricultural subject (e.g., a person, animal, building, or other non-plant object).',
-            'prevention': 'Please upload a clear photo of an actual crop plant.',
-            'treatment_type': 'Invalid Image',
-            'medication': 'N/A - Please upload a crop image.',
-            'instructions': 'Upload a clear photo of a crop plant showing leaves, stems, or affected areas. Ensure the plant is the main subject of the image.',
-            'duration': 0,
-            'follow_up_date': None,
-            'engine': 'openrouter-vision',
-            'trained_model': True,
-            'model_version': 'vision-validation',
-            'image_parsed': ok,
-            'is_inconclusive': True,
-        }
-
-    @staticmethod
-    def _build_crop_mismatch_result(selected_crop, ok):
-        return {
-            'is_healthy': False,
-            'disease_name': 'CropMismatch',
-            'confidence': Decimal('0'),
-            'severity': 'mismatch',
-            'symptoms': f'The image does not show the selected crop type ({selected_crop}).',
-            'causes': f'The uploaded image appears to show a different crop than {selected_crop!r}. This could be a Tomato image when Maize was selected, for example.',
-            'prevention': f'Please upload an image of {selected_crop} specifically, not other crop types.',
-            'treatment_type': 'Incorrect Crop',
-            'medication': 'N/A - Image does not match selected crop.',
-            'instructions': f'Upload a clear photo of {selected_crop} plants showing leaves, stems, or affected areas. Make sure the image matches the crop type you selected.',
-            'duration': 0,
-            'follow_up_date': None,
-            'engine': 'openrouter-vision',
-            'trained_model': True,
-            'model_version': 'crop-validation',
-            'image_parsed': ok,
-            'is_inconclusive': True,
         }
 
     def _candidates(self, crop_type):
@@ -477,14 +455,9 @@ class OpenRouterEngine(PlantPathologyEngine):
         ]
 
     def _fallback(self, image, crop_type, reason):
-        if not bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
-            raise AIEngineUnavailable(reason)
-        logger.warning('Using rule-based AI fallback after OpenRouter failure: %s',
-                       reason)
-        result = RuleBasedEngine().analyze(image, crop_type)
-        result['fallback_reason'] = reason
-        result['trained_model'] = False
-        return result
+        # A colour heuristic cannot verify crop identity. Never disguise a
+        # provider outage as a diagnosis, even when a legacy env enables rules.
+        raise AIEngineUnavailable(reason)
 
     def analyze(self, image, crop_type):
         if not self.available:
@@ -504,11 +477,33 @@ class OpenRouterEngine(PlantPathologyEngine):
         try:
             prediction = self._client.classify(image, crop_type, candidates)
         except OpenRouterUnavailableError as exc:
-            return self._fallback(image, crop_type, str(exc))
+            raise AIEngineUnavailable(str(exc), code=exc.code,
+                                      retry_after=exc.retry_after) from exc
         except OpenRouterResponseError as exc:
-            if bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
-                return self._fallback(image, crop_type, str(exc))
-            raise AIInferenceError(str(exc)) from exc
+            raise AIEngineUnavailable(
+                str(exc), code='ai_invalid_response') from exc
+
+        # Do not rely on the model's outcome alone. Independently gate every
+        # diagnosis (including Healthy) on the image subject and crop identity.
+        if prediction.image_type == 'not_crop' or prediction.outcome == 'not_a_crop':
+            raise AIImageRejected(
+                'This photo does not appear to show a crop plant. Upload a clear '
+                'photo of a real leaf, stem, or fruit.', 'not_a_crop')
+        identity_threshold = getattr(settings, 'AI_CROP_CONFIDENCE_THRESHOLD', 80)
+        if (prediction.image_type != 'crop'
+                or crop_key(prediction.detected_crop) in ('', 'unknown', 'uncertain')
+                or prediction.crop_confidence < identity_threshold):
+            raise AIImageRejected(
+                f'We could not verify that this is {crop_type}. Retake a well-lit '
+                'photo with the plant filling the frame.', 'crop_uncertain')
+        if (crop_key(prediction.detected_crop) != crop_key(crop_type)
+                or prediction.outcome == 'crop_mismatch'):
+            raise AIImageRejected(
+                f'You selected {crop_type}, but the photo appears to show '
+                f'{prediction.detected_crop}. Select the correct crop or change '
+                'the photo; no disease diagnosis was made.', 'crop_mismatch',
+                prediction.detected_crop)
+
 
         configured_cap = min(100.0, max(0.0, float(getattr(
             settings, 'OPENROUTER_MAX_CONFIDENCE', 95.0))))
@@ -529,19 +524,9 @@ class OpenRouterEngine(PlantPathologyEngine):
                 'confidence': round(confidence, 2),
             }],
             'visual_evidence': list(prediction.evidence),
+            'detected_crop': prediction.detected_crop,
+            'crop_confidence': prediction.crop_confidence,
         }
-
-        if prediction.outcome == 'crop_mismatch':
-            result = RuleBasedEngine._build_crop_mismatch_result(crop_type, True)
-            result.update(metadata)
-            result['is_inconclusive'] = True
-            return result
-
-        if prediction.outcome == 'not_a_crop':
-            result = RuleBasedEngine._build_not_a_crop_result(True)
-            result.update(metadata)
-            result['is_inconclusive'] = True
-            return result
 
         if prediction.outcome == 'inconclusive' or confidence < threshold:
             result = RuleBasedEngine._build_inconclusive_result(
@@ -575,6 +560,16 @@ class OpenRouterEngine(PlantPathologyEngine):
             'knowledge_base_match': True,
         })
         return result
+
+
+class OllamaEngine(OpenRouterEngine):
+    """Same reviewed-disease and image guards, with private local inference."""
+
+    engine_name = 'ollama-vision'
+
+    def __init__(self, client=None):
+        from .ollama_client import OllamaVisionClient
+        super().__init__(client or OllamaVisionClient())
 
 
 class TensorFlowEngine(PlantPathologyEngine):
@@ -816,12 +811,20 @@ class TensorFlowEngine(PlantPathologyEngine):
 
         try:
             probabilities = self._predict(self._prepare_image(image))
-            crop_key = str(crop_type).strip().casefold()
+            selected_crop_key = str(crop_type).strip().casefold()
             eligible = [item for item in self._classes
-                        if item.crop_type.casefold() == crop_key]
+                        if item.crop_type.casefold() == selected_crop_key]
             if not eligible:
                 raise AIInferenceError(
                     f'The trained model has no classes for {crop_type!r}.')
+
+            overall = max(self._classes, key=lambda item: probabilities[item.index])
+            if (crop_key(overall.crop_type) != crop_key(crop_type)
+                    and probabilities[overall.index] * 100 >= getattr(
+                        settings, 'AI_CROP_CONFIDENCE_THRESHOLD', 80)):
+                raise AIImageRejected(
+                    f'The model identified {overall.crop_type}, not {crop_type}. '
+                    'Check the selected crop and photo.', 'crop_mismatch', overall.crop_type)
 
             ranked = sorted(
                 ((probabilities[item.index], item) for item in eligible),
@@ -898,6 +901,8 @@ class TensorFlowEngine(PlantPathologyEngine):
                 'knowledge_base_match': knowledge_base_match,
             })
             return result
+        except AIImageRejected:
+            raise
         except AIEngineError as exc:
             if bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False)):
                 return self._fallback(image, crop_type, str(exc))
@@ -928,6 +933,14 @@ def _engine_cache_key():
         key_fingerprint,
         str(getattr(settings, 'OPENROUTER_MODEL', '') or ''),
         str(getattr(settings, 'OPENROUTER_BASE_URL', '') or ''),
+        json.dumps({name: getattr(settings, name, None) for name in (
+            'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_FREE_ONLY',
+            'OPENROUTER_TIMEOUT_SECONDS', 'OPENROUTER_MAX_TOKENS',
+            'OPENROUTER_IMAGE_MAX_DIMENSION', 'OPENROUTER_IMAGE_QUALITY',
+            'OPENROUTER_CONFIDENCE_THRESHOLD', 'OPENROUTER_MAX_CONFIDENCE',
+            'AI_CROP_CONFIDENCE_THRESHOLD', 'OLLAMA_BASE_URL', 'OLLAMA_MODEL',
+            'OLLAMA_TIMEOUT_SECONDS', 'AI_MODEL_CONFIDENCE_THRESHOLD',
+        )}, sort_keys=True),
     )
 
 
@@ -943,6 +956,8 @@ def get_engine():
         requested = key[0]
         if requested in ('openrouter', 'openrouter-vision', 'cloud'):
             engine = OpenRouterEngine()
+        elif requested in ('ollama', 'ollama-vision'):
+            engine = OllamaEngine()
         elif requested in ('tensorflow', 'keras', 'tf'):
             engine = TensorFlowEngine()
         elif requested == 'auto':
@@ -958,7 +973,7 @@ def get_engine():
             engine = RuleBasedEngine()
         else:
             raise AIEngineUnavailable(
-                f'Unknown AI_ENGINE={requested!r}; use openrouter, tensorflow, '
+                f'Unknown AI_ENGINE={requested!r}; use openrouter, ollama, tensorflow, '
                 f'auto, or rules.')
         _ENGINE_CACHE[key] = engine
     return _ENGINE_CACHE[key]
@@ -973,7 +988,11 @@ def analyze_disease(image, crop_type):
             and bool(getattr(settings, 'AI_REQUIRE_TRAINED_MODEL', False))):
         raise AIEngineUnavailable(
             'A trained model is required but only the demo heuristic is configured.')
-    return engine.analyze(image, str(crop_type).strip())
+    result = engine.analyze(image, str(crop_type).strip())
+    if (bool(getattr(settings, 'AI_REQUIRE_TRAINED_MODEL', False))
+            and not result.get('trained_model')):
+        raise AIEngineUnavailable('A trained model is required. A demo fallback cannot diagnose this image.')
+    return result
 
 
 def get_engine_info():
@@ -990,16 +1009,16 @@ def get_engine_info():
 
     if isinstance(engine, OpenRouterEngine):
         if not engine.available:
-            fallback = bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False))
-            detail = (engine.load_error or 'OpenRouter is unavailable.') \
-                if settings.DEBUG else 'OpenRouter configuration failed readiness checks.'
+            fallback = False
+            detail = (engine.load_error or 'Vision service is unavailable.') \
+                if settings.DEBUG else 'Vision configuration failed readiness checks.'
             return {
                 'status': 'degraded' if fallback else 'error',
                 'engine': 'rule-based' if fallback else engine.engine_name,
                 'requested_engine': engine.engine_name,
                 'model_version': engine.model_version,
                 'trained_model': False,
-                'remote': True,
+                'remote': not isinstance(engine, OllamaEngine),
                 'detail': detail,
             }
         return {
@@ -1007,9 +1026,10 @@ def get_engine_info():
             'engine': engine.engine_name,
             'model_version': engine.model_version,
             'trained_model': True,
-            'remote': True,
-            'detail': ('OpenRouter vision is configured; availability is checked '
-                       'on each diagnosis request.'),
+            'remote': not isinstance(engine, OllamaEngine),
+            'detail': ('Vision service is configured; live model availability is checked '
+                       'on each diagnosis request. This is not an uptime guarantee.'),
+            'provider_daily_limit': None if isinstance(engine, OllamaEngine) else 'account-dependent',
         }
 
     if isinstance(engine, RuleBasedEngine):
@@ -1024,7 +1044,8 @@ def get_engine_info():
                        'Demo heuristic only — no trained pathology model is configured.'),
         }
     if isinstance(engine, TensorFlowEngine) and not engine.available:
-        fallback = bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False))
+        fallback = (bool(getattr(settings, 'AI_ALLOW_RULE_FALLBACK', False))
+                    and not bool(getattr(settings, 'AI_REQUIRE_TRAINED_MODEL', False)))
         detail = (engine.load_error or 'TensorFlow model unavailable.') \
             if settings.DEBUG else 'Configured model failed readiness checks.'
         return {
@@ -1054,33 +1075,30 @@ PREFERRED_CROP_ORDER = ['Tomato', 'Maize', 'Cassava', 'Pepper', 'Cocoa', 'Potato
 
 
 def get_available_crops():
-    """Crops supported by the active model, or by the heuristic knowledge base.
+    """Offer only crops the selected engine can actually diagnose.
 
-    Returns crops in a stable preferred order (Tomato first) so the mobile
-    crop selector always starts at the most common crop rather than whichever
-    happens to be first alphabetically.
+    A cloud/local VLM needs reviewed database rows. Demo-only bundled crops
+    must not leak into the production crop picker.
     """
     try:
         engine = get_engine()
     except AIEngineError:
         engine = None
-    if isinstance(engine, TensorFlowEngine) and engine.supported_crops:
-        return engine.supported_crops
-
-    from diagnosis.models import Disease
-    db_crops = list(Disease.objects.values_list(
-        'crop_name', flat=True).distinct())
-
-    # Merge all sources without duplicates (case-sensitive dedupe via dict.fromkeys).
-    all_crops = list(dict.fromkeys(
-        [crop for crop in db_crops if crop] +
-        list(FALLBACK_DISEASE_DATABASE.keys()) +
-        DEFAULT_SUPPORTED_CROPS
-    ))
-
-    # Sort by preferred order; unknown crops go to the end alphabetically.
-    preferred_index = {name: i for i, name in enumerate(PREFERRED_CROP_ORDER)}
-    return sorted(all_crops, key=lambda c: (preferred_index.get(c, len(PREFERRED_CROP_ORDER)), c))
+    if isinstance(engine, TensorFlowEngine):
+        crops = engine.supported_crops
+    else:
+        from diagnosis.models import Disease
+        crops = list(Disease.objects.order_by('crop_name').values_list(
+            'crop_name', flat=True).distinct())
+        if isinstance(engine, RuleBasedEngine):
+            crops += list(FALLBACK_DISEASE_DATABASE)
+    unique = {}
+    preferred = {crop_key(c): i for i, c in enumerate(PREFERRED_CROP_ORDER)}
+    for crop in crops:
+        if str(crop).strip():
+            unique.setdefault(crop_key(crop), str(crop).strip())
+    return sorted(unique.values(), key=lambda c: (
+        preferred.get(crop_key(c), len(preferred)), c.casefold()))
 
 
 def get_disease_info(disease_name):

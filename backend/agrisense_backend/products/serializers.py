@@ -50,6 +50,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
+    latest_payment = serializers.SerializerMethodField()
     farmer_name = serializers.CharField(source='farmer.first_name', read_only=True)
     farmer_phone = serializers.CharField(source='farmer.phone_number', read_only=True)
     product_name = serializers.CharField(source='product.name', read_only=True)
@@ -60,7 +61,18 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = '__all__'
-        read_only_fields = ['farmer', 'total_price', 'created_at', 'updated_at']
+        read_only_fields = ['farmer', 'product', 'quantity', 'total_price', 'status',
+                            'payment_status', 'payment_method', 'reserved_until',
+                            'checkout_key', 'created_at', 'updated_at']
+
+    def get_latest_payment(self, obj):
+        # Prefetched in the list endpoint; never expose another buyer's number.
+        payments = list(obj.payments.all())
+        if not payments:
+            return None
+        payment = payments[0]
+        return {'id': payment.pk, 'status': payment.status, 'is_test': payment.is_test,
+                'last_error': payment.last_error}
 
     def get_dealer_name(self, obj):
         dealer = obj.product.dealer

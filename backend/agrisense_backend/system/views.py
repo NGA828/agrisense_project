@@ -49,14 +49,15 @@ def _push_info():
 
 
 def _payments_info():
-    from payments.gateway import get_gateway
-    gateway = get_gateway('MTN_MOMO')
-    return {
-        'status': 'ok' if gateway.provider != 'sandbox' else 'degraded',
-        'provider': gateway.provider,
-        'detail': ('Live gateway configured' if gateway.provider != 'sandbox'
-                   else 'sandbox — real provider not configured'),
-    }
+    from payments.gateway import payment_methods
+    methods = payment_methods()
+    available = [m for m in methods if m['available']]
+    live = [m for m in available if not m['is_test']]
+    return {'status': 'ok' if live else 'degraded', 'methods': methods,
+            'provider': live[0]['id'] if live else 'test' if available else 'unconfigured',
+            'detail': ('Collection configured (not a live transaction check).' if live
+                       else 'Test payments only; no money transferred.' if available
+                       else 'No collection gateway configured.')}
 
 
 @api_view(['GET'])

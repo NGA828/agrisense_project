@@ -474,25 +474,20 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  /// One-tap purchase from the product card: create the order and jump
-  /// straight to mobile-money checkout.
+  /// Open checkout; reserve stock only after the farmer presses Pay.
   Future<void> _quickBuy(dynamic product) async {
     if (_buying.contains(product.idProduct)) return;
     setState(() => _buying.add(product.idProduct));
     try {
-      final api = ApiService();
-      final order = await api.createOrder(product.idProduct, 1);
       if (!mounted) return;
       await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PaymentScreen(
-            orderId: order['id'],
+            productId: product.idProduct,
             productName: product.name,
             unitPrice: product.price.toInt().toString(),
             quantity: 1,
-            totalAmount:
-                double.tryParse(order['total_price']?.toString() ?? '') ?? 0,
           ),
         ),
       );

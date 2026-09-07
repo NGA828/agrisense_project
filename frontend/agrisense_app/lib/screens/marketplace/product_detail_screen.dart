@@ -785,18 +785,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     if (widget.productId != null) {
       setState(() => isAddingToCart = true);
       try {
-        final api = ApiService();
-        final order = await api.createOrder(widget.productId!, quantity);
         if (mounted) {
-          Navigator.push(
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => PaymentScreen(
-                orderId: order['id'],
+                productId: widget.productId,
                 productName: widget.name,
                 unitPrice: widget.price,
                 quantity: quantity,
-                totalAmount: double.tryParse(order['total_price']?.toString() ?? '') ?? 0,
               ),
             ),
           );
@@ -815,17 +812,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         if (mounted) setState(() => isAddingToCart = false);
       }
     } else {
-      // Offline / Local fallback transition
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PaymentScreen(
-            productName: widget.name,
-            unitPrice: widget.price,
-            quantity: quantity,
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('This product is offline. Connect to the marketplace before paying.'),
+      ));
     }
   }
 

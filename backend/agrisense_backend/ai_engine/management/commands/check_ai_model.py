@@ -30,16 +30,18 @@ import urllib.error
 import urllib.request
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 CATALOG_URL = 'https://openrouter.ai/api/v1/models'
 TIMEOUT = 30
 
 
 class Command(BaseCommand):
-    help = 'Verify the configured OpenRouter vision model is usable (and fast/free).'
+    help = 'Check advertised vision-model capabilities without running inference.'
 
     def add_arguments(self, parser):
+        parser.add_argument('--check-auth', action='store_true',
+                            help='Validate the OpenRouter key without running inference.')
         parser.add_argument('--model', help='Check this model id instead of settings.')
         parser.add_argument('--list-free', action='store_true',
                             help='List free models meeting all requirements.')
@@ -70,8 +72,10 @@ class Command(BaseCommand):
     @staticmethod
     def _is_free(model):
         pricing = model.get('pricing') or {}
-        return (float(pricing.get('prompt') or 0) == 0
-                and float(pricing.get('completion') or 0) == 0)
+        try:
+            return float(pricing['prompt']) == 0 and float(pricing['completion']) == 0
+        except (KeyError, TypeError, ValueError):
+            return False
 
     @staticmethod
     def _requirements(model):
@@ -84,6 +88,21 @@ class Command(BaseCommand):
         }
 
     def _evaluate(self, model_id, catalog):
+        if model_id == 'openrouter/free':
+            # The router has no provider endpoint of its own. Inspect the
+            # current eligible pool, not stale, hard-coded free-model slugs.
+            usable = []
+            for candidate_id, _ in self._usable(catalog, True):
+                if candidate_id == model_id or not candidate_id.endswith(':free'):
+                    continue
+                candidate = self._evaluate(candidate_id, catalog)
+                if candidate['ok']:
+                    usable.append(candidate_id)
+                    break
+            return {'model': model_id, 'ok': bool(usable), 'free': True,
+                    'vision': bool(usable), 'structured_outputs': bool(usable),
+                    'providers': usable,
+                    'problems': [] if usable else ['No live free vision/structured-output endpoint found.']}
         model = catalog.get(model_id)
         if model is None:
             return {'model': model_id, 'ok': False, 'listed': False,
@@ -128,7 +147,8 @@ class Command(BaseCommand):
             checks = self._requirements(model)
             if not (checks['vision'] and checks['structured_outputs']):
                 continue
-            if free_only and not self._is_free(model):
+            if free_only and (not self._is_free(model) or not (
+                    model_id == 'openrouter/free' or model_id.endswith(':free'))):
                 continue
             rows.append((model_id, model))
         return rows
@@ -151,30 +171,70 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(f'        - {problem}'))
 
     def handle(self, *args, **options):
+        as_json = options['json']
+        if settings.AI_ENGINE in ('ollama', 'ollama-vision') and not (
+                options['list_free'] or options['list_all'] or options['model']):
+            from ai_engine.ollama_client import OllamaVisionClient
+            import requests
+
+            client = OllamaVisionClient()
+            if client.configuration_error:
+                raise CommandError(client.configuration_error)
+            try:
+                response = requests.post(f'{client.base_url}/api/show',
+                                         json={'model': client.model}, timeout=10)
+                response.raise_for_status()
+                info = response.json()
+            except (requests.RequestException, ValueError) as exc:
+                raise CommandError('Ollama is unreachable or the vision model is not installed.') from exc
+            if not isinstance(info, dict) or 'vision' not in (info.get('capabilities') or []):
+                raise CommandError('The installed Ollama model does not advertise vision support.')
+            if as_json:
+                self.stdout.write(json.dumps([{'model': client.model, 'engine': 'ollama',
+                    'ok': True, 'vision': True, 'provider_daily_limit': None,
+                    'inference_tested': False}], indent=2))
+            else:
+                self.stdout.write(self.style.SUCCESS(
+                    f'{client.model}: installed, vision enabled, no hosted API daily quota. '
+                    'No inference was run; benchmark latency on your hardware.'))
+            return
+        if options['check_auth']:
+            from ai_engine.openrouter_client import OpenRouterVisionClient
+            client = OpenRouterVisionClient()
+            if client.configuration_error:
+                raise CommandError(client.configuration_error)
+            request = urllib.request.Request(client.base_url + '/key', headers=client._headers())
+            try:
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    auth = json.loads(response.read())
+                if not isinstance(auth, dict) or not isinstance(auth.get('data'), dict) or auth.get('error'):
+                    raise ValueError('Invalid authentication response')
+            except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+                raise CommandError('OpenRouter key check failed. Check credentials and connectivity privately.') from exc
+            if not as_json:
+                self.stdout.write('OpenRouter authentication succeeded. No scan was submitted.')
+
         try:
             catalog = self._catalog()
         except RuntimeError as exc:
-            self.stderr.write(self.style.ERROR(str(exc)))
-            return
+            raise CommandError(str(exc)) from exc
 
         if options['list_free'] or options['list_all']:
             free_only = not options['list_all']
             rows = self._usable(catalog, free_only)
             results = [self._evaluate(model_id, catalog)
                        for model_id, _model in sorted(rows)]
-            # Capability alone is not enough — a model can advertise vision and
-            # structured outputs yet have no provider serving it. Show the
-            # genuinely usable ones first so nothing dead gets copied.
             usable = [r for r in results if r['ok']]
             broken = [r for r in results if not r['ok']]
-            self.stdout.write(
-                f'Models with image input + structured outputs '
-                f'({"free only" if free_only else "all"}): '
-                f'{len(usable)} usable, {len(broken)} unavailable\n')
-            for result in usable + broken:
-                self._report(result)
-            if options['json']:
+            if as_json:
                 self.stdout.write(json.dumps(results, indent=2))
+            else:
+                self.stdout.write(
+                    f'Models with image input + structured outputs '
+                    f'({"free only" if free_only else "all"}): '
+                    f'{len(usable)} usable, {len(broken)} unavailable\n')
+                for result in usable + broken:
+                    self._report(result)
             return
 
         if options['model']:
@@ -182,30 +242,33 @@ class Command(BaseCommand):
         else:
             targets = [getattr(settings, 'OPENROUTER_MODEL', '')]
             targets += list(getattr(settings, 'OPENROUTER_FALLBACK_MODELS', ()) or ())
-        targets = [t for t in targets if t]
-
+        targets = list(dict.fromkeys(t for t in targets if t))
         if not targets:
-            self.stderr.write(self.style.ERROR('No model configured.'))
-            return
-
-        self.stdout.write('Checking configured OpenRouter models:\n')
-        results = []
-        for index, model_id in enumerate(targets):
-            role = 'primary ' if index == 0 else f'fallback{index}'
-            self.stdout.write(f'{role}:')
-            result = self._evaluate(model_id, catalog)
-            results.append(result)
-            self._report(result)
-
-        if options['json']:
+            raise CommandError('No model configured.')
+        guarded = (not options['model'] and not settings.OPENROUTER_ALLOW_PAID_MODELS)
+        invalid_ids = [t for t in targets if t != 'openrouter/free' and not t.endswith(':free')]
+        results = [self._evaluate(model_id, catalog) for model_id in targets]
+        for result in results:
+            if guarded and result['model'] in invalid_ids:
+                result['ok'] = False
+                result['problems'].append('Model ID is blocked by the free-only configuration guard.')
+            if options['check_auth']:
+                result['authentication_checked'] = True
+            result['inference_tested'] = False
+        if as_json:
             self.stdout.write(json.dumps(results, indent=2))
-
-        if results and not results[0]['ok']:
-            self.stdout.write(self.style.WARNING(
-                '\nThe primary model is not usable. Run '
-                '`python manage.py check_ai_model --list-free` to see '
-                'working alternatives.'))
-        elif not any(r['ok'] for r in results):
-            self.stdout.write(self.style.WARNING('\nNo configured model is usable.'))
         else:
-            self.stdout.write(self.style.SUCCESS('\nConfiguration is usable.'))
+            self.stdout.write('Checking configured OpenRouter models:\n')
+            for index, result in enumerate(results):
+                self.stdout.write('primary:' if index == 0 else f'fallback{index}:')
+                self._report(result)
+        if guarded and invalid_ids:
+            raise CommandError('The configured model list includes IDs blocked by the free-only guard.')
+        if not any(r['ok'] for r in results):
+            raise CommandError('No configured model is usable. Run check_ai_model --list-free.')
+        if not as_json:
+            if not results[0]['ok']:
+                self.stdout.write(self.style.WARNING('Primary unavailable; a fallback can serve the request.'))
+            self.stdout.write(self.style.SUCCESS(
+                'Catalog configuration is usable. This does not guarantee free quota, '
+                'latency, accuracy, or future availability.'))

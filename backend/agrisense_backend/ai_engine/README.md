@@ -1,114 +1,53 @@
 # AgriSense plant-pathology inference
 
-## Engines
+## Current setup
 
-AgriSense uses a pluggable backend with three deliberately distinct modes:
+Use the maintained [AI setup guide](../../../docs/AI_SETUP.md) for installation,
+free-provider limits, privacy, crop screening, timeouts and local Ollama. It
+supersedes the old hard-coded free-model/failover instructions.
 
-1. `AI_ENGINE=openrouter` — **primary** cloud vision path. The default model is
-   `google/gemma-4-26b-a4b-it:free`.
-2. `AI_ENGINE=tensorflow` — optional local/offline Keras CNN with an exact class
-   manifest.
-3. `AI_ENGINE=rules` — deterministic colour/lesion heuristic for demos only. It
-   is not a trained pathology model and health reports it as `degraded`.
+- `AI_ENGINE=openrouter`: `openrouter/free` routes among available free vision
+  models compatible with structured output. A zero prompt/completion price cap
+  and a free-only model-ID guard prevent silently selecting a paid endpoint.
+- `AI_ENGINE=ollama`: private vision model such as `gemma3:4b`, with the same
+  identity/disease contract and no hosted API daily quota. Hardware is required.
+- `AI_ENGINE=tensorflow`: optional local Keras CNN with an exact class manifest.
+  A closed-set classifier is **not** a reliable general-purpose non-crop detector.
+- `AI_ENGINE=rules`: colour/lesion demo only. `AI_REQUIRE_TRAINED_MODEL=true`
+  blocks it, including internal fallback results. Never use it to hide provider errors.
 
-## OpenRouter setup (primary)
+## Shared vision contract
 
-Create an OpenRouter key and keep it only in the backend environment:
+One image request returns `image_type`, `detected_crop`, finite numeric
+`crop_confidence`, the disease/healthy/inconclusive outcome and image evidence.
+The backend validates identity **before** accepting even a healthy result.
+Non-crop, mismatched or uncertain identity returns a 422 rejection with no
+persisted diagnosis/image/treatment. Disease uncertainty may instead return
+an inconclusive screening, with no chemical recommendation.
 
-```dotenv
-AI_ENGINE=openrouter
-OPENROUTER_API_KEY=replace-in-the-private-server-environment
-OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
-OPENROUTER_FALLBACK_MODELS=meta-llama/llama-4-scout:free,mistralai/mistral-small-3.1-24b-instruct:free
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_TIMEOUT_SECONDS=60
-OPENROUTER_IMAGE_MAX_DIMENSION=1280
-OPENROUTER_CONFIDENCE_THRESHOLD=70
-OPENROUTER_MAX_CONFIDENCE=95
-AI_REQUIRE_TRAINED_MODEL=true
-AI_ALLOW_RULE_FALLBACK=false
-```
+Only reviewed `Disease` rows for the selected crop are eligible; unknown labels
+and generated treatment fields fail closed. Causes, medication and instructions
+are copied from reviewed data. Model confidence is self-reported, not a clinical
+accuracy guarantee. Evaluate on real local field images and consult an agronomist.
 
-No OpenRouter SDK is required; the existing `requests` dependency calls the
-OpenAI-compatible chat-completions endpoint.
+Images are rotated/resized, converted to JPEG and stripped of EXIF before being
+sent to the configured vision service. Cloud processing must be disclosed to
+users. A private model avoids the cloud provider, but the app still sends the
+photo to the AgriSense backend.
 
-### Choosing a model (verify before you deploy)
-
-A model is only usable by this client if it meets **all three** requirements:
-
-| Requirement | Why | Symptom when missing |
-|---|---|---|
-| **Image input** | The photo is sent as a base64 JPEG data URL | HTTP 400 / the image is ignored |
-| **`structured_outputs`** | The disease allow-list is enforced with `response_format: json_schema` plus `provider.require_parameters` | No endpoint satisfies the request; it fails to route |
-| **A live provider endpoint** | A model can stay listed in the catalog with `"endpoints": []` after being deprecated | HTTP 404 — "diagnosis unavailable" to the farmer |
-
-Capability flags alone are misleading: the catalog lists models that nothing
-currently serves. Always verify against the live API:
+`ai_engine/cache.py` binds reuse to the user, image, selected crop, engine/config,
+and reviewed knowledge-base contents. Use shared Redis across workers. No
+failures are cached and no automatic repeated requests spend the free budget.
 
 ```bash
-python manage.py check_ai_model              # check primary + fallbacks
-python manage.py check_ai_model --list-free  # working free alternatives
-python manage.py check_ai_model --list-all   # include paid models
+python manage.py check_ai_model --check-auth  # no inference/charge
+python manage.py check_ai_model --list-free   # current advertised free candidates
+python manage.py check_ai_model --json        # machine-readable capability report
 ```
 
-### Failover
-
-`OPENROUTER_FALLBACK_MODELS` is sent as OpenRouter's `models` array, so a
-rate-limited, down, or moderation-blocked primary is retried against the next
-model **inside the same HTTP request** — the farmer never re-uploads the photo.
-This matters because free endpoints are the first thing providers throttle:
-free tiers allow roughly **20 requests/minute** and **50 requests/day**, rising
-to 1,000/day after a one-time $10 credit purchase.
-
-The response's `model` field records which model actually answered, and that
-value is persisted on every `Diagnosis` row.
-
-### Spend guard — this deployment cannot be billed
-
-Both default models are `:free` ($0 per input and output token, verified against
-the live catalog). Two independent mechanisms keep it that way:
-
-1. **Config validation** — with `OPENROUTER_ALLOW_PAID_MODELS=false` (the
-   default) the client refuses to run if `OPENROUTER_MODEL` or any fallback is
-   not a `:free` slug. It fails *before* any HTTP call, so a mistyped model id
-   cannot cost money.
-2. **Zero price ceiling** — every request pins
-   `provider.max_price = {prompt: 0, completion: 0}`, so even if a `:free` slug
-   were remapped to a billable endpoint, OpenRouter rejects the request instead
-   of charging.
-
-OpenRouter is prepaid with no card required: with a $0 balance the worst case is
-an HTTP 429 (daily cap) or 402 — never a surprise bill. Only set
-`OPENROUTER_ALLOW_PAID_MODELS=true` if you deliberately want paid models.
-
-### Database-only disease restriction
-
-OpenRouter is not allowed to provide arbitrary diagnoses or treatments:
-
-- Only `diagnosis.Disease` rows for the farmer-selected crop are loaded.
-  Bundled fallback diseases are **not** eligible in OpenRouter mode.
-- The request includes only each reviewed disease name, pathogen and reviewed
-  symptoms. Medication, instructions and other treatment content are never sent.
-- A strict JSON schema limits `disease_name` to `Healthy`, `Inconclusive`, or
-  one of those exact reviewed database names.
-- The backend repeats the allow-list check after receiving the response, so a
-  provider that ignores the schema still cannot inject another disease.
-- Unexpected response fields—including model-generated treatment advice—are
-  rejected.
-- Causes, prevention, medication, instructions, severity and duration are
-  always copied from the matching local `Disease` row.
-- Low confidence, poor image quality, crop mismatch or any unknown label becomes
-  `Inconclusive`; chemicals are not recommended for uncertain results.
-
-Before upload, the backend rotates the photo correctly, resizes it, converts it
-to JPEG and strips EXIF metadata. The image is then sent as a private base64
-data URL. Deployments must still disclose this third-party image processing to
-users in their privacy notice.
-
-The free model is suitable for prototypes and low-volume use. Free availability
-and rate limits can change, and a general vision-language model is not a
-field-validated plant pathology classifier. Keep agronomist confirmation in the
-workflow and evaluate against representative local field images.
+A readiness/catalog check cannot guarantee latency, recognition accuracy, daily
+free capacity or future provider uptime. For 50+ daily scans without purchasing
+API credits, size and test a private Ollama deployment; see the setup guide.
 
 ## Optional local TensorFlow model
 
@@ -154,9 +93,10 @@ curl http://localhost:8000/api/health/
 A configured OpenRouter engine reports `openrouter-vision`. Health validates
 configuration without making a billable model request; provider availability is
 checked during diagnosis. Missing credentials, network failures, malformed JSON,
-unknown diseases and provider errors fail closed. A rule fallback occurs only
-when `AI_ALLOW_RULE_FALLBACK=true`, and it remains visibly labelled as untrained.
+unknown diseases and provider errors fail closed. OpenRouter/Ollama never fall
+back to rules. A legacy TensorFlow demo fallback requires explicit permission
+and is rejected at the API boundary when a trained model is required.
 
 Every diagnosis persists `engine`, `trained_model`, `model_version`,
-`model_label`, and alternatives so results remain auditable after a model or
+`model_label`, `detected_crop`, `crop_confidence`, and alternatives so results remain auditable after a model or
 provider changes.

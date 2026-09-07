@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
@@ -312,25 +312,43 @@ class UserViewSet(viewsets.ModelViewSet):
         # becomes active. `activate_premium` is idempotent and safe to re-call.
         total = PREMIUM_PRICE_PER_MONTH * duration_months
         phone = str(request.data.get('phone_number') or '').strip() or user.phone_number or ''
-        payment, created = Payment.objects.get_or_create(
-            user=user,
-            order=None,
-            payment_method='MTN_MOMO',
-            status='pending',
-            description=f'Premium dealer subscription ({duration_months} month(s))',
-            defaults={
-                'amount': total,
-                'phone_number': phone,
-                'transaction_id': f'PREM-{user.id}-{timezone.now().strftime("%Y%m%d%H%M%S")}',
-                'payment_type': 'premium',
-            },
-        )
-        if created:
-            payment.save()
+        from payments.gateway import get_gateway, PaymentError
+        from django.db import transaction
+        import uuid
+        try:
+            gateway = get_gateway('MTN_MOMO')
+            phone = gateway.validate_phone(phone)
+        except PaymentError as exc:
+            return Response({'error': str(exc), 'code': exc.code}, status=400)
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=user.pk)
+            payment = Payment.objects.filter(user=user, payment_type='premium',
+                                             status__in=('pending', 'processing', 'review_required')).first()
+            if payment is None:
+                payment = Payment.objects.create(
+                    user=user, amount=total, phone_number=phone,
+                    payment_method='MTN_MOMO', payment_type='premium',
+                    transaction_id=f'PREM-{uuid.uuid4().hex.upper()}',
+                    gateway_environment=gateway.environment,
+                    description=f'Premium dealer subscription ({duration_months} month(s))',
+                )
+            elif payment.status == 'pending':
+                payment.phone_number = phone
+                payment.amount = total
+                payment.description = f'Premium dealer subscription ({duration_months} month(s))'
+                payment.gateway_environment = gateway.environment
+                payment.save(update_fields=['phone_number', 'amount', 'description',
+                                            'gateway_environment', 'updated_at'])
+        total = payment.amount
+        from payments.services import _premium_months
 
         return Response({
             'message': f'Premium upgrade initiated. Complete the payment of {total} FCFA to activate.',
             'payment_id': payment.id,
+            'payment_status': payment.status,
+            'duration_months': _premium_months(payment.description),
+            'is_test': payment.is_test,
+            'gateway_environment': payment.gateway_environment,
             'amount': float(total),
             'status': 'payment_required',
             'activate_premium': True,
@@ -406,7 +424,7 @@ def dealer_analytics(request):
     days = {'7d': 7, '30d': 30, '90d': 90, '1y': 365}.get(period, 30)
     since = timezone.now() - timedelta(days=days)
 
-    my_orders = Order.objects.filter(product__dealer=request.user)
+    my_orders = Order.objects.filter(product__dealer=request.user, payment_status__in=('paid', 'refunded'))
 
     # Revenue time-series (only paid/fulfilled orders count as revenue).
     revenue_qs = my_orders.filter(
@@ -646,7 +664,7 @@ def admin_analytics(request):
     if request.user.role != 'admin':
         return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
 
-    from products.models import Product, Order
+    from products.models import Order
     from diagnosis.models import Diagnosis
     from payments.models import Payment
 

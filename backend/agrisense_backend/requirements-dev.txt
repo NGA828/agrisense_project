@@ -1,0 +1,3 @@
+-r requirements.txt
+# Fake CNN regression tests need arrays, not TensorFlow or downloaded weights.
+numpy>=1.26,<3

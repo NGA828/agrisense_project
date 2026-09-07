@@ -1,5 +1,7 @@
 # AgriSense AI — Enterprise Pre-Development Audit & Architecture Blueprint
 
+> **Current validation note:** CI is deferred; this update includes no GitHub Actions workflow. References below to completed CI or automatic checks are historical plans, not evidence that CI has run. Use the manual checks and outstanding-validation list in [DEPLOYMENT.md](DEPLOYMENT.md#6-manual-validation-ci-deferred).
+
 **Role:** Expert Full-Stack Software Architect / Lead Developer
 **Scope:** Full pre-development architectural audit of the AgriSense AI monorepo
 **Stage:** No application code written in this pass — analysis, validation and planning only

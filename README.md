@@ -4,7 +4,15 @@
 
 ## Overview
 
-AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, the AI engine identifies the disease with a confidence score and a full treatment plan (causes, prevention, specific fungicides and application instructions), and the farmer can then buy the recommended inputs from verified dealers — chatting in real time and paying with **MTN Mobile Money** or **Orange Money** — all inside one green-themed Flutter app.
+AgriSense helps farmers screen crop photos and access reviewed treatment guidance,
+weather and farm supplies. Crop identity is checked against the farmer's explicit
+selection before accepting a diagnosis; uncertain or non-crop images are refused.
+AI can still be wrong, so treatment decisions need agronomist confirmation.
+Marketplace checkout supports configured **MTN Collection**; Orange Money/cards
+are not integrated, and simulated payments are explicitly test-only.
+
+**Setup:** [Free AI and the 50-scans/day requirement](docs/AI_SETUP.md) ·
+[Real payments vs test mode](docs/PAYMENTS_SETUP.md).
 
 ## Architecture
 
@@ -16,9 +24,9 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 | **Database** | MySQL 8 (utf8mb4) — SQLite supported for local dev | Users, products, orders, payments, chats, diagnoses |
 | **Cache / Queue** | Redis (django-redis cache + Celery broker); locmem/eager in dev | Caching, async workers, background scheduling |
 | **Async** | Celery + django-celery-beat schedules (reservations, premiums, reconciliation, weather cleanup) | Background jobs that never block requests |
-| **AI Engine** | OpenRouter vision (`google/gemma-4-26b-a4b-it:free`) restricted to reviewed DB diseases; optional local TensorFlow; labelled demo rules | Image-based crop screening with auditable model provenance |
+| **AI Engine** | Free OpenRouter router / private Ollama vision; reviewed crop-specific diseases; optional legacy CNN/demo engines | Image-based crop screening with auditable model provenance |
 | **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + push-bus (live notifications & stock) |
-| **External** | OpenWeatherMap, MTN MoMo / Orange Money gateway adapters | Weather forecasts & mobile-money payments |
+| **External** | OpenWeatherMap, verified MTN Collection, explicit test simulator | Weather forecasts & mobile-money payments |
 | **Observability** | JSON structured logging, request-id tracing, `/api/health/`, optional Sentry | Trace + monitor production |
 
 ## Features
@@ -26,11 +34,11 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 ### Farmer
 - **Persistent session** — auto-login on app start, JWT auto-refresh
 - **Dashboard** — time-aware greeting, live weather mini-card, AI tips, announcements
-- **AI Plant Doctor** — camera/gallery scan → disease/healthy/inconclusive + calibrated confidence + severity + full treatment plan + recommended products (crop-mandatory)
+- **AI Plant Doctor** — camera/gallery scan → disease/healthy/inconclusive + model confidence (not clinically calibrated) + severity + full treatment plan + recommended products (crop-mandatory)
 - **Marketplace** — searchable catalog with categories, images, prices, verified/premium badges, ratings/reviews; premium dealers rank first
 - **Real-time chat** — WebSocket messaging with dealers (images, typing indicators, auto-reconnect with backfill)
 - **Live marketplace** — stock availability updates instantly as orders are placed
-- **Payments** — MTN MoMo / Orange Money checkout with amount validation & provider simulation
+- **Payments** — verified MTN checkout, pending-payment recovery, amount validation and paid-only dealer visibility; simulator/sandbox are labelled TEST
 - **History** — diagnosis history and order history modules
 - **Offline-first** — diagnosis history, marketplace catalog and weather are cached for low-coverage areas, with an offline action outbox
 - **Works on first launch, offline** — a pre-populated SQLite knowledge base (crops, diseases, treatments, irrigation thresholds) ships inside the APK and installs itself into internal storage on first run; see [docs/BUNDLED_DATABASE.md](docs/BUNDLED_DATABASE.md)
@@ -39,7 +47,7 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 
 ### Agro-input Dealer
 - **Inventory CRUD** — add/edit/delete products, images, prices, stock; availability toggle
-- **Order management** — live order list, real-time "new order" notifications, accept/ship/deliver/cancel with automatic stock restore
+- **Order management** — paid-only order list/notifications, ship/deliver workflow and safe stock handling; live refunds require provider operations
 - **Live inventory** — stock changes push to the dashboard in real time as orders are placed/cancelled
 - **Customer chat** — real-time conversations with farmers (typing indicators)
 - **Premium tier** — subscription via mobile money (or admin grant); products get search visibility boost until expiry
@@ -69,13 +77,14 @@ AgriSense AI removes agricultural guesswork. A farmer photographs a sick leaf, t
 - **MySQL 8.0+ or MariaDB 10.6+** (recommended; the schema uses `utf8mb4`,
   `CHECK` constraints and descending indexes). SQLite works too for quick
   local smoke tests — see the note at the end of this section.
-- **Flutter 3.x** for the mobile app
+- **Current stable Flutter** for the app (the checked-in lockfile requires Dart 3.11+)
 
 ### Backend (Django + MySQL)
 
 ```bash
 cd backend/agrisense_backend
-python -m venv venv && source      Windows: venv\Scripts\activate
+python -m venv venv
+source venv/bin/activate           # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -98,7 +107,7 @@ It is idempotent — safe to re-run. Then:
 
 ```bash
 python manage.py migrate
-python manage.py seed_data            # demo users/products/diseases/orders/chats
+python manage.py seed_data            # ISOLATED DEV ONLY: creates known demo passwords
 python manage.py createsuperuser
 python manage.py runserver            # REST API on :8000
 ```
@@ -144,41 +153,43 @@ DB_NAME=agrisense_db DB_USER=root DB_PASSWORD=yourpass DB_HOST=localhost DB_PORT
   `export DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3` (or the
   equivalent `set` on Windows) before `migrate` — no other changes needed.
 
-### OpenRouter AI setup
+### Free AI setup
 
-OpenRouter vision is the primary engine, on a free vision model. **Step-by-step
-guide: [docs/AI_SETUP.md](docs/AI_SETUP.md).**
-
-Only two things are needed: a free OpenRouter key (no credit card) in
-`backend/agrisense_backend/.env`, and a seeded disease knowledge base
-(`python manage.py seed_data`) — the AI can only return diseases that already
-exist in the database, so scans fail without it.
+Follow [docs/AI_SETUP.md](docs/AI_SETUP.md). Default configuration:
 
 ```dotenv
 AI_ENGINE=openrouter
-OPENROUTER_API_KEY=your-private-key
-OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
-OPENROUTER_FALLBACK_MODELS=meta-llama/llama-4-scout:free,mistralai/mistral-small-3.1-24b-instruct:free
+OPENROUTER_API_KEY=replace-privately-in-the-backend
+OPENROUTER_MODEL=openrouter/free
+OPENROUTER_FALLBACK_MODELS=openrouter/free
+OPENROUTER_ALLOW_PAID_MODELS=false
 AI_REQUIRE_TRAINED_MODEL=true
 AI_ALLOW_RULE_FALLBACK=false
 ```
 
-Verify the model is live and free before scanning:
+Add **reviewed Disease records** for each supported crop, and run
+`python manage.py check_ai_model --check-auth` to check credentials/capabilities
+without using an inference request. Missing provider configuration or reviewed
+data deliberately does not produce a guessed diagnosis.
 
-```bash
-python manage.py check_ai_model
-```
+The app has no daily scan cap (20/minute default burst throttle). A hosted free
+account's **50 daily requests are shared and do not guarantee 50 successful
+analyses**. For that requirement without buying credits, use the documented
+**private Ollama vision** option and benchmark your hardware. Caching and smaller
+images reduce repeated calls and upload size; they cannot guarantee provider
+uptime, response speed or accuracy.
 
-The remote model can return only `Healthy`, `Inconclusive`, or an exact disease
-already present in the admin-reviewed `Disease` table for the selected crop.
-The backend rejects every other label and all model-generated treatment fields;
-causes, prevention, medication and instructions always come from the database.
-Only crops with reviewed database rows are exposed by the API.
+### Payment setup
 
-`/api/health/` reports missing OpenRouter configuration as an error. See
-[`ai_engine/README.md`](backend/agrisense_backend/ai_engine/README.md) for the
-restriction, privacy behavior, confidence controls and optional local
-TensorFlow setup.
+Payments are **disabled until configured**. Follow
+[docs/PAYMENTS_SETUP.md](docs/PAYMENTS_SETUP.md) for MTN sandbox/live credentials,
+Cameroon target/currency, callbacks, reconciliation and historical-order audits.
+`python manage.py check_payments --check-auth` validates authentication without
+charging anyone. Keep all provider credentials private in the backend.
+
+Development-only simulation requires both `DEBUG=True` and
+`PAYMENT_SIMULATOR_ENABLED=true`. It transfers no funds. Orange/card collection,
+automatic live refunds and dealer wallet payouts are not implemented.
 
 ### Frontend (Flutter)
 
@@ -186,10 +197,15 @@ TensorFlow setup.
 cd frontend/agrisense_app
 flutter pub get
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api   # Android emulator
-# or: flutter run --dart-define=API_BASE_URL=http://localhost:8000/api  # iOS/web/desktop
+# Real device: use your reachable backend host, not localhost.
 ```
 
-The default base URL adapts per platform automatically (`10.0.2.2` on Android, `localhost` elsewhere), so plain `flutter run` works on emulators.
+Android emulator defaults to `10.0.2.2`; iOS simulator/desktop defaults to localhost.
+Web defaults to its **own origin**: reverse-proxy `/api/`, `/media/`, `/ws/` to
+Django, or set a public `API_BASE_URL` and configure CORS/WebSocket origins.
+Use HTTPS for production and rebuild/install the app with the backend update.
+New scans and purchases require a connection; cached reference/history is not
+an offline payment or a new offline AI diagnosis.
 
 ### Demo accounts
 
@@ -201,7 +217,9 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 | Dealer (pending) | `dealer3` | `password123` | shows in admin verification queue |
 | Admin | `admin1` | `password123` | |
 
-**Payment simulator:** MTN/Orange sandbox succeeds when the phone number ends in an even digit and fails on odd digits — so you can test both flows.
+**Local simulator only:** explicitly enable it in DEBUG to test even-last-digit
+success / odd-last-digit failure. This is not the MTN external sandbox and does
+not move money. Never seed demo accounts or enable simulation on a public launch.
 
 ## API Endpoints
 
@@ -211,7 +229,7 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 - Admin: `GET /api/users/` · `GET /api/users/dealer_requests/` · `POST /api/users/{id}/suspend|activate|verify_dealer|upgrade_premium/` · `DELETE /api/users/{id}/`
 
 ### Diagnosis & AI
-- `POST /api/diagnosis/analyze/` (multipart image + crop_type — crop is required) · `GET /api/diagnosis/history/`
+- `POST /api/diagnosis/analyze/` (multipart image + crop_type — crop is required; new 201 / cached 200 / image rejected 422) · `GET /api/diagnosis/history/`
 - Returns `healthy` / `inconclusive` outcomes, conservative confidence thresholds/caps, and auditable `engine`, `trained_model`, `model_version`, `model_label`, and alternatives
 - `GET /api/diseases/supported_crops/` · Admin: `GET /api/diseases/list_diseases/`, `POST /api/diseases/add_disease/`, full CRUD
 
@@ -221,15 +239,18 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 ### Marketplace & Orders
 - `GET /api/products/marketplace/?category=&search=` (premium-boosted ranking)
 - Dealer: `GET /api/products/my_products/`, POST/PUT/DELETE `/api/products/{id}/`, `POST /api/products/{id}/toggle_availability/`
-- `POST /api/orders/` (stock-safe, reserves stock) · `GET /api/orders/` · `POST /api/orders/{id}/update_status/` (ship/deliver) · `POST /api/orders/{id}/cancel/` (farmer/dealer/admin)
+- `POST /api/orders/` (buyer-scoped `checkout_key`, reserves stock but does not notify the dealer) · `GET /api/orders/` · `POST /api/orders/{id}/update_status/` (ship/deliver) · `POST /api/orders/{id}/cancel/` (farmer/dealer/admin)
 
 ### Payments
-- `POST /api/payments/` (validates amount + ownership) · `POST /api/payments/{id}/process_payment/` · `GET /api/payments/{id}/verify/` · `POST /api/payments/{id}/refund/` (admin) · `GET /api/payments/my_payments/`
-- `POST /api/payments/webhook/` (HMAC-signed, idempotent provider callback)
+- `POST /api/payments/` (validates amount + ownership) · `POST /api/payments/{id}/process_payment/` · `GET /api/payments/{id}/verify/` · `POST /api/payments/{id}/refund/` (admin, test-only accounting) · `GET /api/payments/my_payments/`
+- `GET /api/payments/methods/` (gateway readiness/test labels and premium pricing)
+- `POST /api/payments/mtn/callback/` (native hint; authenticated provider status is checked)
+- `POST /api/payments/webhook/` (HMAC-signed integration bridge, not native MTN)
 
 ### Ledger & Settlement
 - Double-entry ledger records every collection (→ escrow), fulfilment (→ dealer + platform fee),
-  and refund (escrow reversal) with an immutable audit trail.
+  and test refund (escrow reversal) with an immutable audit trail.
+  **Ledger balances are accounting, not real wallet transfers or bank settlement.**
 
 ### Reviews, Reports & Trust
 - `POST /api/reviews/` (farmers, verified purchases only) · `GET /api/reviews/?product=`
@@ -284,7 +305,7 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 
 ### Background tasks (Celery)
 - `release_stale_reservations_task` (every 5 min) · `expire_premiums_task` (daily)
-- `reconcile_payments_task` (every 15 min) · `cleanup_weather_task` (daily)
+- `reconcile_payments_task` (every 60 seconds) · `cleanup_weather_task` (daily)
 - `fan_out_announcement_task` (on broadcast). Run `worker`/`beat` services in
   docker-compose, or `celery -A agrisense_backend worker/beat`. Without a broker
   (no `CELERY_BROKER_URL`) tasks run eagerly — no server needed for dev/tests.
@@ -296,15 +317,14 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 - JWT rotation with **blacklist**; short access tokens + transparent client refresh
 - **Authenticated & participant-checked WebSockets** — sender identity always comes from the token
 - **Transactional, stock-safe orders** with `SELECT ... FOR UPDATE` and quantity validation
-- **Reservation model** — an unpaid order holds stock only until `ORDER_RESERVATION_MINUTES`;
-  payment failure releases stock, retries re-hold, farmer cancel restores it, and a reconciler
-  command (`release_stale_reservations`) expires abandoned reservations.
-- Payment **amount integrity**, ownership checks and idempotent processing (gateway adapter pattern)
-- **Payment failure handling** — a failed collection marks the order `payment_failed` and releases
-  its stock (retryable within the reservation window).
-- **Refund + settlement** — completed payments can be refunded (escrow reversal) and fulfilled
-  orders settle funds to the dealer via an auditable double-entry ledger (commission configurable).
-- **HMAC-signed webhook** endpoint for real provider callbacks, with idempotent processing.
+- **Reservation model** — definitive payment failure releases stock; retries recheck
+  availability. Processing/uncertain payments cannot expire or be cancelled blindly.
+  `python manage.py reconcile_payments` verifies payments and releases safe abandoned holds.
+- Payment amount/ownership checks, unique provider references and idempotent processing.
+  A reported payment success alone cannot publish an order; live status is verified.
+- **Accounting is not a refund/payout adapter.** Live refunds are refused until a real
+  provider transfer workflow is integrated; never show a ledger reversal as money sent.
+- Native callbacks trigger authenticated provider verification, with polling as backup.
 - Env-driven secrets, CORS/ALLOWED_HOSTS allow-lists, DRF throttling, image type validation
 - **Custom production-security system checks** (`agrisense.W*`) fail the gate on
   insecure defaults; `manage.py check --deploy` surfaces them.
@@ -315,13 +335,33 @@ The default base URL adapts per platform automatically (`10.0.2.2` on Android, `
 
 ```bash
 cd backend/agrisense_backend
+python -m pip install -r requirements-dev.txt
 DB_ENGINE=django.db.backends.sqlite3 DB_NAME=./db.sqlite3 python manage.py test
-# 186 tests: auth/RBAC, JWT rotation, orders/stock + reservation lifecycle,
+# Backend coverage: auth/RBAC, JWT rotation, orders/stock + reservation lifecycle,
 # payment failure/retry/refund, ledger settlement, HMAC webhook, realtime push
 # bus (auth, fan-out, ping/pong), push-token registration, broadcast fan-out,
 # Celery tasks (eager), weather auth/cache/cleanup, custom security checks,
 # chat permissions, disease-DB authorization, AI determinism, analytics, health
 ```
+
+CI is deferred in this update; no GitHub Actions workflow is included.
+Run the manual checks below and the [deployment validation checklist](docs/DEPLOYMENT.md)
+before release. The backend previously passed 331 SQLite tests with mocked
+providers. Flutter analysis/tests/build and real AI/MTN validation remain unrun.
+
+Frontend regression checks (requires a working Flutter SDK):
+
+```bash
+cd frontend/agrisense_app
+flutter pub get
+flutter analyze --no-fatal-infos
+flutter test
+flutter build web --release
+```
+
+The 50-scan backend regression uses mocked inference; it proves application
+allowance, not real provider capacity or recognition accuracy. See the setup
+guides for staging/live acceptance checks.
 
 See `docs/ARCHITECTURE_ANALYSIS.md` for the full architecture & gap analysis, `docs/DEPLOYMENT.md` for production deployment (Docker, daphne, Redis channel layer, payment/weather keys), `docs/ADMIN_DASHBOARD_REDESIGN.md` for the admin-console UI/UX overhaul plus the image-upload debugging guide & fixes, `docs/FARMER_DASHBOARD_REDESIGN.md` for the farmer experience redesign, and `docs/DEALER_DASHBOARD_REDESIGN.md` for the dealer-console redesign strategy (workflows, data visualization and usability).
 
@@ -333,7 +373,7 @@ agrisense_project/
 │   ├── agrisense_backend/     # settings, urls, asgi, celery, logging, checks
 │   ├── users/                 # custom user, registration, admin management
 │   ├── diagnosis/             # diagnoses, treatment plans, disease knowledge base
-│   ├── ai_engine/             # restricted OpenRouter vision + local CNN/demo adapters
+│   ├── ai_engine/             # guarded OpenRouter/Ollama vision + legacy CNN/demo adapters
 │   ├── products/              # catalog, orders, stock management
 │   ├── payments/              # payment model + mobile-money gateway adapters
 │   ├── chat/                  # chat rooms, messages, JWT WebSocket consumer

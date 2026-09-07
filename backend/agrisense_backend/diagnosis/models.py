@@ -27,6 +27,9 @@ class Diagnosis(models.Model):
     model_version = models.CharField(max_length=100, blank=True, default='')
     model_label = models.CharField(max_length=200, blank=True, default='')
     alternatives = models.JSONField(blank=True, default=list)
+    detected_crop = models.CharField(max_length=100, blank=True, default='')
+    crop_confidence = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    visual_evidence = models.JSONField(blank=True, default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='diagnoses')
 

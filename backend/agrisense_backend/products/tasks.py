@@ -25,7 +25,9 @@ def release_stale_reservations_task():
     for order in stale:
         with transaction.atomic():
             order = Order.objects.select_for_update().get(id=order.id)
-            if order.status != 'pending' or order.payment_status == 'paid':
+            if (order.status != 'pending' or order.payment_status != 'unpaid'
+                    or order.reserved_until is None or order.reserved_until > now
+                    or order.payments.filter(status__in=('processing', 'review_required')).exists()):
                 continue
             product = Product.objects.select_for_update().get(id_product=order.product_id)
             product.stock_quantity += order.quantity
@@ -42,13 +44,6 @@ def release_stale_reservations_task():
             'Order expired',
             f'Your order of {order.product.name} was cancelled because it was '
             f'not paid in time. The stock has been released.',
-            type='order_status', reference_id=order.id,
-        )
-        notify_user(
-            order.product.dealer,
-            'Order expired',
-            f'Order #{order.id} of {order.product.name} was not paid in time '
-            f'and has been cancelled.',
             type='order_status', reference_id=order.id,
         )
         from products.views import _push_stock

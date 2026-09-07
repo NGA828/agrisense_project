@@ -101,18 +101,21 @@ def notify_user(user, title, message, type='system', reference_id=''):
         type=type,
         reference_id=str(reference_id or ''),
     )
-    try:
-        from realtime.services import send_to_user, send_push_notification
-        send_to_user(user.id, 'notification', {
-            'id': notification.id,
-            'title': title,
-            'message': message,
-            'type': type,
-            'reference_id': str(reference_id or ''),
-        })
-        send_push_notification(user, title, message,
-                               data={'type': type, 'reference_id': str(reference_id or '')})
-    except Exception:
-        # Realtime/push are best-effort; never break the business operation.
-        pass
+    def deliver():
+        try:
+            from realtime.services import send_to_user, send_push_notification
+            send_to_user(user.id, 'notification', {
+                'id': notification.id,
+                'title': title,
+                'message': message,
+                'type': type,
+                'reference_id': str(reference_id or ''),
+            })
+            send_push_notification(user, title, message,
+                                   data={'type': type, 'reference_id': str(reference_id or '')})
+        except Exception:
+            # Realtime/push are best-effort; never break the business operation.
+            pass
+    from django.db import transaction
+    transaction.on_commit(deliver)
     return notification

@@ -7,7 +7,7 @@ from PIL import Image
 
 from ai_engine.class_mapping import ClassMapError, infer_class_fields, parse_class_map
 from ai_engine.openrouter_client import OpenRouterVisionClient
-from ai_engine.services import (AIEngineUnavailable, AIInferenceError,
+from ai_engine.services import (AIEngineUnavailable, AIInferenceError, AIImageRejected,
                                 OpenRouterEngine, RuleBasedEngine,
                                 TensorFlowEngine, analyze_disease,
                                 get_available_crops, get_disease_info,
@@ -40,10 +40,9 @@ class RuleBasedEngineTests(TestCase):
             self.assertIn(key, result)
         self.assertIsInstance(result['confidence'], Decimal)
 
-    def test_unknown_crop_falls_back_to_default(self):
-        result = RuleBasedEngine().analyze(png_bytes(), 'Mango')
-        self.assertIn(result['disease_name'], [
-            'Tomato Late Blight', 'Tomato Early Blight', 'Tomato Bacterial Wilt'])
+    def test_unknown_crop_never_falls_back_to_tomato(self):
+        with self.assertRaises(AIInferenceError):
+            RuleBasedEngine().analyze(png_bytes(), 'Mango')
 
     def test_brownish_image_scores_lesion_diseases(self):
         # Brown-heavy image should favour high-lesion signatures over mosaic.
@@ -190,6 +189,7 @@ class OpenRouterEngineTests(TestCase):
         )
         self.requests = []
         self.result = {
+            'image_type': 'crop', 'detected_crop': 'Tomato', 'crop_confidence': 94,
             'outcome': 'disease',
             'disease_name': 'Reviewed Tomato Blight',
             'confidence': 88,
@@ -215,13 +215,7 @@ class OpenRouterEngineTests(TestCase):
 
     def test_supported_crops_come_only_from_reviewed_database_rows(self):
         crops = get_available_crops()
-        # The engine's supported-crop list is the union of reviewed database
-        # crops and the bundled/defaults (the crop picker must offer every
-        # crop the knowledge base can still diagnose offline), with reviewed
-        # rows first and no duplicates.
-        self.assertEqual(crops[0], 'Maize')
-        self.assertEqual(crops[1], 'Tomato')
-        self.assertEqual(len(crops), len(set(crops)))
+        self.assertEqual(crops, ['Tomato', 'Maize'])
 
     def test_uses_only_reviewed_diseases_for_selected_crop(self):
         result = self.engine().analyze(png_bytes(), 'Tomato')
@@ -252,6 +246,7 @@ class OpenRouterEngineTests(TestCase):
 
     def test_healthy_result_uses_no_disease_treatment(self):
         self.result = {
+            'image_type': 'crop', 'detected_crop': 'Tomato', 'crop_confidence': 94,
             'outcome': 'healthy', 'disease_name': 'Healthy',
             'confidence': 86, 'evidence': ['uniform green tissue'],
         }
@@ -269,6 +264,7 @@ class OpenRouterEngineTests(TestCase):
 
     def test_explicit_inconclusive_does_not_show_high_match_confidence(self):
         self.result = {
+            'image_type': 'crop', 'detected_crop': 'Tomato', 'crop_confidence': 94,
             'outcome': 'inconclusive', 'disease_name': 'Inconclusive',
             'confidence': 99, 'evidence': ['image is blurry'],
         }
@@ -278,12 +274,12 @@ class OpenRouterEngineTests(TestCase):
 
     def test_model_cannot_select_unreviewed_disease(self):
         self.result['disease_name'] = 'Invented Leaf Disease'
-        with self.assertRaises(AIInferenceError):
+        with self.assertRaises(AIEngineUnavailable):
             self.engine().analyze(png_bytes(), 'Tomato')
 
     def test_model_treatment_fields_are_rejected(self):
         self.result['treatment'] = 'Buy an invented pesticide'
-        with self.assertRaises(AIInferenceError):
+        with self.assertRaises(AIEngineUnavailable):
             self.engine().analyze(png_bytes(), 'Tomato')
 
     def test_crop_without_reviewed_rows_is_rejected_before_api_call(self):
@@ -318,12 +314,12 @@ class OpenRouterEngineTests(TestCase):
             self.engine().analyze(png_bytes(), 'Tomato')
         self.assertIn('check_ai_model', str(ctx.exception))
 
-    def test_completion_budget_leaves_room_for_reasoning(self):
+    def test_completion_budget_is_bounded(self):
         """Reasoning models spend hidden tokens from the same completion
         budget; a small max_tokens yields an empty body and a failed scan."""
         self.engine().analyze(png_bytes(), 'Tomato')
         payload = self.requests[0][1]['json']
-        self.assertGreaterEqual(payload['max_tokens'], 1500)
+        self.assertEqual(payload['max_tokens'], 1024)
 
     @override_settings(OPENROUTER_API_KEY='')
     def test_missing_api_key_fails_closed(self):
@@ -375,8 +371,8 @@ class OpenRouterEngineTests(TestCase):
     def test_reasoning_is_excluded_so_content_contains_diagnosis(self):
         self.engine().analyze(png_bytes(), 'Tomato')
         payload = self.requests[0][1]['json']
-        self.assertEqual(payload['reasoning'], {'exclude': True})
-        self.assertEqual(payload['max_tokens'], 2000)
+        self.assertEqual(payload['reasoning'], {'enabled': False})
+        self.assertEqual(payload['max_tokens'], 1024)
 
     def test_records_the_model_that_actually_answered(self):
         """With failover the responder may differ from the requested model."""
@@ -477,12 +473,10 @@ class TensorFlowEngineTests(TestCase):
         self.assertTrue(result['low_confidence'])
         self.assertEqual(result['engine'], 'tensorflow-cnn')
 
-    def test_selected_crop_masks_other_crop_classes(self):
-        # The global top class is Tomato, but only Maize outputs are eligible.
-        result = self.engine([0.01, 0.98, 0.01]).analyze(
-            png_bytes(), 'Maize')
-        self.assertEqual(result['disease_name'], 'Inconclusive')
-        self.assertEqual(result['model_label'], 'Corn_(maize)___Common_rust_')
+    def test_selected_crop_does_not_hide_a_confident_crop_mismatch(self):
+        with self.assertRaises(AIImageRejected) as caught:
+            self.engine([0.01, 0.98, 0.01]).analyze(png_bytes(), 'Maize')
+        self.assertEqual(caught.exception.code, 'crop_mismatch')
 
     def test_output_manifest_mismatch_fails_closed(self):
         engine = self.engine([0.1, 0.9])

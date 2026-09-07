@@ -1,163 +1,112 @@
-# Getting the AI Plant Doctor running
+# Reliable crop analysis: free-model setup
 
-Everything in the code is already configured. There are exactly **two** things
-left to do, and both are one-liners.
+## What changed
 
----
+- You must select a crop. The app no longer silently selects Tomato or offers crops with no reviewed disease data.
+- One vision request checks **whether the photo contains a crop**, identifies the actual crop, and screens for a disease. The backend independently checks those fields before accepting any disease or `Healthy` result.
+- Non-crop photos, crop mismatches and uncertain crop identities return a helpful message. **No diagnosis, treatment plan or image is saved for these rejections.**
+- The model may choose only a disease reviewed for the selected crop. Medication, dosage and treatment instructions are never taken from generated model text.
+- Photos are resized to 1,024 pixels before upload where supported, then resized/rotated and stripped of EXIF on the server. Hidden reasoning is disabled and the output budget is bounded.
+- Recent identical scans are reused for the **same user + image + crop + model/configuration + reviewed data** for 10 minutes. Edits to reviewed data invalidate the cache. A concurrent duplicate does not make another model call.
+- Expired login tokens are refreshed for scan uploads. Network, quota and model-response failures are not disguised as a diagnosis or blamed on the photo.
 
-## 1. Get a free OpenRouter API key
+**No AI model is error-free.** Crop recognition and self-reported confidence can be wrong. This is visual screening, not a laboratory diagnosis or a substitute for an agronomist. Test on representative crop/non-crop photos from your farms before relying on it.
 
-1. Go to <https://openrouter.ai> and sign up (email or GitHub).
-   **No credit card is required**, and none should be added.
-2. Open <https://openrouter.ai/keys> and click **Create Key**.
-3. Copy the key (it starts with `sk-or-v1-...`). You only see it once.
+## Choose the free option that matches your daily requirement
 
-## 2. Put the key in the backend environment
+| Option | Model cost | Daily capacity | Trade-off |
+|---|---|---|---|
+| OpenRouter free router | Zero-priced endpoints only by default | Shared provider/account quota | Simplest setup; free availability and latency vary |
+| Private Ollama vision model | No hosted API per-scan fee | No provider daily request cap; the app has no daily cap | You provide suitable hardware, electricity/hosting and model maintenance |
 
-Create `backend/agrisense_backend/.env` (the file is git-ignored — the key must
-never be committed or placed in the Flutter app):
+The basic OpenRouter free tier is commonly limited to **50 requests/day across the account**, not 50 successful scans for every farmer. Other users, unsuccessful calls and upstream availability can reduce the number of useful results. Switching free models/keys is not a way to create extra account quota. Check the current [provider limits](https://openrouter.ai/docs/api_reference/limits) before deployment.
 
-```bash
-cd backend/agrisense_backend
-cp .env.example .env
-```
+If **at least 50 fresh analyses/day without buying API credits** is a firm requirement, use the private Ollama option and size/test the machine for your workload. It removes the hosted-model quota, not hardware failures or recognition uncertainty. There is intentionally no automatic paid fallback or automatic retry loop that spends more requests.
 
-Then edit `.env` and set just this one line:
+## Option A — OpenRouter, easiest to start
 
-```dotenv
-OPENROUTER_API_KEY=sk-or-v1-your-key-here
-```
-
-Everything else already has a working default: the model, the free-only spend
-guard, the fallback model, the confidence thresholds.
-
-## 3. Seed the disease knowledge base
-
-**This step is not optional.** The AI is deliberately restricted to diseases
-that exist in your database — it is never allowed to invent one. With an empty
-`Disease` table every scan fails with:
-
-```
-No reviewed diseases exist in the database for 'Tomato'.
-```
-
-So run:
-
-```bash
-python manage.py migrate
-python manage.py seed_data      # seeds 9 diseases across 5 crops
-```
-
----
-
-## Verify before you scan
-
-```bash
-python manage.py check_ai_model
-```
-
-Expected:
-
-```
-primary : OK    google/gemma-4-26b-a4b-it:free
-                free, vision + structured outputs, served by Google AI Studio
-fallback1: OK   meta-llama/llama-4-scout:free
-fallback2: OK   mistralai/mistral-small-3.1-24b-instruct:free
-fallback3: OK   dots-studio/dots-3-note-preview:free  (retired 2026-09-30)
-Configuration is usable.
-```
-
-Then check the app's own health endpoint:
-
-```bash
-curl http://localhost:8000/api/health/
-```
-
-The `ai` section should read `"status": "ok"`. If it says
-`"OPENROUTER_API_KEY is not configured."`, the `.env` file was not picked up —
-confirm it sits next to `manage.py` and that `python-dotenv` is installed.
-
----
-
-## "It was working, now every scan fails" — check this first
-
-Free OpenRouter models are **retired on a rolling schedule** (for example,
-`dots-studio/dots-3-note-preview:free` is scheduled for removal on
-**2026-09-30**, and providers drop free endpoints without notice). When the
-primary *and* every fallback are dead or throttled, every diagnosis fails with
-the same generic "could not analyze this photo" error — which looks like the AI
-"can't recognize anything", including perfectly clear crop photos.
-
-Two commands tell you which case you are in:
-
-```bash
-python manage.py check_ai_model            # are the configured models alive?
-python manage.py check_ai_model --list-free # what can I switch to right now?
-```
-
-Then update `OPENROUTER_MODEL` / `OPENROUTER_FALLBACK_MODELS` in `.env` to a
-model that reports **OK on all three requirements** (vision, structured
-outputs, live provider) and restart the backend.
-
-Also confirm the failure is not quota: the free tier allows **50 requests per
-day, account-wide** (failed requests count too). A day of UI testing can
-exhaust it, and then every scan fails until the daily reset — or until the
-one-time $10 top-up raises it to 1,000/day.
-
----
-
-## What each failure message means
-
-| Message | Cause | Fix |
-|---|---|---|
-| `OPENROUTER_API_KEY is not configured.` | Step 2 missing/not loaded | Check `.env` is in `backend/agrisense_backend/` |
-| `No reviewed diseases exist in the database for 'X'.` | Step 3 missing, or crop has no rows | `python manage.py seed_data` |
-| `OPENROUTER_FREE_ONLY is enabled but these models are not free: ...` | A paid model was configured | Use a `:free` id, or set `OPENROUTER_ALLOW_PAID_MODELS=true` |
-| `OpenRouter returned HTTP 429. Rate limited...` | Daily/minute cap hit | Wait; see budget notes below |
-| `OpenRouter returned HTTP 402. ...out of free-tier credit/quota` | Free daily quota exhausted | Wait for reset or one-time $10 top-up |
-| `OpenRouter returned HTTP 401. The API key was rejected` | Key revoked/typo | Create a new key at openrouter.ai/settings/keys |
-| `OpenRouter returned HTTP 404. ...no longer has a live provider` | Model retired | `python manage.py check_ai_model --list-free` |
-| `empty diagnosis content` | Model spent its output budget on reasoning | Raise `OPENROUTER_MAX_TOKENS` (default 2000) or switch to a non-reasoning model |
-
----
-
-## Staying inside the free tier
-
-One photo scan = one OpenRouter request. No retries are performed.
-
-| Account | Scans/day | Scans/min |
-|---|---|---|
-| Free (no card) | **50** | 20 |
-| After a one-time $10 credit purchase | 1,000 | 20 |
-
-The daily cap is **account-wide across all `:free` models**, so the fallback
-model buys reliability, not extra quota. Failed requests still count.
-
-**While building UI, don't burn quota on the real model:**
+Keep the key only in `backend/agrisense_backend/.env` (or your hosting secret manager). Do not put it in Flutter, Git, screenshots, or chat.
 
 ```dotenv
-AI_ENGINE=rules
-AI_REQUIRE_TRAINED_MODEL=false
-```
-
-This uses the local heuristic engine — zero requests, no key needed. Switch back
-to `AI_ENGINE=openrouter` when you want to test real diagnosis quality.
-
-To make your app's throttle match OpenRouter's ceiling (so users see a clean
-error instead of a raw 429):
-
-```dotenv
+AI_ENGINE=openrouter
+OPENROUTER_API_KEY=replace-privately
+OPENROUTER_MODEL=openrouter/free
+OPENROUTER_FALLBACK_MODELS=openrouter/free
+OPENROUTER_ALLOW_PAID_MODELS=false
+OPENROUTER_TIMEOUT_SECONDS=25
+OPENROUTER_MAX_TOKENS=1024
+OPENROUTER_IMAGE_MAX_DIMENSION=1024
+OPENROUTER_IMAGE_QUALITY=82
+AI_CROP_CONFIDENCE_THRESHOLD=80
+AI_REQUIRE_TRAINED_MODEL=true
+AI_ALLOW_RULE_FALLBACK=false
+AI_ANALYSIS_CACHE_SECONDS=600
 THROTTLE_AI_RATE=20/min
 ```
 
----
+Get a key from <https://openrouter.ai/keys>. The [free router](https://openrouter.ai/docs/guides/routing/routers/free-router) selects currently available free models compatible with image input and structured output, instead of depending on a list of retired model IDs. Its choice can vary. The actual responding model is recorded on each diagnosis.
 
-## Notes
+The spend guard accepts only `openrouter/free` or `:free` model IDs and pins provider prompt/completion prices to zero. A duplicate primary/fallback is removed. To pin a particular free vision model, inspect the live catalog first:
 
-- The key lives **only** in the backend. The Flutter app talks to your Django
-  server, never to OpenRouter, so the key is never shipped in the APK.
-- Scans are also constrained by the crop list: `seed_data` covers Tomato, Maize,
-  Cassava, Pepper and Cocoa. To support more crops, add `Disease` rows via the
-  admin — the AI picks them up immediately, with no code change.
-- `dots-3-note-preview` is a *preview* model and free slugs do get retired. If
-  diagnoses start failing, run `check_ai_model` first.
+```bash
+cd backend/agrisense_backend
+python manage.py check_ai_model --list-free
+python manage.py check_ai_model --check-auth
+```
+
+The second command checks credentials and catalog capability **without submitting a scan**. It cannot guarantee remaining free requests or a successful future diagnosis. Restart Django after changing the environment.
+
+## Option B — Private Ollama, no daily provider quota
+
+1. Install [Ollama](https://ollama.com/) on the inference machine.
+2. Download a **vision-capable** local model, for example `ollama pull gemma3:4b`.
+3. Keep Ollama running and private. Warm the model before accepting traffic; the adapter keeps it loaded for 30 minutes after use. Benchmark latency and accuracy on your actual hardware. A CPU-only machine can be much slower than a suitable GPU.
+4. Set:
+
+```dotenv
+AI_ENGINE=ollama
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=gemma3:4b
+OLLAMA_TIMEOUT_SECONDS=25
+AI_REQUIRE_TRAINED_MODEL=true
+AI_ALLOW_RULE_FALLBACK=false
+```
+
+That loopback URL is **server-to-server**, when Django and Ollama run on the same machine; the phone/browser never calls it. Use a private service hostname if they run separately. Do not expose Ollama's unauthenticated port publicly. Cloud-tagged models are rejected by this adapter.
+
+The repository also includes an optional Compose profile. In the environment file used by Compose, set `AI_ENGINE=ollama` and `OLLAMA_BASE_URL=http://ollama:11434`, then, from the repository root:
+
+```bash
+docker compose --env-file backend/agrisense_backend/.env --profile local-ai up -d --build
+docker compose --env-file backend/agrisense_backend/.env --profile local-ai exec ollama ollama pull gemma3:4b
+docker compose --env-file backend/agrisense_backend/.env exec backend python manage.py check_ai_model
+```
+
+Weights stay in the `ollama_models` Docker volume, not Git. No weights are downloaded by Django or included in this patch. A downloaded model and adequate runtime resources are still required. Pin and validate an Ollama image/model version for production.
+
+## Required for BOTH options: reviewed crop data
+
+```bash
+python manage.py migrate
+```
+
+Add/review `Disease` records in Django admin or the app's content-management screen for every crop you intend to offer. On an **isolated development database only**, `python manage.py seed_data` supplies demo crop data **and demo accounts with known passwords**. Never run that command on a public production database as a shortcut.
+
+An empty knowledge base intentionally exposes no crops. Do not turn on the colour-rule demo to conceal missing data or provider failures. The optional legacy TensorFlow closed-set classifier is not an open-world non-crop detector; prefer the guarded OpenRouter/Ollama paths for this requirement.
+
+## Production and troubleshooting
+
+- Existing diagnoses are not re-classified by the migration. Resubmit a photo if an old result seemed wrong.
+- Deploy the updated backend **and rebuild/install the Flutter app**. Cached scans now return HTTP 200; new scans return 201, and image rejections have dedicated error codes.
+- Use `CACHE_BACKEND=redis` with a shared `REDIS_CACHE_URL` for multiple workers. Redis uses an ownership-checked atomic lease; local-memory caching coordinates only within one process.
+- A cache/throttle outage stops new inference with a private, retryable 503 rather than bypassing the free-request guard. Cache write/cleanup failures cannot hide an already-saved diagnosis or change a crop rejection into a server error. Redis connection/read waits are bounded to two seconds each.
+- `ai_cache_unavailable`: the shared cache needs attention. Wait briefly and retry; the request does not fall back to a guessed diagnosis.
+- The default provider read timeout is 25 seconds (connection timeout up to 5 seconds); the app waits up to 45 seconds per upload attempt. These are waiting limits, **not a measured completion-time guarantee**. Model cold starts, provider queues and slow uploads still matter.
+- `GET /api/health/` reports configuration under `checks.ai_engine`; it does not make an expensive live inference call.
+- `not_a_crop` / `crop_mismatch`: choose an actual photo of the selected crop, or change the crop selection. The app will never silently substitute another crop.
+- `crop_uncertain`: retake a clearer photo with useful plant features visible.
+- `ai_rate_limited`: obey `Retry-After` when returned. The quota is shared; do not repeatedly tap retry.
+- `ai_timeout` / `ai_invalid_response`: a provider issue, not proof your plant is diseased. No result is saved; retry later.
+- `ai_knowledge_base_empty` / `unsupported_crop`: review/add the relevant disease records, then reload the crop selector.
+
+Never lower the crop-identity threshold simply to make more uploads pass. Better to refuse an uncertain photo than prescribe a treatment for the wrong crop.
