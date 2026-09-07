@@ -71,8 +71,18 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
-      # OpenRouter vision (primary). Keep the API key in the host environment.
+      # Vision engine: groq (free tier, recommended) / openrouter / ollama.
+      # Keep API keys in the host environment, never in the image or Git.
       AI_ENGINE: ${AI_ENGINE:-openrouter}
+      # Groq free-tier vision (https://console.groq.com/keys)
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
+      GROQ_FALLBACK_MODELS: ${GROQ_FALLBACK_MODELS:-meta-llama/llama-4-maverick-17b-128e-instruct}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_TIMEOUT_SECONDS: ${GROQ_TIMEOUT_SECONDS:-25}
+      GROQ_MAX_TOKENS: ${GROQ_MAX_TOKENS:-1024}
+      GROQ_IMAGE_MAX_DIMENSION: ${GROQ_IMAGE_MAX_DIMENSION:-1024}
+      GROQ_IMAGE_QUALITY: ${GROQ_IMAGE_QUALITY:-82}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/free}
       OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-openrouter/free}
@@ -102,6 +112,8 @@ services:
       JWT_ACCESS_MINUTES: "30"
       JWT_REFRESH_DAYS: "7"
       PAYMENT_SIMULATOR_ENABLED: ${PAYMENT_SIMULATOR_ENABLED:-false}
+      # Explicit opt-in for simulated checkout on a non-DEBUG demo deployment.
+      PAYMENT_SIMULATOR_ALLOW_NON_DEBUG: ${PAYMENT_SIMULATOR_ALLOW_NON_DEBUG:-false}
       PAYMENT_PROVIDER_TIMEOUT_SECONDS: ${PAYMENT_PROVIDER_TIMEOUT_SECONDS:-12}
       MTN_MOMO_ENABLED: ${MTN_MOMO_ENABLED:-false}
       MTN_MOMO_API_KEY: ${MTN_MOMO_API_KEY:-}
@@ -135,6 +147,7 @@ services:
       # The worker does not perform image inference; keep the provider key scoped
       # to the web backend process.
       OPENROUTER_API_KEY: ""
+      GROQ_API_KEY: ""
     volumes:
       - ./backend/agrisense_backend/media:/app/media
     depends_on:
@@ -155,6 +168,7 @@ services:
     environment:
       <<: *backend-env
       OPENROUTER_API_KEY: ""
+      GROQ_API_KEY: ""
     depends_on:
       db:
         condition: service_healthy

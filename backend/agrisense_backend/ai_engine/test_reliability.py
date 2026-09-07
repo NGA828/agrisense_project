@@ -5,14 +5,18 @@ from unittest.mock import Mock, patch
 
 from django.core.cache import cache
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from PIL import Image
+from rest_framework.test import APITestCase
 
 from diagnosis.models import Disease
 from .openrouter_client import OpenRouterVisionClient
 from .ollama_client import OllamaVisionClient
+from .groq_client import GroqVisionClient
 from .services import (
     AIEngineUnavailable, AIImageRejected, OpenRouterEngine, OllamaEngine,
-    analyze_disease, get_available_crops, get_engine, reset_engine_cache,
+    GroqEngine, analyze_disease, get_available_crops, get_engine,
+    reset_engine_cache,
 )
 
 
@@ -195,3 +199,218 @@ class LocalVisionTests(TestCase):
         with self.assertRaises(AIEngineUnavailable):
             OllamaEngine(OllamaVisionClient(post=post)).analyze(photo(), 'Tomato')
         post.assert_not_called()
+
+
+def groq_transport(result=None, *, status=200, model='groq/llama-4-scout',
+                   finish_reason='stop', error=None, headers=None):
+    envelope = {'model': model,
+                'choices': [{'message': {'content': json.dumps(result or classification())},
+                             'finish_reason': finish_reason}]}
+    if error:
+        envelope['error'] = error
+    return Mock(return_value=SimpleNamespace(
+        status_code=status, headers=headers or {}, json=lambda: envelope))
+
+
+@override_settings(AI_ENGINE='groq', GROQ_API_KEY='unit-test-only',
+                   GROQ_MODEL='groq/llama-4-scout',
+                   GROQ_FALLBACK_MODELS=['groq/llama-4-maverick'],
+                   OPENROUTER_API_KEY='', AI_ALLOW_RULE_FALLBACK=True,
+                   AI_REQUIRE_TRAINED_MODEL=True)
+class GroqVisionTests(TestCase):
+    """The free Groq engine must obey the same guards as every vision engine."""
+
+    def setUp(self):
+        reset_engine_cache()
+        Disease.objects.create(disease_name='Tomato Blight', crop_name='Tomato',
+                               symptoms='Reviewed symptoms', medication='Reviewed treatment only')
+        self.addCleanup(reset_engine_cache)
+
+    def engine(self, post):
+        return GroqEngine(GroqVisionClient(post=post))
+
+    def test_success_uses_reviewed_treatment_and_groq_json_mode(self):
+        post = groq_transport()
+        result = self.engine(post).analyze(photo(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Tomato Blight')
+        self.assertEqual(result['engine'], 'groq-vision')
+        self.assertEqual(result['medication'], 'Reviewed treatment only')
+        self.assertEqual(post.call_args.args[0],
+                         'https://api.groq.com/openai/v1/chat/completions')
+        payload = post.call_args.kwargs['json']
+        self.assertEqual(payload['model'], 'groq/llama-4-scout')
+        self.assertEqual(payload['response_format'], {'type': 'json_object'})
+        self.assertEqual(payload['temperature'], 0)
+        self.assertEqual(payload['max_completion_tokens'], 1024)
+        self.assertNotIn('models', payload)
+        self.assertNotIn('provider', payload)
+        self.assertNotIn('reasoning', payload)
+        image_part = payload['messages'][1]['content'][1]
+        self.assertEqual(set(image_part['image_url']), {'url'})
+        self.assertTrue(image_part['image_url']['url'].startswith('data:image/jpeg;base64,'))
+        # JSON mode cannot carry the schema itself: it must be in the prompt.
+        self.assertIn('JSON', payload['messages'][1]['content'][0]['text'])
+        self.assertEqual(post.call_count, 1)
+
+    def test_non_crop_photo_is_rejected_without_saving_a_diagnosis(self):
+        with self.assertRaises(AIImageRejected) as caught:
+            self.engine(groq_transport(classification(image_type='not_crop'))).analyze(photo(), 'Tomato')
+        self.assertEqual(caught.exception.code, 'not_a_crop')
+
+    def test_photo_of_another_crop_is_rejected_even_for_healthy(self):
+        post = groq_transport(classification(detected_crop='Maize', outcome='healthy',
+                                             disease_name='Healthy'))
+        with self.assertRaises(AIImageRejected) as caught:
+            self.engine(post).analyze(photo(), 'Tomato')
+        self.assertEqual(caught.exception.code, 'crop_mismatch')
+
+    def test_rate_limited_primary_falls_back_once_per_model(self):
+        limited = SimpleNamespace(status_code=429, headers={'retry-after': '90'},
+                                  json=lambda: {'error': {'code': 429}})
+        success = groq_transport(model='groq/llama-4-maverick')
+        post = Mock(side_effect=[limited, success.return_value])
+        result = self.engine(post).analyze(photo(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Tomato Blight')
+        self.assertEqual(result['model_version'], 'groq/llama-4-maverick')
+        self.assertEqual(post.call_count, 2)
+
+    def test_rejected_key_never_falls_back_or_leaks_details(self):
+        post = groq_transport(status=401, error={'code': 401})
+        with self.assertRaises(AIEngineUnavailable) as caught:
+            self.engine(post).analyze(photo(), 'Tomato')
+        self.assertEqual(caught.exception.code, 'ai_model_unavailable')
+        self.assertIn('console.groq.com/keys', str(caught.exception))
+        self.assertEqual(post.call_count, 1)
+
+    def test_all_models_rate_limited_maps_to_retryable_error(self):
+        post = groq_transport(status=429, error={'code': 429}, headers={'retry-after': '70'})
+        with self.assertRaises(AIEngineUnavailable) as caught:
+            self.engine(post).analyze(photo(), 'Tomato')
+        self.assertEqual(caught.exception.code, 'ai_rate_limited')
+        self.assertEqual(caught.exception.retry_after, 70)
+        self.assertEqual(post.call_count, 2, 'primary and one fallback')
+
+    def test_non_json_answer_is_rejected_not_guessed(self):
+        envelope = {'model': 'groq/llama-4-scout',
+                    'choices': [{'message': {'content': 'looks like blight'},
+                                 'finish_reason': 'stop'}]}
+        post = Mock(return_value=SimpleNamespace(status_code=200, headers={},
+                                                 json=lambda: envelope))
+        with self.assertRaises(AIEngineUnavailable) as caught:
+            self.engine(post).analyze(photo(), 'Tomato')
+        self.assertEqual(caught.exception.code, 'ai_invalid_response')
+
+    def test_truncated_json_hints_the_token_budget(self):
+        envelope = {'model': 'groq/llama-4-scout',
+                    'choices': [{'message': {'content': '{"outcome": "dise'},
+                                             'finish_reason': 'length'}]}
+        post = Mock(return_value=SimpleNamespace(status_code=200, headers={},
+                                                 json=lambda: envelope))
+        with self.assertRaises(AIEngineUnavailable) as caught:
+            self.engine(post).analyze(photo(), 'Tomato')
+        self.assertIn('GROQ_MAX_TOKENS', str(caught.exception))
+
+    def test_extra_json_keys_are_rejected(self):
+        with self.assertRaises(AIEngineUnavailable) as caught:
+            self.engine(groq_transport(dict(classification(), extra='x'))).analyze(photo(), 'Tomato')
+        self.assertEqual(caught.exception.code, 'ai_invalid_response')
+
+    def test_disease_outside_reviewed_allow_list_is_rejected(self):
+        with self.assertRaises(AIEngineUnavailable):
+            self.engine(groq_transport(classification(disease_name='Cassava Mosaic Disease'))).analyze(photo(), 'Tomato')
+
+    def test_missing_key_fails_closed_without_any_request(self):
+        post = groq_transport()
+        with override_settings(GROQ_API_KEY=''):
+            with self.assertRaises(AIEngineUnavailable) as caught:
+                self.engine(post).analyze(photo(), 'Tomato')
+        self.assertIn('console.groq.com/keys', str(caught.exception))
+        post.assert_not_called()
+
+    def test_engine_selection_and_auto_preference(self):
+        from .services import GroqEngine as Engine
+        self.assertIsInstance(get_engine(), Engine)
+        with override_settings(AI_ENGINE='auto', OPENROUTER_API_KEY=''):
+            reset_engine_cache()
+            self.assertIsInstance(get_engine(), Engine)
+            reset_engine_cache()
+
+    def test_cached_engine_rebuilds_when_groq_settings_change(self):
+        first = get_engine()
+        with override_settings(GROQ_TIMEOUT_SECONDS=11):
+            second = get_engine()
+        self.assertIsNot(first, second)
+        self.assertEqual(second._client.timeout, 11)
+
+
+@override_settings(AI_ENGINE='groq', GROQ_API_KEY='unit-test-only',
+                   GROQ_MODEL='groq/llama-4-scout', GROQ_FALLBACK_MODELS=[],
+                   OPENROUTER_API_KEY='', AI_REQUIRE_TRAINED_MODEL=True)
+class GroqEndpointIntegrationTests(APITestCase):
+    """Full HTTP stack: upload → Groq engine (mocked transport) → saved diagnosis."""
+
+    def setUp(self):
+        reset_engine_cache()
+        self.addCleanup(reset_engine_cache)
+        from users.models import User
+        self.farmer = User.objects.create_user(
+            username='groqfarmer', password='Str0ngPass!', email='g@test.com',
+            role='farmer')
+        Disease.objects.create(disease_name='Tomato Blight', crop_name='Tomato',
+                               symptoms='Reviewed symptoms', medication='Reviewed treatment only')
+        self.client.force_authenticate(self.farmer)
+
+    def test_scan_upload_diagnoses_and_saves_reviewed_result(self):
+        image = io.BytesIO()
+        Image.new('RGB', (64, 64), (65, 125, 80)).save(image, 'PNG')
+        image.seek(0)
+        with patch('requests.post', groq_transport()):
+            response = self.client.post(
+                reverse('diagnosis-analyze'),
+                {'image': image, 'crop_type': 'Tomato'}, format='multipart')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['disease_name'], 'Tomato Blight')
+        self.assertEqual(response.data['engine'], 'groq-vision')
+        self.assertEqual(response.data['treatment_plan']['medication'],
+                         'Reviewed treatment only')
+
+    def test_scan_of_a_non_crop_photo_is_refused_and_nothing_saved(self):
+        image = io.BytesIO()
+        Image.new('RGB', (64, 64), (65, 125, 80)).save(image, 'PNG')
+        image.seek(0)
+        with patch('requests.post', groq_transport(classification(
+                image_type='not_crop', outcome='not_a_crop', disease_name='NotACrop'))):
+            response = self.client.post(
+                reverse('diagnosis-analyze'),
+                {'image': image, 'crop_type': 'Tomato'}, format='multipart')
+        self.assertEqual(response.status_code, 422, response.data)
+        self.assertEqual(response.data['code'], 'not_a_crop')
+        from diagnosis.models import Diagnosis
+        self.assertEqual(Diagnosis.objects.count(), 0)
+
+    def test_scan_of_another_crop_is_refused_with_detected_crop(self):
+        image = io.BytesIO()
+        Image.new('RGB', (64, 64), (65, 125, 80)).save(image, 'PNG')
+        image.seek(0)
+        with patch('requests.post', groq_transport(classification(
+                detected_crop='Maize', outcome='crop_mismatch',
+                disease_name='CropMismatch'))):
+            response = self.client.post(
+                reverse('diagnosis-analyze'),
+                {'image': image, 'crop_type': 'Tomato'}, format='multipart')
+        self.assertEqual(response.status_code, 422, response.data)
+        self.assertEqual(response.data['code'], 'crop_mismatch')
+        self.assertEqual(response.data['detected_crop'], 'Maize')
+
+    def test_invalid_key_returns_retryable_503_without_saving(self):
+        image = io.BytesIO()
+        Image.new('RGB', (64, 64), (65, 125, 80)).save(image, 'PNG')
+        image.seek(0)
+        with patch('requests.post', groq_transport(status=401, error={'code': 401})):
+            response = self.client.post(
+                reverse('diagnosis-analyze'),
+                {'image': image, 'crop_type': 'Tomato'}, format='multipart')
+        self.assertEqual(response.status_code, 503, response.data)
+        self.assertEqual(response.data['code'], 'ai_model_unavailable')
+        from diagnosis.models import Diagnosis
+        self.assertEqual(Diagnosis.objects.count(), 0)

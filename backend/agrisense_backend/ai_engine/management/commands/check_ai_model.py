@@ -153,6 +153,125 @@ class Command(BaseCommand):
             rows.append((model_id, model))
         return rows
 
+    # ── Groq engine ──────────────────────────────────────────────────────
+    def _groq_catalog(self, client):
+        """GET /models validates the key, connectivity and the live catalog."""
+        request = urllib.request.Request(
+            client.base_url + '/models',
+            headers={'Accept': 'application/json',
+                     'Authorization': f'Bearer {client.api_key}',
+                     'User-Agent': 'AgriSense/1.0'})
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                data = json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                raise RuntimeError(
+                    'The Groq API key was rejected. Check GROQ_API_KEY at '
+                    'https://console.groq.com/keys.') from exc
+            if exc.code == 429:
+                raise RuntimeError(
+                    'Groq rate limit reached while listing models. Free-tier '
+                    'limits reset over time; retry shortly.') from exc
+            raise RuntimeError(f'Groq returned HTTP {exc.code}.') from exc
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f'Could not reach the Groq API: {exc}') from exc
+        models = {m.get('id'): m for m in (data or {}).get('data', [])
+                  if isinstance(m, dict) and m.get('id')}
+        if not models:
+            raise RuntimeError('Groq returned an empty model catalog.')
+        return models
+
+    @staticmethod
+    def _groq_evaluate(model_id, catalog):
+        model = catalog.get(model_id)
+        if model is None:
+            return {'model': model_id, 'ok': False, 'listed': False, 'free': True,
+                    'problems': ['not present in the Groq model catalog']}
+        modalities = set(model.get('modalities') or [])
+        # Older catalog entries omit `modalities`; absence is not proof a
+        # vision request will fail, so it is reported as unknown, not failed.
+        vision = 'image' in modalities if modalities else None
+        problems = []
+        if vision is False:
+            problems.append('does not accept image input')
+        if model.get('active') is False:
+            problems.append('is marked inactive by Groq')
+        return {'model': model_id, 'ok': not problems, 'listed': True, 'free': True,
+                'vision': vision, 'active': model.get('active'),
+                'context_window': (model.get('context_window') or {}).get('window')
+                if isinstance(model.get('context_window'), dict) else None,
+                'problems': problems}
+
+    def _handle_groq(self, options):
+        from ai_engine.groq_client import GroqVisionClient
+
+        as_json = options['json']
+        client = GroqVisionClient()
+        if client.configuration_error:
+            raise CommandError(client.configuration_error)
+        try:
+            catalog = self._groq_catalog(client)
+        except RuntimeError as exc:
+            raise CommandError(str(exc)) from exc
+
+        if options['model']:
+            targets = [options['model']]
+        elif options['list_free'] or options['list_all']:
+            # Groq does not publish per-model pricing in the catalog: every
+            # listed model is callable on the free tier with per-key quotas.
+            targets = sorted(catalog)
+            results = [self._groq_evaluate(model_id, catalog) for model_id in targets]
+            vision = [r for r in results if r['vision'] is not False]
+            if as_json:
+                self.stdout.write(json.dumps(results, indent=2))
+            else:
+                self.stdout.write(
+                    f'Groq models ({len(vision)} available, vision unknown for '
+                    f'{sum(1 for r in results if r["vision"] is None)}):\n')
+                for result in results:
+                    marker = ('image' if result['vision'] else
+                              'text?' if result['vision'] is None else 'text')
+                    flag = 'OK  ' if result['ok'] else 'FAIL'
+                    self.stdout.write(f'  {flag}  {result["model"]}  [{marker}]')
+                    for problem in result['problems']:
+                        self.stdout.write(self.style.ERROR(f'        - {problem}'))
+                self.stdout.write(self.style.NOTICE(
+                    'All Groq models are callable on the free tier; daily quotas '
+                    'are per key and per model (console.groq.com/settings/limits).'))
+            return
+
+        targets = ([client.model, *client.fallback_models]
+                   if not options['model'] else targets)
+        results = [self._groq_evaluate(model_id, catalog) for model_id in targets]
+        for result in results:
+            result['inference_tested'] = False
+            result['engine'] = 'groq'
+        if as_json:
+            self.stdout.write(json.dumps(results, indent=2))
+            return
+        self.stdout.write('Checking configured Groq models:\n')
+        for index, result in enumerate(results):
+            self.stdout.write('primary:' if index == 0 else f'fallback{index}:')
+            if result['ok']:
+                note = ('vision confirmed' if result['vision']
+                        else 'vision not advertised by catalog; test a scan')
+                self.stdout.write(self.style.SUCCESS(
+                    f'  OK    {result["model"]}\n        free tier, {note}'))
+            else:
+                self.stdout.write(self.style.ERROR(f'  FAIL  {result["model"]}'))
+                for problem in result['problems']:
+                    self.stdout.write(self.style.ERROR(f'        - {problem}'))
+        if options['check_auth']:
+            self.stdout.write('Groq authentication succeeded. No scan was submitted.')
+        if not any(r['ok'] for r in results):
+            raise CommandError(
+                'No configured Groq model is usable. Re-run with --list-free to '
+                'see the live catalog and update GROQ_MODEL.')
+        self.stdout.write(self.style.SUCCESS(
+            'Groq configuration is usable. Free-tier quota is per key/model; this '
+            'does not guarantee remaining quota, latency, or accuracy.'))
+
     # ── output ───────────────────────────────────────────────────────────
     def _report(self, result):
         name = result['model']
@@ -172,6 +291,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         as_json = options['json']
+        if settings.AI_ENGINE in ('groq', 'groq-vision'):
+            return self._handle_groq(options)
         if settings.AI_ENGINE in ('ollama', 'ollama-vision') and not (
                 options['list_free'] or options['list_all'] or options['model']):
             from ai_engine.ollama_client import OllamaVisionClient

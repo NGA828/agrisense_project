@@ -86,7 +86,8 @@ class DiagnosisViewSet(viewsets.ReadOnlyModelViewSet):
             if previous is not None:
                 return previous
             lock_ttl = int(max(settings.OPENROUTER_TIMEOUT_SECONDS,
-                               settings.OLLAMA_TIMEOUT_SECONDS)) + 30
+                               settings.OLLAMA_TIMEOUT_SECONDS,
+                               getattr(settings, 'GROQ_TIMEOUT_SECONDS', 0))) + 30
             lease = AnalysisLease(key + ':lock', lock_ttl)
             if not lease.acquire():
                 return Response({'error': 'This photo is already being analysed. Please wait '

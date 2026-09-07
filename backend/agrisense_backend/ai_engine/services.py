@@ -20,6 +20,8 @@ through an ordered pipeline:
    * ``OpenRouterEngine`` (primary): submits a privacy-scrubbed image to a
      configured vision model, constrained by a strict JSON schema to diseases
      already reviewed in the database for the selected crop.
+   * ``GroqEngine`` (free-tier cloud): same guarded pipeline against Groq's
+     OpenAI-compatible vision API (key from https://console.groq.com/keys).
    * ``TensorFlowEngine`` (optional local): loads a Keras `.keras`/`.h5`
      artifact and exact output class map for offline CNN inference.
 """
@@ -572,6 +574,16 @@ class OllamaEngine(OpenRouterEngine):
         super().__init__(client or OllamaVisionClient())
 
 
+class GroqEngine(OpenRouterEngine):
+    """Free-tier Groq vision with the same reviewed-disease and image guards."""
+
+    engine_name = 'groq-vision'
+
+    def __init__(self, client=None):
+        from .groq_client import GroqVisionClient
+        super().__init__(client or GroqVisionClient())
+
+
 class TensorFlowEngine(PlantPathologyEngine):
     """Keras/TensorFlow image-classification backend.
 
@@ -921,6 +933,9 @@ def _engine_cache_key():
     api_key = str(getattr(settings, 'OPENROUTER_API_KEY', '') or '')
     key_fingerprint = hashlib.sha256(api_key.encode()).hexdigest()[:12] \
         if api_key else ''
+    groq_key = str(getattr(settings, 'GROQ_API_KEY', '') or '')
+    groq_fingerprint = hashlib.sha256(groq_key.encode()).hexdigest()[:12] \
+        if groq_key else ''
     return (
         str(getattr(settings, 'AI_ENGINE', 'openrouter')).strip().lower(),
         str(getattr(settings, 'AI_MODEL_PATH', '') or ''),
@@ -933,6 +948,7 @@ def _engine_cache_key():
         key_fingerprint,
         str(getattr(settings, 'OPENROUTER_MODEL', '') or ''),
         str(getattr(settings, 'OPENROUTER_BASE_URL', '') or ''),
+        groq_fingerprint,
         json.dumps({name: getattr(settings, name, None) for name in (
             'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_FREE_ONLY',
             'OPENROUTER_TIMEOUT_SECONDS', 'OPENROUTER_MAX_TOKENS',
@@ -940,6 +956,9 @@ def _engine_cache_key():
             'OPENROUTER_CONFIDENCE_THRESHOLD', 'OPENROUTER_MAX_CONFIDENCE',
             'AI_CROP_CONFIDENCE_THRESHOLD', 'OLLAMA_BASE_URL', 'OLLAMA_MODEL',
             'OLLAMA_TIMEOUT_SECONDS', 'AI_MODEL_CONFIDENCE_THRESHOLD',
+            'GROQ_MODEL', 'GROQ_FALLBACK_MODELS', 'GROQ_BASE_URL',
+            'GROQ_TIMEOUT_SECONDS', 'GROQ_MAX_TOKENS',
+            'GROQ_IMAGE_MAX_DIMENSION', 'GROQ_IMAGE_QUALITY',
         )}, sort_keys=True),
     )
 
@@ -956,6 +975,8 @@ def get_engine():
         requested = key[0]
         if requested in ('openrouter', 'openrouter-vision', 'cloud'):
             engine = OpenRouterEngine()
+        elif requested in ('groq', 'groq-vision'):
+            engine = GroqEngine()
         elif requested in ('ollama', 'ollama-vision'):
             engine = OllamaEngine()
         elif requested in ('tensorflow', 'keras', 'tf'):
@@ -963,7 +984,9 @@ def get_engine():
         elif requested == 'auto':
             # Prefer configured cloud vision, then a local artifact, and expose
             # the labelled heuristic only when neither real model is available.
-            if str(getattr(settings, 'OPENROUTER_API_KEY', '') or '').strip():
+            if str(getattr(settings, 'GROQ_API_KEY', '') or '').strip():
+                engine = GroqEngine()
+            elif str(getattr(settings, 'OPENROUTER_API_KEY', '') or '').strip():
                 engine = OpenRouterEngine()
             elif key[1]:
                 engine = TensorFlowEngine()
@@ -973,8 +996,8 @@ def get_engine():
             engine = RuleBasedEngine()
         else:
             raise AIEngineUnavailable(
-                f'Unknown AI_ENGINE={requested!r}; use openrouter, ollama, tensorflow, '
-                f'auto, or rules.')
+                f'Unknown AI_ENGINE={requested!r}; use groq, openrouter, ollama, '
+                f'tensorflow, auto, or rules.')
         _ENGINE_CACHE[key] = engine
     return _ENGINE_CACHE[key]
 
@@ -1029,7 +1052,11 @@ def get_engine_info():
             'remote': not isinstance(engine, OllamaEngine),
             'detail': ('Vision service is configured; live model availability is checked '
                        'on each diagnosis request. This is not an uptime guarantee.'),
-            'provider_daily_limit': None if isinstance(engine, OllamaEngine) else 'account-dependent',
+            'provider_daily_limit': (
+                None if isinstance(engine, OllamaEngine)
+                else 'per-API-key free-tier daily quota (model dependent)'
+                if isinstance(engine, GroqEngine)
+                else 'account-dependent'),
         }
 
     if isinstance(engine, RuleBasedEngine):

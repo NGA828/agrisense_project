@@ -24,7 +24,7 @@ are not integrated, and simulated payments are explicitly test-only.
 | **Database** | MySQL 8 (utf8mb4) — SQLite supported for local dev | Users, products, orders, payments, chats, diagnoses |
 | **Cache / Queue** | Redis (django-redis cache + Celery broker); locmem/eager in dev | Caching, async workers, background scheduling |
 | **Async** | Celery + django-celery-beat schedules (reservations, premiums, reconciliation, weather cleanup) | Background jobs that never block requests |
-| **AI Engine** | Free OpenRouter router / private Ollama vision; reviewed crop-specific diseases; optional legacy CNN/demo engines | Image-based crop screening with auditable model provenance |
+| **AI Engine** | Free Groq vision tier (recommended) / free OpenRouter router / private Ollama vision; reviewed crop-specific diseases; optional legacy CNN/demo engines | Image-based crop screening with auditable model provenance |
 | **Real-time** | Django Channels WebSocket (JWT-secured) | Instant chat + push-bus (live notifications & stock) |
 | **External** | OpenWeatherMap, verified MTN Collection, explicit test simulator | Weather forecasts & mobile-money payments |
 | **Observability** | JSON structured logging, request-id tracing, `/api/health/`, optional Sentry | Trace + monitor production |
@@ -155,41 +155,53 @@ DB_NAME=agrisense_db DB_USER=root DB_PASSWORD=yourpass DB_HOST=localhost DB_PORT
 
 ### Free AI setup
 
-Follow [docs/AI_SETUP.md](docs/AI_SETUP.md). Default configuration:
+Follow [docs/AI_SETUP.md](docs/AI_SETUP.md). Recommended free configuration
+(Groq — free key from <https://console.groq.com/keys>, no credit card):
 
 ```dotenv
-AI_ENGINE=openrouter
-OPENROUTER_API_KEY=replace-privately-in-the-backend
-OPENROUTER_MODEL=openrouter/free
-OPENROUTER_FALLBACK_MODELS=openrouter/free
-OPENROUTER_ALLOW_PAID_MODELS=false
+AI_ENGINE=groq
+GROQ_API_KEY=replace-privately-in-the-backend
+GROQ_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+GROQ_FALLBACK_MODELS=meta-llama/llama-4-maverick-17b-128e-instruct
 AI_REQUIRE_TRAINED_MODEL=true
 AI_ALLOW_RULE_FALLBACK=false
 ```
 
-Add **reviewed Disease records** for each supported crop, and run
+Alternatives: `AI_ENGINE=openrouter` (free router) or `AI_ENGINE=ollama`
+(self-hosted). Add **reviewed Disease records** for each supported crop, and run
 `python manage.py check_ai_model --check-auth` to check credentials/capabilities
 without using an inference request. Missing provider configuration or reviewed
 data deliberately does not produce a guessed diagnosis.
 
-The app has no daily scan cap (20/minute default burst throttle). A hosted free
-account's **50 daily requests are shared and do not guarantee 50 successful
-analyses**. For that requirement without buying credits, use the documented
-**private Ollama vision** option and benchmark your hardware. Caching and smaller
-images reduce repeated calls and upload size; they cannot guarantee provider
-uptime, response speed or accuracy.
+Every engine applies the same guards: the photo must actually show a crop
+(`not_a_crop` rejections), the crop in the photo must match the farmer's
+selection (`crop_mismatch` rejections), and only diseases reviewed for that
+crop can be returned — treatment text always comes from the local reviewed
+database, never from the model.
+
+The app has no daily scan cap (20/minute default burst throttle). Groq's free
+tier allows ~30 requests/minute and a per-model daily quota per key (commonly
+1,000–14,400 requests/day) — comfortably above **50 scans/day**, with LPU-speed
+responses (typically a few seconds per scan). Caching and smaller images reduce
+repeated calls and upload size; they cannot guarantee provider uptime, response
+speed or accuracy.
 
 ### Payment setup
 
-Payments are **disabled until configured**. Follow
+Payments are **off until configured** (or simulated). Follow
 [docs/PAYMENTS_SETUP.md](docs/PAYMENTS_SETUP.md) for MTN sandbox/live credentials,
 Cameroon target/currency, callbacks, reconciliation and historical-order audits.
 `python manage.py check_payments --check-auth` validates authentication without
 charging anyone. Keep all provider credentials private in the backend.
 
-Development-only simulation requires both `DEBUG=True` and
-`PAYMENT_SIMULATOR_ENABLED=true`. It transfers no funds. Orange/card collection,
-automatic live refunds and dealer wallet payouts are not implemented.
+In development (`DEBUG=True`) the local simulator is on by default and
+**deterministic: simulated payments always succeed**, so checkout demos never
+randomly fail. To test the failure flow, pay from a number ending in `0000`
+(e.g. `+237 670 00 00 00`). A failed or unpaid checkout is never sent to the
+dealer. On a `DEBUG=False` demo server, set `PAYMENT_SIMULATOR_ENABLED=true`
+and `PAYMENT_SIMULATOR_ALLOW_NON_DEBUG=true` (explicit, warned-about opt-in).
+It transfers no funds. Orange/card collection, automatic live refunds and
+dealer wallet payouts are not implemented.
 
 ### Frontend (Flutter)
 
@@ -373,7 +385,7 @@ agrisense_project/
 │   ├── agrisense_backend/     # settings, urls, asgi, celery, logging, checks
 │   ├── users/                 # custom user, registration, admin management
 │   ├── diagnosis/             # diagnoses, treatment plans, disease knowledge base
-│   ├── ai_engine/             # guarded OpenRouter/Ollama vision + legacy CNN/demo adapters
+│   ├── ai_engine/             # guarded Groq/OpenRouter/Ollama vision + legacy CNN/demo adapters
 │   ├── products/              # catalog, orders, stock management
 │   ├── payments/              # payment model + mobile-money gateway adapters
 │   ├── chat/                  # chat rooms, messages, JWT WebSocket consumer

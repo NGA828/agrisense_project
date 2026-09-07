@@ -4,8 +4,8 @@
 
 | Mode | Real funds? | Requirements |
 |---|---|---|
-| Disabled (default) | No | Checkout explains that no gateway is available |
-| Local simulator | **No** | `DEBUG=True` AND `PAYMENT_SIMULATOR_ENABLED=true` |
+| Local simulator (dev default) | **No** | `DEBUG=True` (on by default there; set `PAYMENT_SIMULATOR_ENABLED=false` to disable) |
+| Local simulator outside DEBUG | **No** | `PAYMENT_SIMULATOR_ENABLED=true` AND `PAYMENT_SIMULATOR_ALLOW_NON_DEBUG=true` (explicit, warned-about opt-in) |
 | MTN sandbox | **No** | MTN Collection sandbox credentials |
 | MTN Cameroon live Collection | Yes, on verified payer approval | Approved live merchant account, live Collection credentials and deployment configuration |
 
@@ -33,11 +33,16 @@ Django reads `backend/agrisense_backend/.env`. Copy `.env.example` if needed and
 
 ```dotenv
 DEBUG=True
+# The simulator is on by default in DEBUG; this line is shown for clarity.
 PAYMENT_SIMULATOR_ENABLED=true
 MTN_MOMO_ENABLED=false
 ```
 
-Restart Django. Use a valid Cameroon mobile number, for example `670000008`: an even last digit completes a **fake test** payment; an odd last digit fails it. The app/notifications explicitly label successful tests as no money transferred. This is only a way to exercise the workflow, **not a fix for live payments**. Never enable it for a real launch.
+Restart Django. Use any valid Cameroon mobile number, for example `+237 670 00 00 08` — **every simulated payment now completes** so demos and training sessions don't randomly fail. To exercise the failure path (declined payment, stock release, "no order was sent to the dealer"), pay from a number ending in `0000`, e.g. `+237 670 00 00 00`.
+
+The app/notifications explicitly label successful tests as no money transferred. A failed or unpaid checkout is **never** sent to the dealer: it does not appear in the dealer's order list, analytics or notifications, and its stock reservation is released. This is only a way to exercise the workflow, **not a fix for live payments**. Never enable it for a real launch.
+
+To keep simulated checkout working on a staging/demo server that runs with `DEBUG=False`, set `PAYMENT_SIMULATOR_ALLOW_NON_DEBUG=true` as well. This is an explicit, warned-about opt-in: Django's system checks flag it, every payment remains labelled `[TEST]`, and it must be removed before real launch.
 
 ### MTN sandbox
 
