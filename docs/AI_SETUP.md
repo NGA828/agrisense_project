@@ -69,7 +69,10 @@ Keep the key only in `backend/agrisense_backend/.env` (or your hosting secret ma
 AI_ENGINE=openrouter
 OPENROUTER_API_KEY=replace-privately
 OPENROUTER_MODEL=openrouter/free
-OPENROUTER_FALLBACK_MODELS=openrouter/free
+# Pinned free vision models tried (server-side, one HTTP request) if the
+# auto-router is throttled or has no live endpoint. Free slugs are retired
+# regularly — refresh with `python manage.py check_ai_model --list-free`.
+OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free,google/gemma-4-31b-it:free,nvidia/nemotron-nano-12b-v2-vl:free
 OPENROUTER_ALLOW_PAID_MODELS=false
 OPENROUTER_TIMEOUT_SECONDS=25
 OPENROUTER_MAX_TOKENS=1024
@@ -145,6 +148,7 @@ An empty knowledge base intentionally exposes no crops. Do not turn on the colou
 - `crop_uncertain`: retake a clearer photo with useful plant features visible.
 - `ai_rate_limited`: obey `Retry-After` when returned. The quota is shared; do not repeatedly tap retry.
 - `ai_timeout` / `ai_invalid_response`: a provider issue, not proof your plant is diseased. No result is saved; retry later.
+- **`OpenRouter returned fields outside the restricted diagnosis schema`** in older builds happened when a free model added extra JSON keys (e.g. `reasoning`). The current build tolerates extra keys (they are ignored and audited in the logs — only the seven contracted fields are read, and treatments still come exclusively from reviewed database rows), while missing or mistyped fields still fail closed. A model that wraps the result one level deep (e.g. `{"diagnosis": {...}}`) is also accepted. Update the backend if you still see this error.
 - `ai_knowledge_base_empty` / `unsupported_crop`: review/add the relevant disease records, then reload the crop selector.
 
 Never lower the crop-identity threshold simply to make more uploads pass. Better to refuse an uncertain photo than prescribe a treatment for the wrong crop.

@@ -114,7 +114,8 @@ class GroqVisionClient(OpenRouterVisionClient):
             return 'Groq is having an outage. A fallback model may still work.'
         return 'Unexpected Groq response.'
 
-    def _groq_payload(self, image_data_url: str, contract: dict) -> dict:
+    def _groq_payload(self, image_data_url: str, contract: dict,
+                      candidates: list[dict] | None = None) -> dict:
         """Adapt the shared contract to Groq's OpenAI-compatible schema.
 
         Groq does not implement OpenRouter routing controls, reasoning hints
@@ -125,7 +126,11 @@ class GroqVisionClient(OpenRouterVisionClient):
         """
         system_message = contract['messages'][0]
         user_text = contract['messages'][1]['content'][0]['text']
-        schema = contract['response_format']['json_schema']['schema']
+        disease_names = [
+            str(item.get('disease_name') or '').strip()
+            for item in (candidates or ())
+            if str(item.get('disease_name') or '').strip()]
+        schema = self.response_schema(disease_names)
         json_instruction = (
             '\n\nRespond with ONLY a valid JSON object (no markdown, no '
             'commentary) that satisfies exactly this JSON schema. Use only '
@@ -148,7 +153,9 @@ class GroqVisionClient(OpenRouterVisionClient):
                 },
             ],
             'temperature': 0,
-            'max_completion_tokens': self.max_tokens,
+            # Groq's OpenAI-compatible Chat Completions API uses max_tokens for
+            # the output budget.
+            'max_tokens': self.max_tokens,
             'response_format': {'type': 'json_object'},
             'stream': False,
         }
@@ -204,8 +211,9 @@ class GroqVisionClient(OpenRouterVisionClient):
 
         data_url = self._encode_image(image_file)
         contract = self._request_payload(data_url, crop_type, candidates)
-        payload = self._groq_payload(data_url, contract)
-        allowed_names = [item['disease_name'] for item in candidates]
+        payload = self._groq_payload(data_url, contract, candidates)
+        allowed_names = [
+            item['disease_name'] for item in self._candidate_payload(candidates)]
 
         last_error = None
         for index, model in enumerate((self.model, *self.fallback_models)):

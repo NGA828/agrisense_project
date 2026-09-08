@@ -271,10 +271,27 @@ class OpenRouterEngineTests(TestCase):
         with self.assertRaises(AIEngineUnavailable):
             self.engine().analyze(png_bytes(), 'Tomato')
 
-    def test_model_treatment_fields_are_rejected(self):
-        self.result['treatment'] = 'Buy an invented pesticide'
-        with self.assertRaises(AIEngineUnavailable):
+    def test_model_treatment_fields_are_never_used(self):
+        # Extra/non-contract fields (some free providers add notes or
+        # reasoning) are ignored: they never reach the saved diagnosis, and
+        # treatment content always comes from reviewed database rows.
+        self.result.update({
+            'treatment': 'Buy an invented pesticide',
+            'medication': 'fake chemical',
+            'instructions': 'spray twice daily',
+            'note': 'provider-added commentary',
+        })
+        result = self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Reviewed Tomato Blight')
+        self.assertEqual(result['medication'], 'Local reviewed medication')
+        self.assertNotIn('treatment', result)
+        self.assertNotIn('note', result)
+
+    def test_missing_required_fields_fail_closed(self):
+        del self.result['confidence']
+        with self.assertRaises(AIEngineUnavailable) as caught:
             self.engine().analyze(png_bytes(), 'Tomato')
+        self.assertEqual(caught.exception.code, 'ai_invalid_response')
 
     def test_crop_without_reviewed_rows_is_rejected_before_api_call(self):
         with self.assertRaises(AIInferenceError):

@@ -247,7 +247,7 @@ class GroqVisionTests(TestCase):
         self.assertEqual(payload['model'], 'groq/llama-4-scout')
         self.assertEqual(payload['response_format'], {'type': 'json_object'})
         self.assertEqual(payload['temperature'], 0)
-        self.assertEqual(payload['max_completion_tokens'], 1024)
+        self.assertEqual(payload['max_tokens'], 1024)
         self.assertNotIn('models', payload)
         self.assertNotIn('provider', payload)
         self.assertNotIn('reasoning', payload)
@@ -316,10 +316,34 @@ class GroqVisionTests(TestCase):
             self.engine(post).analyze(photo(), 'Tomato')
         self.assertIn('GROQ_MAX_TOKENS', str(caught.exception))
 
-    def test_extra_json_keys_are_rejected(self):
+    def test_extra_json_keys_are_ignored_not_fatal(self):
+        # Free models/providers occasionally add non-contract fields (notes,
+        # reasoning tokens, timestamps). Such fields are never read — treatment
+        # content comes only from reviewed DB rows — so the scan must succeed
+        # while missing fields or injected values still fail closed.
+        result = self.engine(groq_transport(
+            dict(classification(), extra='x', reasoning='hidden thoughts',
+                 timestamp='2026-09-08'))).analyze(photo(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Tomato Blight')
+        self.assertNotIn('extra', result)
+
+    def test_missing_required_keys_still_fail_closed(self):
+        broken = {key: value for key, value in classification().items()
+                  if key != 'confidence'}
         with self.assertRaises(AIEngineUnavailable) as caught:
-            self.engine(groq_transport(dict(classification(), extra='x'))).analyze(photo(), 'Tomato')
+            self.engine(groq_transport(broken)).analyze(photo(), 'Tomato')
         self.assertEqual(caught.exception.code, 'ai_invalid_response')
+
+    def test_model_supplied_treatment_fields_are_never_used(self):
+        # An injected treatment/medication field must not reach the result;
+        # medication always comes from the reviewed database record.
+        result = self.engine(groq_transport(
+            dict(classification(), treatment='Buy an invented pesticide',
+                 medication='fake chemical', instructions='spray twice daily'))
+            ).analyze(photo(), 'Tomato')
+        self.assertEqual(result['disease_name'], 'Tomato Blight')
+        self.assertEqual(result['medication'], 'Reviewed treatment only')
+        self.assertNotIn('treatment', result)
 
     def test_disease_outside_reviewed_allow_list_is_rejected(self):
         with self.assertRaises(AIEngineUnavailable):

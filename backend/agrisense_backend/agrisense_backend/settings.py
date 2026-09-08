@@ -410,10 +410,18 @@ AI_ENGINE = os.getenv('AI_ENGINE', 'openrouter').strip().lower()
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '').strip()
 # The free router selects currently available vision/structured-output models;
 # it avoids pinning every deployment to short-lived, retired free model slugs.
+# The free router auto-selects a currently available model matching the
+# request (image input + structured output). Pinned fallbacks below are live,
+# free vision-capable models tried if the auto-router is throttled/down; run
+# `python manage.py check_ai_model --list-free` to refresh the list, because
+# free model slugs are retired regularly.
 OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'openrouter/free').strip()
 OPENROUTER_FALLBACK_MODELS = [
     model.strip() for model in os.getenv(
-        'OPENROUTER_FALLBACK_MODELS', 'openrouter/free').split(',') if model.strip()
+        'OPENROUTER_FALLBACK_MODELS',
+        'google/gemma-4-26b-a4b-it:free,google/gemma-4-31b-it:free,'
+        'nvidia/nemotron-nano-12b-v2-vl:free'
+    ).split(',') if model.strip()
 ]
 OPENROUTER_MAX_TOKENS = int(os.getenv('OPENROUTER_MAX_TOKENS', '1024'))
 OPENROUTER_BASE_URL = os.getenv(
