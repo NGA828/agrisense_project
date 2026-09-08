@@ -44,11 +44,13 @@ class OllamaVisionClient(OpenRouterVisionClient):
             raise OpenRouterUnavailableError(self.configuration_error)
         data_url = self._encode_image(image_file)
         contract = self._request_payload(data_url, crop_type, candidates)
+        reviewed = self._candidate_payload(candidates)
         payload = {
             'model': self.model,
             'stream': False,
             'keep_alive': '30m',
-            'format': contract['response_format']['json_schema']['schema'],
+            'format': self.response_schema(
+                [item['disease_name'] for item in reviewed]),
             'options': {'temperature': 0, 'num_predict': 1024},
             'messages': [
                 contract['messages'][0],

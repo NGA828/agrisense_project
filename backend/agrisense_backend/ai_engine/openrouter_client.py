@@ -11,11 +11,14 @@ from __future__ import annotations
 import base64
 import io
 import json
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from django.conf import settings
+
+logger = logging.getLogger('agrisense.ai')
 
 
 class OpenRouterClientError(RuntimeError):
@@ -193,7 +196,12 @@ class OpenRouterVisionClient:
         return reviewed
 
     @staticmethod
-    def _response_schema(disease_names: list[str]) -> dict[str, Any]:
+    def response_schema(disease_names: list[str]) -> dict[str, Any]:
+        """The strict JSON object schema every vision backend must satisfy.
+
+        Shared by the OpenRouter request, the Groq JSON-mode prompt and the
+        Ollama ``format`` parameter so all three engines enforce one contract.
+        """
         allowed_names = ['Healthy', 'Inconclusive', 'NotACrop', 'CropMismatch', *disease_names]
         return {
             'type': 'object',
@@ -292,9 +300,10 @@ class OpenRouterVisionClient:
             'reasoning': {'enabled': False},
             'temperature': 0,
             'max_tokens': int(getattr(settings, 'OPENROUTER_MAX_TOKENS', 1024)),
-            # The current free vision endpoint advertises structured output
-            # but can emit malformed json_schema responses. json_object is
-            # supported reliably; _validate_result below remains the
+            # The free vision endpoints advertise structured output but some
+            # providers emit malformed json_schema responses or reject unknown
+            # keys, so the wire format stays plain json_object; the schema is
+            # embedded in the prompt instead, and _validate_result below is the
             # authoritative schema and allow-list gate.
             'response_format': {'type': 'json_object'},
             # The free vision router currently returns 404 when
@@ -369,6 +378,18 @@ class OpenRouterVisionClient:
         if not isinstance(parsed, dict):
             raise OpenRouterResponseError(
                 'OpenRouter diagnosis response must be a JSON object.')
+        # Some providers/models wrap the diagnosis one level deep, e.g.
+        # {"diagnosis": {...}} or {"result": {...}}. Accept exactly one nested
+        # object when it contains the expected fields; strict validation below
+        # still rejects missing, mistyped or unsafe values.
+        if not {'outcome', 'disease_name', 'confidence'} & set(parsed):
+            nested = next(
+                (value for value in parsed.values()
+                 if isinstance(value, dict)
+                 and {'outcome', 'disease_name', 'confidence'} & set(value)),
+                None)
+            if nested is not None:
+                parsed = nested
         return parsed
 
     @staticmethod
@@ -377,11 +398,23 @@ class OpenRouterVisionClient:
         allowed_disease_names: list[str],
         response_model: str,
     ) -> OpenRouterClassification:
-        expected_fields = {'image_type', 'detected_crop', 'crop_confidence',
-                           'outcome', 'disease_name', 'confidence', 'evidence'}
-        if set(result) != expected_fields:
+        expected_fields = ('image_type', 'detected_crop', 'crop_confidence',
+                           'outcome', 'disease_name', 'confidence', 'evidence')
+        missing = [name for name in expected_fields if name not in result]
+        if missing:
+            # Fail closed: every contracted field is required.
             raise OpenRouterResponseError(
-                'OpenRouter returned fields outside the restricted diagnosis schema.')
+                'OpenRouter diagnosis JSON is missing required fields: '
+                + ', '.join(missing) + '.')
+        extra = sorted(set(result) - set(expected_fields))
+        if extra:
+            # Extra fields (e.g. provider reasoning/notes) are not trusted and
+            # never read — treatment content comes only from the reviewed
+            # database rows — so they are ignored rather than failing a whole
+            # scan. Log them for auditability.
+            logger.info(
+                'Vision model returned non-contract fields (ignored): %s',
+                ', '.join(extra))
         image_type = result['image_type']
         detected_crop = result['detected_crop']
         crop_confidence = result['crop_confidence']
