@@ -366,7 +366,7 @@ class Command(BaseCommand):
         targets = list(dict.fromkeys(t for t in targets if t))
         if not targets:
             raise CommandError('No model configured.')
-        guarded = (not options['model'] and not settings.OPENROUTER_ALLOW_PAID_MODELS)
+        guarded = (not options['model'] and not getattr(settings, 'OPENROUTER_ALLOW_PAID_MODELS', False))
         invalid_ids = [t for t in targets if t != 'openrouter/free' and not t.endswith(':free')]
         results = [self._evaluate(model_id, catalog) for model_id in targets]
         for result in results:

@@ -168,6 +168,7 @@ class _FakeOpenRouterResponse:
     OPENROUTER_FALLBACK_MODELS=['google/gemma-4-26b-a4b-it:free'],
     OPENROUTER_CONFIDENCE_THRESHOLD=70,
     OPENROUTER_MAX_CONFIDENCE=95,
+    OPENROUTER_MAX_TOKENS=1024,
     AI_ALLOW_RULE_FALLBACK=False,
 )
 class OpenRouterEngineTests(TestCase):
